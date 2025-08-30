@@ -1,192 +1,198 @@
-const express = require('express');
-const fs = require('fs');
+// users.js — versione MongoDB (Mongoose)
+const express = require("express");
 const router = express.Router();
+const User = require("./models/User");
+const Restaurant = require("./models/Restaurant");
 
-const USERS_FILE = './users.json';
-const MEALS_FILE = './meals1.json';
-const RESTAURANTS_FILE = './restaurants.json';
-
-// 🔄 Leggi utenti
-function readUsers() {
-  if (!fs.existsSync(USERS_FILE)) return [];
-  return JSON.parse(fs.readFileSync(USERS_FILE));
-}
-
-// 💾 Scrivi utenti
-function writeUsers(users) {
-  fs.writeFileSync(USERS_FILE, JSON.stringify(users, null, 2));
-}
-
-// 🔄 Leggi ristoranti meals
-function readMeals() {
-  if (!fs.existsSync(MEALS_FILE)) return [];
-  return JSON.parse(fs.readFileSync(MEALS_FILE));
-}
-
-// 💾 Scrivi ristoranti meals
-function writeMeals(meals) {
-  fs.writeFileSync(MEALS_FILE, JSON.stringify(meals, null, 2));
-}
-
-// 🔄 Leggi restaurants.json
-function readRestaurants() {
-  if (!fs.existsSync(RESTAURANTS_FILE)) return [];
-  return JSON.parse(fs.readFileSync(RESTAURANTS_FILE));
-}
-
-// 💾 Scrivi restaurants.json
-function writeRestaurants(data) {
-  fs.writeFileSync(RESTAURANTS_FILE, JSON.stringify(data, null, 2));
+// 🧮 ID numerico incrementale per compatibilità col vecchio frontend
+async function nextLegacyId() {
+  const last = await User.findOne({ legacyId: { $ne: null } })
+    .sort({ legacyId: -1 })
+    .select("legacyId")
+    .lean();
+  return (last?.legacyId || 0) + 1;
 }
 
 // ✅ REGISTRAZIONE
-router.post('/register', (req, res) => {
-  const {
-    username, email, password, role,
-    phone, location, vat, address,
-    nome, cognome, pagamento, preferenza
-  } = req.body;
+router.post("/register", async (req, res) => {
+  try {
+    const {
+      username, email, password, role,
+      phone, location, vat, address,
+      nome, cognome, pagamento, preferenza
+    } = req.body;
 
-  if (!username || !email || !password || !role) {
-    return res.status(400).send("Tutti i campi obbligatori non sono stati forniti.");
-  }
-
-  const users = readUsers();
-
-  if (users.find(u => u.username === username || u.email === email)) {
-    return res.status(409).send("Username o email già registrati.");
-  }
-
-  const newUser = {
-    id: users.length ? users[users.length - 1].id + 1 : 1,
-    username,
-    email,
-    password,
-    role,
-    phone: phone || "",
-    location: location || "",
-    vat: vat || "",
-    address: address || "",
-    nome: nome || "",
-    cognome: cognome || "",
-    pagamento: pagamento || "",
-    preferenza: preferenza || ""
-  };
-
-  // ➕ Se è ristoratore, crea anche ristorante in meals1.json e restaurants.json
-  if (role === "ristoratore") {
-    const meals = readMeals();
-    const restaurantId = "r_" + username.toLowerCase().replace(/\s+/g, "");
-
-    if (!meals.find(r => r.restaurantId === restaurantId)) {
-      meals.push({
-        restaurantId,
-        nome: username + " Ristorante",
-        email,
-        phone,
-        location,
-        vat,
-        address,
-        menu: []
-      });
-      writeMeals(meals);
+    if (!username || !email || !password || !role) {
+      return res.status(400).send("Tutti i campi obbligatori non sono stati forniti.");
     }
 
-    const restaurants = readRestaurants();
-    const newRestaurant = {
-      restaurantId,
-      nome: username + " Ristorante",
-      partitaIVA: vat || "",
-      telefono: phone || "",
-      luogo: location || "",
-      indirizzo: address || ""
-    };
-    restaurants.push(newRestaurant);
-    writeRestaurants(restaurants);
+    // Username o email già presenti?
+    const dup = await User.findOne({ $or: [{ username }, { email }] }).lean();
+    if (dup) return res.status(409).send("Username o email già registrati.");
 
-    newUser.restaurantId = restaurantId;
-  }
+    // legacy id numerico come nel vecchio file JSON
+    const legacyId = await nextLegacyId();
 
-  users.push(newUser);
-  writeUsers(users);
+    // Se ristoratore, generiamo/colleghiamo un restaurantId
+    let restaurantId = null;
+    if (role === "ristoratore") {
+      restaurantId = `r_${username.toLowerCase().replace(/\s+/g, "")}`;
 
-  res.status(201).json({ message: "Registrazione completata", user: newUser });
-});
-
-// ✅ LOGIN (con restaurantId se ristoratore)
-router.post('/login', (req, res) => {
-  const { username, password } = req.body;
-  const users = readUsers();
-  const user = users.find(u => u.username === username && u.password === password);
-
-  if (!user) return res.status(401).send("Credenziali non valide");
-
-  let restaurantId = null;
-
-  if (user.role === "ristoratore") {
-    const meals = readMeals();
-    const ristoratore = meals.find(r => r.email === user.email || r.nome === user.username + " Ristorante");
-
-    if (ristoratore) {
-      restaurantId = ristoratore.restaurantId;
+      // Crea (se non esiste) il documento Restaurant
+      const existingR = await Restaurant.findOne({ restaurantId }).lean();
+      if (!existingR) {
+        await Restaurant.create({
+          restaurantId,
+          nome: `${username} Ristorante`,
+          email,
+          telefono: phone || "",
+          luogo: location || "",
+          partitaIva: vat || "",
+          indirizzo: address || ""
+        });
+      }
     }
+
+    // Crea utente
+    const newUser = await User.create({
+      legacyId,
+      username,
+      email,
+      password,   // ⚠️ plain-text (puoi passare in seguito a bcrypt)
+      role,
+      phone: phone || "",
+      location: location || "",
+      vat: vat || "",
+      address: address || "",
+      nome: nome || "",
+      cognome: cognome || "",
+      pagamento: pagamento || "",
+      preferenza: preferenza || "",
+      restaurantId
+    });
+
+    res.status(201).json({ message: "Registrazione completata", user: {
+      id: newUser.legacyId,
+      _id: newUser._id,
+      username: newUser.username,
+      email: newUser.email,
+      role: newUser.role,
+      restaurantId: newUser.restaurantId || undefined
+    }});
+  } catch (err) {
+    console.error("Errore registrazione:", err);
+    res.status(500).send("Errore durante la registrazione");
   }
-
-  const loggedUser = {
-    id: user.id,
-    username: user.username,
-    email: user.email,
-    role: user.role,
-    ...(restaurantId && { restaurantId })
-  };
-
-  res.json(loggedUser);
 });
 
-// ✅ MODIFICA
-router.put('/:id', (req, res) => {
-  const userId = parseInt(req.params.id);
-  const users = readUsers();
-  const index = users.findIndex(u => u.id === userId);
+// ✅ LOGIN (ritorna restaurantId se ristoratore)
+router.post("/login", async (req, res) => {
+  try {
+    const { username, password } = req.body;
 
-  if (index === -1) return res.status(404).send("Utente non trovato");
+    const user = await User.findOne({ username, password }).lean(); // ⚠️ plain-text
+    if (!user) return res.status(401).send("Credenziali non valide");
 
-  const updated = {
-    ...users[index],
-    ...req.body,
-    id: userId
-  };
+    // Se ristoratore e non ha restaurantId in user, prova a recuperarlo da Restaurant
+    let restaurantId = user.restaurantId || null;
+    if (user.role === "ristoratore" && !restaurantId) {
+      const r = await Restaurant.findOne({
+        $or: [
+          { email: user.email },
+          { nome: `${user.username} Ristorante` }
+        ]
+      }).lean();
+      if (r) restaurantId = r.restaurantId;
+    }
 
-  users[index] = updated;
-  writeUsers(users);
-  res.json(updated);
+    res.json({
+      id: user.legacyId ?? undefined,
+      _id: user._id,
+      username: user.username,
+      email: user.email,
+      role: user.role,
+      ...(restaurantId ? { restaurantId } : {})
+    });
+  } catch (err) {
+    console.error("Errore login:", err);
+    res.status(500).send("Errore durante il login");
+  }
 });
 
-// ✅ CANCELLAZIONE
-router.delete('/:id', (req, res) => {
-  const userId = parseInt(req.params.id);
-  const users = readUsers();
-  const index = users.findIndex(u => u.id === userId);
+// Helper per individuare se l'ID è un ObjectId
+function isObjectId(id) {
+  return /^[a-f0-9]{24}$/i.test(String(id));
+}
 
-  if (index === -1) return res.status(404).send("Utente non trovato");
+// ✅ MODIFICA profilo (compat sia con /users/:id numerico che con /users/:_id Mongo)
+router.put("/:id", async (req, res) => {
+  try {
+    const param = String(req.params.id);
+    const filter = isObjectId(param) ? { _id: param } : { legacyId: parseInt(param) };
 
-  users.splice(index, 1);
-  writeUsers(users);
-  res.sendStatus(204);
+    const updates = { ...req.body };
+    // non permettere di cambiare campi chiave direttamente:
+    delete updates._id;
+    delete updates.legacyId;
+    delete updates.username; // opzionale: rimuovi se vuoi permettere cambio username
+    delete updates.role;     // opzionale
+
+    const updated = await User.findOneAndUpdate(filter, { $set: updates }, { new: true });
+    if (!updated) return res.status(404).send("Utente non trovato");
+
+    res.json(updated);
+  } catch (err) {
+    console.error("Errore modifica utente:", err);
+    res.status(500).send("Errore durante la modifica");
+  }
 });
 
-// ✅ Endpoint per ottenere tutti i ristoratori da users.json
-router.get('/restaurants', (req, res) => {
-  const users = readUsers();
-  const ristoratori = users
-    .filter(u => u.role === "ristoratore")
-    .map(u => ({
-      nome: u.username + " Ristorante",
-      location: u.location,
-      telefono: u.phone,
-      partitaIVA: u.vat
+// ✅ CANCELLAZIONE (compat legacyId/_id)
+router.delete("/:id", async (req, res) => {
+  try {
+    const param = String(req.params.id);
+    const filter = isObjectId(param) ? { _id: param } : { legacyId: parseInt(param) };
+
+    const deleted = await User.findOneAndDelete(filter);
+    if (!deleted) return res.status(404).send("Utente non trovato");
+
+    res.sendStatus(204);
+  } catch (err) {
+    console.error("Errore cancellazione utente:", err);
+    res.status(500).send("Errore durante la cancellazione");
+  }
+});
+
+// ✅ Lista “ristoratori” (compat con vecchio /users/restaurants)
+router.get("/restaurants", async (req, res) => {
+  try {
+    // Prima fonte: tabella ristoranti dedicata (più ricca e affidabile)
+    const restaurants = await Restaurant.find().lean();
+    if (restaurants.length) {
+      const out = restaurants.map(r => ({
+        nome: r.nome,
+        location: r.luogo || "",
+        telefono: r.telefono || "",
+        partitaIVA: r.partitaIva || "",
+        restaurantId: r.restaurantId
+      }));
+      return res.json(out);
+    }
+
+    // Fallback: dagli utenti con role="ristoratore"
+    const users = await User.find({ role: "ristoratore" }).lean();
+    const out = users.map(u => ({
+      nome: `${u.username} Ristorante`,
+      location: u.location || "",
+      telefono: u.phone || "",
+      partitaIVA: u.vat || "",
+      restaurantId: u.restaurantId || null
     }));
-
-  res.json(ristoratori);
+    res.json(out);
+  } catch (err) {
+    console.error("Errore GET /users/restaurants:", err);
+    res.status(500).send("Errore nel recupero ristoratori");
+  }
 });
+
 module.exports = router;

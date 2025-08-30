@@ -1,23 +1,31 @@
 const express = require('express');
-const bodyParser = require('body-parser');
+const cors = require('cors');
+require('dotenv').config();
+const connectDB = require("./db");
+
 const mealsRoutes = require('./meals');
 const orderRoutes = require('./orders');
-const userRoutes = require('./users'); 
-const restaurantRoutes = require("./restaurant");
-
-const cors = require('cors');
+const userRoutes = require('./users');
+const restaurantRoutes = require('./restaurant');
 
 const app = express();
-const PORT = 3000;
+const PORT = process.env.PORT || 3000;
 
+// Middleware
 app.use(cors());
-app.use(bodyParser.json());
+app.use(express.json()); // sostituisce body-parser
 
+// Rotte API
 app.use('/users', userRoutes);
 app.use('/orders', orderRoutes);
-app.use("/restaurant", restaurantRoutes);
+app.use('/restaurant', restaurantRoutes);
 app.use('/meals', mealsRoutes);
 
-app.listen(PORT, () => {
-  console.log(`Server attivo su http://localhost:${PORT}`);
+// Avvio server SOLO dopo connessione a MongoDB
+connectDB(process.env.MONGO_URI).then(() => {
+  app.listen(PORT, () => {
+    console.log(`✅ Server attivo su http://localhost:${PORT}`);
+  });
+}).catch(err => {
+  console.error("❌ Errore avvio server:", err);
 });

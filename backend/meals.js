@@ -1,134 +1,176 @@
+// meals.js — versione MongoDB (Mongoose)
 const express = require("express");
-const fs = require("fs");
 const router = express.Router();
+const mongoose = require("mongoose");
 
-const DATA_FILE = "./meals1.json";       // dati per ristoranti
-const COMMON_MEALS_FILE = "./meals1.json"; // lista piatti comuni
+//  Assumiamo esista models/Meal.js
+// Schema atteso (esempio):
+// {
+//   idmeals: Number,       // ID numerico incrementale per compatibilità frontend
+//   nome: String,
+//   prezzo: Number,
+//   tipologia: String,
+//   ingredienti: [String], // NB: usiamo 'ingredienti' in italiano
+//   foto: String,
+//   restaurantId: String,  // es. "r_o" o ID del ristoratore
+//   origine: String,       // es. "comune" | "personalizzato"
+//   isCommon: Boolean      // opzionale: alternativa a 'origine'
+// }
+const Meal = require("./models/Meal");
 
-function readData() {
-  return JSON.parse(fs.readFileSync(DATA_FILE));
+// 🧩 Utility: ricostruisce ingredienti da strIngredient1..20 → ingredienti[]
+function buildIngredientiFromStr(obj) {
+  if (Array.isArray(obj.ingredienti) && obj.ingredienti.length) return obj.ingredienti;
+
+  const arr = [];
+  for (let i = 1; i <= 20; i++) {
+    const k = `strIngredient${i}`;
+    if (obj[k]) {
+      arr.push(String(obj[k]).trim());
+      delete obj[k];
+    }
+  }
+  return arr.length ? arr : [];
 }
 
-function writeData(data) {
-  fs.writeFileSync(DATA_FILE, JSON.stringify(data, null, 2));
+// 🧮 Utility: genera idmeals incrementale (compat con vecchio frontend)
+async function nextMealId() {
+  const last = await Meal.findOne().sort({ idmeals: -1 }).select("idmeals").lean();
+  return (last?.idmeals || 0) + 1;
 }
 
-function readCommonMeals() {
-  return JSON.parse(fs.readFileSync(COMMON_MEALS_FILE));
-}
-
-// ✅ Piatti comuni (endpoint compatibile con frontend)
-router.get("/common-meals", (req, res) => {
+/**
+ * ✅ Piatti comuni
+ * Restituisce i piatti marcati come comuni.
+ * Criterio: isCommon === true OR origine === "comune"
+ */
+router.get("/common-meals", async (req, res) => {
   try {
-    const meals = readCommonMeals();
-    res.json(meals);
+    const common = await Meal.find({
+      $or: [{ isCommon: true }, { origine: "comune" }],
+    }).lean();
+    res.json(common);
   } catch (err) {
     console.error("Errore nel leggere i piatti comuni:", err);
     res.status(500).send("Errore nella lettura dei piatti comuni");
   }
 });
 
-// ✅ Tutti i piatti dei ristoranti
-router.get("/", (req, res) => {
-  const data = readData();
-  res.json(data);
+/**
+ * ✅ Tutti i piatti (eventualmente filtrabili)
+ * Query supportate:
+ *  - ?restaurantId=...
+ *  - ?tipologia=...
+ *  - ?search=... (match parziale su nome)
+ */
+router.get("/", async (req, res) => {
+  try {
+    const { restaurantId, tipologia, search } = req.query;
+    const q = {};
+    if (restaurantId) q.restaurantId = restaurantId;
+    if (tipologia) q.tipologia = tipologia;
+    if (search) q.nome = { $regex: search, $options: "i" };
+
+    const meals = await Meal.find(q).lean();
+    res.json(meals);
+  } catch (err) {
+    console.error("Errore GET /meals:", err);
+    res.status(500).send("Errore nel recupero dei piatti");
+  }
 });
 
-// ✅ Singolo piatto per idmeals
-router.get("/:id", (req, res) => {
-  const data = readData();
-  const id = parseInt(req.params.id);
-  for (const r of data) {
-    const meal = r.menu?.find(m => m.idmeals === id);
-    if (meal) return res.json(meal);
+/**
+ * ✅ Singolo piatto per idmeals
+ */
+router.get("/:id", async (req, res) => {
+  try {
+    const id = parseInt(req.params.id);
+    const meal = await Meal.findOne({ idmeals: id }).lean();
+    if (!meal) return res.status(404).send("Piatto non trovato");
+    res.json(meal);
+  } catch (err) {
+    console.error("Errore GET /meals/:id:", err);
+    res.status(500).send("Errore nel recupero del piatto");
   }
-  res.status(404).send("Piatto non trovato");
 });
 
-// ✅ Aggiunta piatto al menu del ristorante
-router.post("/", (req, res) => {
-  const data = readData();
-  const newMeal = req.body;
-  const { restaurantId } = newMeal;
+/**
+ * ✅ Aggiunta piatto
+ * Body richiesto: { restaurantId, nome, prezzo, tipologia, ingredienti? | strIngredient1..20, foto?, origine? }
+ */
+router.post("/", async (req, res) => {
+  try {
+    const payload = { ...req.body };
 
-  if (!restaurantId) return res.status(400).send("restaurantId mancante");
-
-  // Debug: stampa solo se contiene ingredienti comuni
-  if (newMeal.strIngredient1 || newMeal.strIngredient2) {
-    console.log("🔍 Piatto ricevuto con strIngredientX:", JSON.stringify(newMeal, null, 2));
-  }
-
-  // Se mancano gli ingredients ma ci sono strIngredientX, li ricostruiamo
-if (!Array.isArray(newMeal.ingredients) || newMeal.ingredients.length === 0) {
-  const reconstructed = [];
-  for (let i = 1; i <= 20; i++) {
-    const key = `strIngredient${i}`;
-    if (newMeal[key]) {
-      reconstructed.push(newMeal[key]);
-      delete newMeal[key];
+    if (!payload.restaurantId) {
+      return res.status(400).send("restaurantId mancante");
     }
+
+    // Ricostruzione ingredienti se arrivano come strIngredientX
+    const ingredienti = buildIngredientiFromStr(payload);
+    if (ingredienti.length) payload.ingredienti = ingredienti;
+
+    // Imposta origine di default se non fornita
+    if (!payload.origine) payload.origine = "personalizzato";
+
+    // Genera idmeals incrementale
+    payload.idmeals = await nextMealId();
+
+    const created = await Meal.create(payload);
+    res.status(201).json(created);
+  } catch (err) {
+    console.error("Errore POST /meals:", err);
+    res.status(500).send("Errore nella creazione del piatto");
   }
-  if (reconstructed.length > 0) {
-    newMeal.ingredients = reconstructed;
-  }
-}
-
-
-  const restaurant = data.find(r => r.restaurantId == restaurantId);
-  if (!restaurant) return res.status(404).send("Ristorante non trovato");
-
-  const allMeals = data.flatMap(r => r.menu || []);
-  const maxId = Math.max(0, ...allMeals.map(m => m.idmeals || 0));
-  newMeal.idmeals = maxId + 1;
-
-  if (!restaurant.menu) restaurant.menu = [];
-
-  if (!newMeal.origine) newMeal.origine = "personalizzato";
-
-  restaurant.menu.push(newMeal);
-  writeData(data);
-  res.status(201).json(newMeal);
 });
 
-// ✅ Modifica piatto esistente
-router.put("/:id", (req, res) => {
-  const data = readData();
-  const id = parseInt(req.params.id);
+/**
+ * ✅ Modifica piatto esistente (per idmeals)
+ */
+router.put("/:id", async (req, res) => {
+  try {
+    const id = parseInt(req.params.id);
+    const updates = { ...req.body };
 
-  for (const r of data) {
-    const mealIndex = r.menu?.findIndex(m => m.idmeals === id);
-    if (mealIndex >= 0) {
-      const updated = {
-        ...r.menu[mealIndex],
-        ...req.body,
-        idmeals: id
-      };
-      r.menu[mealIndex] = updated;
-      writeData(data);
-      return res.json(updated);
-    }
+    // Se arrivano strIngredientX, ricostruisci
+    const ing = buildIngredientiFromStr(updates);
+    if (ing.length) updates.ingredienti = ing;
+
+    // Non permettiamo di cambiare l'idmeals
+    delete updates.idmeals;
+
+    const updated = await Meal.findOneAndUpdate(
+      { idmeals: id },
+      { $set: updates },
+      { new: true }
+    );
+
+    if (!updated) return res.status(404).send("Piatto non trovato");
+    res.json(updated);
+  } catch (err) {
+    console.error("Errore PUT /meals/:id:", err);
+    res.status(500).send("Errore nella modifica del piatto");
   }
-
-  res.status(404).send("Piatto non trovato");
 });
 
-// ✅ Elimina piatto dal menu del ristorante
-router.delete("/:restaurantId/:idmeals", (req, res) => {
-  const data = readData();
-  const { restaurantId, idmeals } = req.params;
-  const id = parseInt(idmeals);
+/**
+ * ✅ Elimina piatto (compat con vecchio frontend)
+ * Route: /meals/:restaurantId/:idmeals
+ * Nota: in Mongo filtriamo per entrambi per sicurezza.
+ */
+router.delete("/:restaurantId/:idmeals", async (req, res) => {
+  try {
+    const { restaurantId, idmeals } = req.params;
+    const id = parseInt(idmeals);
 
-  const restaurant = data.find(r => r.restaurantId == restaurantId);
-  if (!restaurant || !restaurant.menu) {
-    return res.status(404).send("Ristorante o menu non trovato");
+    const deleted = await Meal.findOneAndDelete({ restaurantId, idmeals: id });
+    if (!deleted) return res.status(404).send("Piatto non trovato");
+
+    res.json({ success: true, removed: deleted });
+  } catch (err) {
+    console.error("Errore DELETE /meals/:restaurantId/:idmeals:", err);
+    res.status(500).send("Errore nell'eliminazione del piatto");
   }
-
-  const index = restaurant.menu.findIndex(m => m.idmeals === id);
-  if (index === -1) return res.status(404).send("Piatto non trovato");
-
-  const removed = restaurant.menu.splice(index, 1);
-  writeData(data);
-  res.json({ success: true, removed });
 });
 
 module.exports = router;
