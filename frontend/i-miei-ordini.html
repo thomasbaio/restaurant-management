@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <meta charset="UTF-8">
+  <title>I miei ordini</title>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <h1>📦 I miei ordini</h1>
+  <div id="ordini-container">
+    <p>Caricamento in corso...</p>
+  </div>
+  <p><a href="index.html">⬅️ Torna alla home</a></p>
+  <p><a href="storico_clienti.html">vecchi ordini</a></p>
+<script>
+window.onload = async () => {
+  const user = JSON.parse(localStorage.getItem("loggedUser"));
+  if (!user || user.role !== "cliente") {
+    alert("Accesso riservato ai clienti");
+    window.location.href = "login.html";
+    return;
+  }
+
+  const container = document.getElementById("ordini-container");
+
+  try {
+    const res = await fetch(`http://localhost:3000/orders?username=${user.username}`);
+    const ordini = await res.json();
+
+    // Leggi anche i piatti per poter mostrare i nomi
+    const menuRes = await fetch("http://localhost:3000/meals");
+    const ristoranti = await menuRes.json();
+    const tuttiIPiatti = ristoranti.flatMap(r => r.menu || []);
+
+    if (ordini.length === 0) {
+      container.innerHTML = "<p>Nessun ordine trovato.</p>";
+      return;
+    }
+
+    container.innerHTML = "";
+    ordini.reverse().forEach(ordine => {
+      const div = document.createElement("div");
+      div.className = "ordine-box";
+
+      const piattiOrdinati = (ordine.meals || [])
+        .map(id => {
+          const p = tuttiIPiatti.find(m => m.idmeals === id);
+          return p ? `${p.nome} (€${p.prezzo?.toFixed(2)})` : `Piatto ID ${id}`;
+        }).join(", ");
+
+      div.innerHTML = `
+        <p><strong>ID:</strong> ${ordine.id}</p>
+        <p><strong>Consegna:</strong> ${ordine.delivery}</p>
+        <p><strong>Stato:</strong> <span class="stato">${ordine.status}</span></p>
+        <p><strong>Piatti:</strong> ${piattiOrdinati}</p>
+        ${ordine.delivery === "domicilio" ? `<p><strong>Indirizzo:</strong> ${ordine.address}</p>` : ""}
+        <div class="azioni"></div>
+      `;
+
+      // Se lo stato è "in consegna", mostra il pulsante
+      if (ordine.status === "in consegna") {
+        const azioniDiv = div.querySelector(".azioni");
+        const btn = document.createElement("button");
+        btn.textContent = "Segnala come consegnato";
+        btn.addEventListener("click", async () => {
+          try {
+            const updateRes = await fetch(`http://localhost:3000/orders/${ordine.id}`, {
+              method: "PUT",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ status: "consegnato" })
+            });
+
+            if (updateRes.ok) {
+              alert("Ordine segnato come consegnato!");
+              window.location.reload();
+            } else {
+              alert("Errore nel segnalare la consegna.");
+            }
+          } catch (err) {
+            console.error("Errore fetch:", err);
+            alert("Errore di rete");
+          }
+        });
+        azioniDiv.appendChild(btn);
+      }
+
+      container.appendChild(div);
+    });
+  } catch (err) {
+    console.error("Errore caricamento ordini:", err);
+    container.innerHTML = "<p>Errore nel caricamento degli ordini.</p>";
+  }
+};
+</script>
+
+</body>
+</html>

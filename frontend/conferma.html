@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <meta charset="UTF-8">
+  <title>Conferma Ordine</title>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <h1>✅ Ordine Confermato</h1>
+
+  <h2>Grazie per il tuo ordine!</h2>
+<div id="riepilogo"></div>
+<div id="tempo-attesa"></div>
+
+    <h3>🛒 Piatti ordinati:</h3>
+    <ul id="lista-piatti"></ul>
+
+    <p><a href="index.html">🔙 Torna alla Home</a></p>
+  </div>
+
+<script>
+window.onload = async () => {
+  const ordine = JSON.parse(localStorage.getItem("lastConfirmedOrder"));
+  const riepilogo = document.getElementById("riepilogo");
+  const attesaDiv = document.getElementById("tempo-attesa");
+  const listaPiatti = document.getElementById("lista-piatti");
+
+  if (!ordine) {
+    riepilogo.innerHTML = "<p>Nessun ordine trovato.</p>";
+    return;
+  }
+
+  // Riepilogo ordine
+  riepilogo.innerHTML = `
+    <p><strong>Consegna:</strong> ${ordine.delivery}</p>
+    <p><strong>Metodo di pagamento:</strong> ${ordine.payment || "carta"}</p>
+    ${ordine.delivery === "domicilio" ? `<p><strong>Indirizzo:</strong> ${ordine.address || "-"}</p>` : ""}
+  `;
+
+  // Carica piatti per visualizzare i nomi
+  try {
+    const res = await fetch("http://localhost:3000/meals");
+    const data = await res.json();
+    const tuttiIPiatti = data.flatMap(r => r.menu || []);
+
+    const piattiOrdinati = tuttiIPiatti.filter(p => ordine.meals.includes(p.idmeals));
+
+    if (piattiOrdinati.length === 0) {
+      listaPiatti.innerHTML = "<li>Nessun piatto trovato.</li>";
+    } else {
+      listaPiatti.innerHTML = piattiOrdinati.map(p =>
+        `<li><strong>${p.nome}</strong> - €${p.prezzo.toFixed(2)}</li>`
+      ).join("");
+    }
+  } catch (err) {
+    console.error("Errore nel caricamento dei piatti:", err);
+    listaPiatti.innerHTML = "<li>Errore nel caricamento dei piatti.</li>";
+  }
+
+  // Timer di attesa se ritiro al ristorante
+  if (ordine.delivery === "asporto") {
+    try {
+      const res = await fetch("http://localhost:3000/orders");
+      const tuttiGliOrdini = await res.json();
+
+      const ordiniInAttesa = tuttiGliOrdini.filter(o =>
+        o.delivery === "asporto" &&
+        (o.status === "ordinato" || o.status === "in preparazione")
+      );
+
+      const minutiAttesa = ordiniInAttesa.length * 5;
+      let secondiRimanenti = minutiAttesa * 60;
+
+      const formattaTempo = s => {
+        const m = Math.floor(s / 60);
+        const sec = s % 60;
+        return `${m}m ${sec}s`;
+      };
+
+      const aggiornaTimer = () => {
+        if (secondiRimanenti > 0) {
+          attesaDiv.innerHTML = `
+            <p><strong>🕒 Tempo stimato per il ritiro:</strong> ${formattaTempo(secondiRimanenti)}</p>
+          `;
+          secondiRimanenti--;
+        } else {
+          clearInterval(timer);
+          attesaDiv.innerHTML = `<p style="color:green;"><strong>✅ Il tuo ordine dovrebbe essere pronto!</strong></p>`;
+        }
+      };
+
+      aggiornaTimer(); // avvio immediato
+      const timer = setInterval(aggiornaTimer, 1000); // ogni secondo
+
+    } catch (err) {
+      console.error("Errore nel calcolo tempo attesa:", err);
+      attesaDiv.innerHTML = "<p>Errore nel calcolo del tempo di attesa.</p>";
+    }
+  }
+};
+</script>
+
+
+
+  </script>
+</body>
+</html>

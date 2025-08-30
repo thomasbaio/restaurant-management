@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <meta charset="UTF-8">
+  <title>Gestione Menu</title>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <h1>Menu del Ristorante</h1>
+
+  <div id="welcome" style="margin-bottom: 10px; font-weight: bold;"></div>
+
+  <div id="links" style="margin-bottom: 20px;"></div>
+
+  <div id="links" class="link-bar">
+  <p><a href="ricerca_piatti.html">🔍 Ricerca Piatti</a></p>
+    <p><a href="ricerca_ristoranti.html">📍 Ricerca Ristoranti</a></p>
+    <p id="link-order" style="display:none;"><a href="order.html">🛒 Ordina qui</a></p>
+    <p id="link-ordini-ristoratore" style="display:none;"><a href="ordini_ristoratore.html">📋 Ordini ricevuti</a></p>
+    <p id="link-statistiche" style="display:none;"><a href="statistiche_ristoratore.html">📈 Statistiche</a></p>
+  </div>
+
+  <h2>🍽️ Offerte Speciali per Te</h2>
+  <ul id="offerte-speciali">
+    <li>Caricamento...</li>
+  </ul>
+
+  <div id="filtro-container" style="margin-bottom: 20px;">
+    <label for="filtro-ingrediente"><strong>🔍 Filtra per ingrediente:</strong></label>
+    <input type="text" id="filtro-ingrediente" placeholder="Es. pomodoro, mozzarella...">
+  </div>
+
+  <div id="menu-container">
+    <table border="1">
+      <thead>
+        <tr>
+          <th>Nome</th>
+          <th>Prezzo</th>
+          <th>Categoria</th>
+          <th>Ingredienti</th>
+          <th>Foto</th>
+          <th>Azioni</th>
+        </tr>
+      </thead>
+      <tbody id="menu-body">
+        <!-- Piatti generati dinamicamente -->
+      </tbody>
+    </table>
+  </div>
+
+  <script src="js/main.js" defer></script>
+  <script>
+    window.addEventListener("DOMContentLoaded", () => {
+      const user = JSON.parse(localStorage.getItem("loggedUser"));
+      const linkContainer = document.getElementById("links");
+      const welcome = document.getElementById("welcome");
+
+      const linkOrder = document.getElementById("link-order");
+      const linkOrdiniRistoratore = document.getElementById("link-ordini-ristoratore");
+      const linkStatistiche = document.getElementById("link-statistiche");
+
+      if (user) {
+        welcome.textContent = `👋 Benvenuto, ${user.username}`;
+
+        if (user.role === "cliente") {
+          linkOrder.style.display = "block";
+        } else if (user.role === "ristoratore") {
+          linkOrdiniRistoratore.style.display = "block";
+          linkStatistiche.style.display = "block";
+        }
+
+        linkContainer.innerHTML = `
+          ${user.role === "ristoratore" ? '<a href="add.html">➕ Aggiungi Piatto</a> | ' : ''}
+          ${user.role === "cliente" ? '<a href="i-miei-ordini.html">📦 I miei ordini</a> | ' : ''}
+          <a href="edituser.html">✏️ Modifica Profilo</a> |
+          <a href="login.html" onclick="localStorage.removeItem('loggedUser')">🚪 Logout</a>
+        `;
+      } else {
+        linkContainer.innerHTML = `
+          <a href="login.html">🔑 Accedi</a> |
+          <a href="register.html">📝 Registrati</a>
+        `;
+      }
+    });
+  </script>
+</body>
+</html>

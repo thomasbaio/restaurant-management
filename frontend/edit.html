@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <meta charset="UTF-8">
+  <title>Modifica Piatto</title>
+</head>
+<body>
+  <h1>Modifica Piatto</h1>
+  <form id="edit-form">
+    <label for="name">Nome:</label>
+    <input type="text" id="name" required><br><br>
+
+    <label for="price">Prezzo (€):</label>
+    <input type="number" id="price" step="0.01" required><br><br>
+
+    <label for="description">Descrizione:</label><br>
+    <textarea id="description" rows="3" cols="40"></textarea><br><br>
+
+    <label for="ingredients">Ingredienti (separati da virgola):</label><br>
+    <input type="text" id="ingredients"><br><br>
+
+    <label for="category">Categoria:</label>
+    <select id="category">
+      <option value="">--Seleziona--</option>
+      <option value="Antipasto">Antipasto</option>
+      <option value="Primo">Primo</option>
+      <option value="Secondo">Secondo</option>
+      <option value="Dessert">Dessert</option>
+    </select><br><br>
+
+    <button type="submit">Salva Modifiche</button>
+  </form>
+
+  <script src="js/edit.js"></script>
+</body>
+</html>

@@ -1,0 +1,81 @@
+[
+  {
+    "username": "bye",
+    "role": "cliente",
+    "meals": [
+      1,
+      2
+    ],
+    "delivery": "ristorante",
+    "address": null,
+    "id": 1,
+    "timestamp": "2025-08-04T07:43:47.208Z"
+  },
+  {
+    "username": "bye",
+    "role": "cliente",
+    "meals": [
+      3,
+      4
+    ],
+    "delivery": "ristorante",
+    "address": null,
+    "id": 2,
+    "timestamp": "2025-08-04T08:30:52.636Z"
+  },
+  {
+    "username": "bye",
+    "role": "cliente",
+    "meals": [
+      3,
+      4
+    ],
+    "delivery": "asporto",
+    "address": null,
+    "payment": "carta_credito",
+    "id": 3,
+    "timestamp": "2025-08-04T08:41:26.671Z"
+  },
+  {
+    "username": "hh",
+    "role": "cliente",
+    "meals": [
+      3,
+      4
+    ],
+    "delivery": "asporto",
+    "stato": "ordinato",
+    "payment": "carta_credito",
+    "status": "consegnato",
+    "id": 4,
+    "timestamp": "2025-08-05T15:13:08.401Z"
+  },
+  {
+    "username": "hh",
+    "role": "cliente",
+    "meals": [
+      3,
+      4
+    ],
+    "delivery": "asporto",
+    "stato": "ordinato",
+    "payment": "carta_credito",
+    "status": "ordinato",
+    "id": 5,
+    "timestamp": "2025-08-05T15:33:59.213Z"
+  },
+  {
+    "username": "hh",
+    "role": "cliente",
+    "meals": [
+      2,
+      4
+    ],
+    "delivery": "asporto",
+    "stato": "ordinato",
+    "payment": "carta_credito",
+    "status": "ordinato",
+    "id": 6,
+    "timestamp": "2025-08-05T15:38:29.633Z"
+  }
+]

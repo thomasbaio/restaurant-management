@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <meta charset="UTF-8">
+  <title>Ordina Piatti</title>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <p><a href="index.html">Torna alla Home</a></p>
+  <h1>Ordina Piatti</h1>
+
+  <form id="order-form">
+    <div id="meals-list">
+      <!-- Piatti caricati da JS -->
+    </div>
+
+    <h3>Modalità di ritiro:</h3>
+    <label><input type="radio" name="delivery" value="asporto" checked> Ritiro al ristorante</label><br>
+
+    <div id="address-section" style="display:none;">
+      <label for="address">Indirizzo di consegna:</label><br>
+      <input type="text" id="address" name="address">
+    </div>
+
+    <h3>Metodo di pagamento:</h3>
+    <label><input type="radio" name="payment" value="carta_credito" checked> Carta di credito</label><br>
+    <label><input type="radio" name="payment" value="prepagata"> Carta prepagata</label><br>
+
+    <h3>Carrello</h3>
+    <div id="cart-list"></div>
+
+    <p id="total"><strong>Totale: €0.00</strong></p>
+
+    <button type="submit">Invia Ordine</button>
+  </form>
+
+  <script src="js/order.js"></script>
+</body>
+</html>
+

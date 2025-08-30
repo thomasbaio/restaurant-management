@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <meta charset="UTF-8">
+  <title>Gestione Ristorante</title>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <h1>Gestione Ristorante</h1>
+
+  <div id="info"></div>
+
+  <form id="restaurant-form">
+    <label for="restaurantName">Nome Ristorante:</label>
+    <input type="text" id="restaurantName" required><br><br>
+
+    <label for="address">Indirizzo:</label>
+    <input type="text" id="address" required><br><br>
+
+    <label for="piva">Partita IVA:</label>
+    <input type="text" id="piva" required><br><br>
+
+    <label for="phone">Telefono:</label>
+    <input type="text" id="phone" required><br><br>
+
+    <button type="submit">Salva</button>
+    <button type="button" onclick="logout()">Logout</button>
+  </form>
+
+  <script src="js/restaurant.js"></script>
+</body>
+</html>

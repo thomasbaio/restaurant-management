@@ -1,0 +1,24 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <meta charset="UTF-8">
+  <title>Ricerca Piatti</title>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <h1>🔍 Cerca Piatti</h1>
+
+  <label>Nome: <input type="text" id="nome"></label><br>
+  <label>Tipologia: <input type="text" id="tipologia"></label><br>
+  <label>Prezzo massimo: <input type="number" id="prezzo" step="0.01"></label><br><br>
+
+  <button onclick="cercaPiatti()">Cerca</button>
+
+  <h2>🍽️ Risultati</h2>
+  <ul id="risultati-piatti"></ul>
+
+  <p><a href="index.html">⬅️ Torna alla home</a></p>
+
+  <script src="js/ricerca_piatti.js"></script>
+</body>
+</html>

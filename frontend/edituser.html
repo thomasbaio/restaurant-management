@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <meta charset="UTF-8">
+  <title>Modifica Profilo</title>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <h1>Modifica Profilo Utente</h1>
+
+  <form id="edit-user-form">
+    <label>Username: <input type="text" id="username" required></label><br><br>
+    <label>Email: <input type="email" id="email" required></label><br><br>
+    <label>Password: <input type="password" id="password" required></label><br><br>
+
+    <label>Ruolo:</label><br>
+    <label><input type="radio" name="role" value="cliente"> Cliente</label><br>
+    <label><input type="radio" name="role" value="ristoratore"> Ristoratore</label><br><br>
+
+    <div id="ristoratore-extra" style="display: none;">
+      <label>Partita IVA: <input type="text" id="piva"></label><br><br>
+      <label>Telefono: <input type="text" id="telefono"></label><br><br>
+      <label>Luogo: <input type="text" id="luogo"></label><br><br>
+      <label>Via: <input type="text" id="via"></label><br><br>
+    </div>
+
+    <div id="cliente-extra" style="display: none;">
+      <label>Nome: <input type="text" id="nome"></label><br><br>
+      <label>Cognome: <input type="text" id="cognome"></label><br><br>
+      <label>Metodo di Pagamento:
+        <select id="pagamento">
+          <option value="">-- Seleziona --</option>
+          <option value="Visa">Visa</option>
+          <option value="Mastercard">Mastercard</option>
+          <option value="Postepay">Postepay</option>
+          <option value="Amex">Amex</option>
+        </select>
+      </label><br><br>
+      <label>Preferenza prodotto:
+        <select id="preferenza">
+          <option value="">-- Nessuna --</option>
+          <option value="primi">Primi</option>
+          <option value="secondi">Secondi</option>
+          <option value="Dessert">Dessert</option>
+          <option value="Offerte speciali">offerte speciali</option>
+          <option value="bevande">Bevande</option>
+        </select>
+      </label><br><br>
+    </div>
+
+    <button type="submit">Salva Modifiche</button>
+    <button type="button" id="delete-btn" style="color: red;">Elimina Profilo</button>
+  </form>
+
+  <p><a href="index.html">Torna alla Home</a></p>
+
+  <script>
+    const user = JSON.parse(localStorage.getItem("loggedUser"));
+    if (!user) {
+      alert("Devi essere loggato per modificare il profilo");
+      window.location.href = "login.html";
+    }
+
+    // Precompila il form
+    document.getElementById("username").value = user.username;
+    document.getElementById("email").value = user.email || "";
+    document.getElementById("password").value = user.password || "";
+    document.querySelector(`input[name="role"][value="${user.role}"]`).checked = true;
+
+    if (user.role === "ristoratore") {
+      document.getElementById("ristoratore-extra").style.display = "block";
+      document.getElementById("piva").value = user.piva || "";
+      document.getElementById("telefono").value = user.telefono || "";
+      document.getElementById("luogo").value = user.luogo || "";
+      document.getElementById("via").value = user.via || "";
+    }
+
+    if (user.role === "cliente") {
+      document.getElementById("cliente-extra").style.display = "block";
+      document.getElementById("nome").value = user.nome || "";
+      document.getElementById("cognome").value = user.cognome || "";
+      document.getElementById("pagamento").value = user.pagamento || "";
+      document.getElementById("preferenza").value = user.preferenza || "";
+    }
+
+    document.querySelectorAll('input[name="role"]').forEach(radio => {
+      radio.addEventListener("change", function () {
+        document.getElementById("ristoratore-extra").style.display = this.value === "ristoratore" ? "block" : "none";
+        document.getElementById("cliente-extra").style.display = this.value === "cliente" ? "block" : "none";
+      });
+    });
+
+    document.getElementById("edit-user-form").addEventListener("submit", async function (e) {
+      e.preventDefault();
+
+      const updatedUser = {
+        username: document.getElementById("username").value.trim(),
+        email: document.getElementById("email").value.trim(),
+        password: document.getElementById("password").value,
+        role: document.querySelector('input[name="role"]:checked').value
+      };
+
+      if (updatedUser.role === "ristoratore") {
+        updatedUser.piva = document.getElementById("piva").value.trim();
+        updatedUser.telefono = document.getElementById("telefono").value.trim();
+        updatedUser.luogo = document.getElementById("luogo").value.trim();
+        updatedUser.via = document.getElementById("via").value.trim();
+      }
+
+      if (updatedUser.role === "cliente") {
+        updatedUser.nome = document.getElementById("nome").value.trim();
+        updatedUser.cognome = document.getElementById("cognome").value.trim();
+        updatedUser.pagamento = document.getElementById("pagamento").value;
+        updatedUser.preferenza = document.getElementById("preferenza").value;
+      }
+
+      try {
+        const res = await fetch(`http://localhost:3000/users/${user.id}`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(updatedUser)
+        });
+
+        if (res.ok) {
+          alert("Profilo aggiornato con successo!");
+          localStorage.setItem("loggedUser", JSON.stringify({ ...updatedUser, id: user.id }));
+          window.location.href = "index.html";
+        } else {
+          alert("Errore durante la modifica del profilo");
+        }
+      } catch (err) {
+        console.error("Errore:", err);
+        alert("Errore di rete");
+      }
+    });
+
+    document.getElementById("delete-btn").addEventListener("click", async function () {
+      if (!confirm("Sei sicuro di voler cancellare il tuo account?")) return;
+
+      try {
+        const res = await fetch(`http://localhost:3000/users/${user.id}`, {
+          method: "DELETE"
+        });
+
+        if (res.ok) {
+          alert("Account eliminato");
+          localStorage.removeItem("loggedUser");
+          window.location.href = "index.html";
+        } else {
+          alert("Errore nella cancellazione dell’account");
+        }
+      } catch (err) {
+        console.error("Errore:", err);
+        alert("Errore di rete");
+      }
+    });
+  </script>
+</body>
+</html>

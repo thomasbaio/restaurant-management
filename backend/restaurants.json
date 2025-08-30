@@ -1,0 +1,18 @@
+[
+  {
+    "restaurantId": "r_i",
+    "nome": "i Ristorante",
+    "partitaIVA": "FR 10 123456788",
+    "telefono": "037856587",
+    "luogo": "crema",
+    "indirizzo": "gulielmo 3"
+  },
+  {
+    "restaurantId": "r_o",
+    "nome": "o Ristorante",
+    "partitaIVA": "FR 10 123456796",
+    "telefono": "037856587",
+    "luogo": "crema",
+    "indirizzo": "gulielmo 3"
+  }
+]

@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <meta charset="UTF-8">
+  <title>Registrazione Utente</title>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <h1>Registrazione</h1>
+
+  <form id="register-form">
+    <label for="username">Nome utente:</label>
+    <input type="text" id="username" required><br><br>
+
+    <label for="email">Email:</label>
+    <input type="email" id="email" required><br><br>
+
+    <label for="password">Password:</label>
+    <input type="password" id="password" required><br><br>
+
+    <label for="role">Ruolo:</label>
+    <select id="role" required>
+      <option value="cliente">Cliente</option>
+      <option value="ristoratore">Ristoratore</option>
+    </select><br><br>
+<div id="cliente-extra" style="display:none;">
+  <label for="nome">Nome:</label>
+  <input type="text" id="nome"><br><br>
+
+  <label for="cognome">Cognome:</label>
+  <input type="text" id="cognome"><br><br>
+
+  <label for="pagamento">Metodo di Pagamento:</label>
+  <select id="pagamento">
+    <option value="">-- Seleziona --</option>
+    <option value="Visa">Visa</option>
+    <option value="Mastercard">Mastercard</option>
+    <option value="Postepay">Postepay</option>
+    <option value="Amex">American Express</option>
+  </select><br><br>
+
+  <label for="preferenza">Preferenza prodotto:</label>
+  <select id="preferenza">
+    <option value="">-- Nessuna preferenza --</option>
+    <option value="antipasti">antipasti</option>
+    <option value="primi">Primi</option>
+    <option value="secondi">Secondi</option>
+    <option value="dessert">Dessert</option>
+    <option value="offerte del giorno">offerte del giorno</option>
+    <option value="bevande">Bevande</option>
+  </select><br><br>
+</div>
+    <div id="ristoratore-extra" style="display:none;">
+      <label for="piva">Partita IVA:</label>
+      <input type="text" id="piva"><br><br>
+
+      <label for="telefono">Telefono:</label>
+      <input type="text" id="telefono"><br><br>
+
+      <label for="luogo">Luogo:</label>
+      <input type="text" id="luogo"><br><br>
+
+      <label for="via">Indirizzo (via):</label>
+      <input type="text" id="via"><br><br>
+    </div>
+
+    <button type="submit">Registrati</button>
+    <button type="button" onclick="window.location.href='login.html'">Vai al Login</button>
+  </form>
+
+  <script src="js/register.js"></script>
+
+</body>
+</html>
