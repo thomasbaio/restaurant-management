@@ -1,18 +1,16 @@
 {
   "name": "fast-food",
   "version": "1.0.0",
-  "main": "index.js",
+  "main": "backend/index.js",
   "scripts": {
     "start": "node backend/index.js"
   },
   "description": "Restaurant management app",
   "license": "ISC",
   "dependencies": {
-    "body-parser": "^2.2.0",
     "cors": "^2.8.5",
     "dotenv": "^17.2.1",
     "express": "^5.1.0",
-    "mongodb": "^6.19.0",
     "mongoose": "^8.18.0",
     "swagger-jsdoc": "^6.2.8",
     "swagger-ui-express": "^5.0.1"
@@ -21,3 +19,4 @@
     "node": ">=18"
   }
 }
+
