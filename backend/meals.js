@@ -1,50 +1,30 @@
 // meals.js — versione MongoDB (Mongoose)
 const express = require("express");
 const router = express.Router();
-const mongoose = require("mongoose");
-
-//  Assumiamo esista models/Meal.js
-// Schema atteso (esempio):
-// {
-//   idmeals: Number,       // ID numerico incrementale per compatibilità frontend
-//   nome: String,
-//   prezzo: Number,
-//   tipologia: String,
-//   ingredienti: [String], // NB: usiamo 'ingredienti' in italiano
-//   foto: String,
-//   restaurantId: String,  // es. "r_o" o ID del ristoratore
-//   origine: String,       // es. "comune" | "personalizzato"
-//   isCommon: Boolean      // opzionale: alternativa a 'origine'
-// }
 const Meal = require("./models/Meal");
 
 // 🧩 Utility: ricostruisce ingredienti da strIngredient1..20 → ingredienti[]
 function buildIngredientiFromStr(obj) {
   if (Array.isArray(obj.ingredienti) && obj.ingredienti.length) return obj.ingredienti;
-
   const arr = [];
   for (let i = 1; i <= 20; i++) {
     const k = `strIngredient${i}`;
     if (obj[k]) {
       arr.push(String(obj[k]).trim());
-      delete obj[k];
+      delete obj[k]; // pulizia
     }
   }
-  return arr.length ? arr : [];
+  return arr;
 }
 
-// 🧮 Utility: genera idmeals incrementale (compat con vecchio frontend)
+// 🧮 Utility: genera idmeals incrementale
 async function nextMealId() {
   const last = await Meal.findOne().sort({ idmeals: -1 }).select("idmeals").lean();
   return (last?.idmeals || 0) + 1;
 }
 
-/**
- * ✅ Piatti comuni
- * Restituisce i piatti marcati come comuni.
- * Criterio: isCommon === true OR origine === "comune"
- */
-router.get("/common-meals", async (req, res) => {
+/** Piatti comuni */
+router.get("/common-meals", async (_req, res) => {
   try {
     const common = await Meal.find({
       $or: [{ isCommon: true }, { origine: "comune" }],
@@ -56,13 +36,7 @@ router.get("/common-meals", async (req, res) => {
   }
 });
 
-/**
- * ✅ Tutti i piatti (eventualmente filtrabili)
- * Query supportate:
- *  - ?restaurantId=...
- *  - ?tipologia=...
- *  - ?search=... (match parziale su nome)
- */
+/** Tutti i piatti (filtri: ?restaurantId= & ?tipologia= & ?search= ) */
 router.get("/", async (req, res) => {
   try {
     const { restaurantId, tipologia, search } = req.query;
@@ -79,12 +53,11 @@ router.get("/", async (req, res) => {
   }
 });
 
-/**
- * ✅ Singolo piatto per idmeals
- */
+/** Singolo piatto per idmeals */
 router.get("/:id", async (req, res) => {
   try {
-    const id = parseInt(req.params.id);
+    const id = Number.parseInt(req.params.id, 10);
+    if (Number.isNaN(id)) return res.status(400).send("id non valido");
     const meal = await Meal.findOne({ idmeals: id }).lean();
     if (!meal) return res.status(404).send("Piatto non trovato");
     res.json(meal);
@@ -94,10 +67,7 @@ router.get("/:id", async (req, res) => {
   }
 });
 
-/**
- * ✅ Aggiunta piatto
- * Body richiesto: { restaurantId, nome, prezzo, tipologia, ingredienti? | strIngredient1..20, foto?, origine? }
- */
+/** Aggiunta piatto */
 router.post("/", async (req, res) => {
   try {
     const payload = { ...req.body };
@@ -105,39 +75,40 @@ router.post("/", async (req, res) => {
     if (!payload.restaurantId) {
       return res.status(400).send("restaurantId mancante");
     }
+    if (!payload.nome || typeof payload.prezzo !== "number") {
+      return res.status(400).send("nome e prezzo sono obbligatori");
+    }
 
-    // Ricostruzione ingredienti se arrivano come strIngredientX
     const ingredienti = buildIngredientiFromStr(payload);
-    if (ingredienti.length) payload.ingredienti = ingredienti;
+    if (ingredienti?.length) payload.ingredienti = ingredienti;
 
-    // Imposta origine di default se non fornita
     if (!payload.origine) payload.origine = "personalizzato";
 
-    // Genera idmeals incrementale
     payload.idmeals = await nextMealId();
 
     const created = await Meal.create(payload);
     res.status(201).json(created);
   } catch (err) {
+    // gestisci violazione di unique su idmeals
+    if (err?.code === 11000 && err?.keyPattern?.idmeals) {
+      return res.status(409).send("idmeals duplicato, riprova");
+    }
     console.error("Errore POST /meals:", err);
     res.status(500).send("Errore nella creazione del piatto");
   }
 });
 
-/**
- * ✅ Modifica piatto esistente (per idmeals)
- */
+/** Modifica piatto per idmeals */
 router.put("/:id", async (req, res) => {
   try {
-    const id = parseInt(req.params.id);
+    const id = Number.parseInt(req.params.id, 10);
+    if (Number.isNaN(id)) return res.status(400).send("id non valido");
+
     const updates = { ...req.body };
+    delete updates.idmeals; // non modificabile
 
-    // Se arrivano strIngredientX, ricostruisci
     const ing = buildIngredientiFromStr(updates);
-    if (ing.length) updates.ingredienti = ing;
-
-    // Non permettiamo di cambiare l'idmeals
-    delete updates.idmeals;
+    if (ing?.length) updates.ingredienti = ing;
 
     const updated = await Meal.findOneAndUpdate(
       { idmeals: id },
@@ -153,15 +124,13 @@ router.put("/:id", async (req, res) => {
   }
 });
 
-/**
- * ✅ Elimina piatto (compat con vecchio frontend)
- * Route: /meals/:restaurantId/:idmeals
- * Nota: in Mongo filtriamo per entrambi per sicurezza.
- */
+/** Elimina piatto (compat: /meals/:restaurantId/:idmeals) */
 router.delete("/:restaurantId/:idmeals", async (req, res) => {
   try {
-    const { restaurantId, idmeals } = req.params;
-    const id = parseInt(idmeals);
+    const id = Number.parseInt(req.params.idmeals, 10);
+    if (Number.isNaN(id)) return res.status(400).send("id non valido");
+
+    const { restaurantId } = req.params;
 
     const deleted = await Meal.findOneAndDelete({ restaurantId, idmeals: id });
     if (!deleted) return res.status(404).send("Piatto non trovato");
