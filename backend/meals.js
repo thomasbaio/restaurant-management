@@ -1,7 +1,7 @@
 // meals.js — versione MongoDB (Mongoose)
 const express = require("express");
 const router = express.Router();
-const Meal = require("./models/Meal");
+const Meal = require("./models/meal");
 
 // 🧩 Utility: ricostruisce ingredienti da strIngredient1..20 → ingredienti[]
 function buildIngredientiFromStr(obj) {
