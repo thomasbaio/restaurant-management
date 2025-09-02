@@ -1,6 +1,8 @@
 const express = require('express');
 const cors = require('cors');
 const path = require('path');
+const mongoose = require('mongoose');
+require('dotenv').config();
 
 // Rotte API
 const mealsRoutes = require('./meals');
@@ -11,31 +13,49 @@ const restaurantRoutes = require('./restaurant');
 const app = express();
 const PORT = process.env.PORT || 3000;
 
+app.set('trust proxy', 1);         // utile su Render dietro proxy
 app.use(cors());
 app.use(express.json());
 
-// === Percorso assoluto alla cartella frontend ===
+// 🔗 Connessione MongoDB (prima di usare le rotte Mongoose)
+if (!process.env.MONGO_URI) {
+  console.warn('⚠️  MONGO_URI non impostata: le rotte Mongoose potrebbero fallire.');
+} else {
+  mongoose.connect(process.env.MONGO_URI, {})
+    .then(() => console.log('✅ Mongo connesso'))
+    .catch(err => {
+      console.error('❌ Errore connessione Mongo:', err.message);
+      // non usciamo: il frontend rimane servibile
+    });
+}
+
+// 🌐 Frontend statico (cartella /frontend a fianco di /backend)
 const FRONTEND_DIR = path.join(__dirname, '..', 'frontend');
 console.log('📁 FRONTEND_DIR:', FRONTEND_DIR);
-
-// === Servire file statici (css, js, immagini, ecc.) ===
 app.use(express.static(FRONTEND_DIR));
 
-// === Rotte API (montate PRIMA del catch-all) ===
+// 🔌 Rotte API (prima del catch-all)
 app.use('/users', userRoutes);
 app.use('/orders', orderRoutes);
 app.use('/restaurant', restaurantRoutes);
 app.use('/meals', mealsRoutes);
 
-// === Homepage ===
-app.get('/', (req, res) => {
+// 🩺 Health check semplice
+app.get('/health', (_req, res) => {
+  res.json({
+    ok: true,
+    mongo: mongoose.connection?.readyState === 1 ? 'connected' : 'not_connected',
+    time: new Date().toISOString(),
+  });
+});
+
+// 🏠 Homepage
+app.get('/', (_req, res) => {
   res.sendFile(path.join(FRONTEND_DIR, 'index.html'));
 });
 
-// === Catch-all per pagine non-API (es. /login, /register, /ricerca_ristoranti.html, ecc.) ===
-// Se usi multipagine fisiche, Express servirà direttamente i file (es. /login.html).
-// Se usi rotte "pulite" senza .html, questo rimanda alla index (stile SPA).
-app.get(/^(?!\/(meals|orders|users|restaurant)(\/|$)).*/, (req, res) => {
+// 🎯 Catch-all per pagine non-API (SPA o rotte senza .html)
+app.get(/^(?!\/(meals|orders|users|restaurant|health)(\/|$)).*/, (_req, res) => {
   res.sendFile(path.join(FRONTEND_DIR, 'index.html'));
 });
 

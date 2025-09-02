@@ -33,10 +33,10 @@ async function nextMealId() {
 function sanitizePayload(payload, { isUpdate = false } = {}) {
   const p = { ...payload };
 
-  // mappa alias immagine
+  // alias immagine
   if (!p.immagine && p.foto) p.immagine = p.foto;
 
-  // prezzo numerico (consenti stringhe da form)
+  // prezzo numerico (accetta stringhe da form)
   if (p.prezzo !== undefined) {
     const n = toNumber(p.prezzo);
     if (n === undefined) throw new Error("prezzo non numerico");
@@ -50,7 +50,7 @@ function sanitizePayload(payload, { isUpdate = false } = {}) {
   // origine default
   if (!isUpdate && !p.origine) p.origine = "personalizzato";
 
-  // rimuovi idmeals in update
+  // non permettere update di idmeals
   if (isUpdate) delete p.idmeals;
 
   return p;
@@ -180,7 +180,7 @@ router.delete("/:restaurantId/:idmeals", async (req, res) => {
   }
 });
 
-// Elimina semplice: /meals/:id (se non vuoi passare restaurantId)
+// Elimina semplice: /meals/:id (senza restaurantId)
 router.delete("/:id", async (req, res) => {
   try {
     const id = Number.parseInt(req.params.id, 10);
