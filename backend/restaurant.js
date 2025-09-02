@@ -1,7 +1,7 @@
 // restaurant.js — versione MongoDB (Mongoose)
 const express = require("express");
 const router = express.Router();
-const Restaurant = require("./models/Restaurant");
+const Restaurant = require("./models/restaurant");
 
 // 🔎 GET lista ristoranti (filtri opzionali: ?nome=&luogo=)
 router.get("/", async (req, res) => {
