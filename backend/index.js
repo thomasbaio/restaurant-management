@@ -11,25 +11,25 @@ const restaurantRoutes = require('./restaurant');
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-// Middleware
 app.use(cors());
 app.use(express.json()); // sostituisce body-parser
 
-// Servire frontend statico (index.html, css, js)
-app.use(express.static(path.join(__dirname)));
+// === Servire frontend statico dalla root del progetto ===
+const FRONTEND_DIR = path.join(__dirname, '..'); // vai fuori da backend/
+app.use(express.static(FRONTEND_DIR));
 
-// Rotte API
+// === Rotte API ===
 app.use('/users', userRoutes);
 app.use('/orders', orderRoutes);
 app.use('/restaurant', restaurantRoutes);
 app.use('/meals', mealsRoutes);
 
-// Default route → index.html
+// === Default route → index.html della root ===
 app.get("/", (req, res) => {
-  res.sendFile(path.join(__dirname, "index.html"));
+  res.sendFile(path.join(FRONTEND_DIR, "index.html"));
 });
 
-// Avvio server (Render userà process.env.PORT)
+// Avvio server
 app.listen(PORT, '0.0.0.0', () => {
   console.log(`✅ Server attivo su http://localhost:${PORT}`);
 });
