@@ -1,8 +1,8 @@
 // users.js — versione MongoDB (Mongoose)
 const express = require("express");
 const router = express.Router();
-const User = require("./models/User");
-const Restaurant = require("./models/Restaurant");
+const User = require("./models/user");
+const Restaurant = require("./models/restaurant");
 
 // 🧮 ID numerico incrementale per compatibilità col vecchio frontend
 async function nextLegacyId() {

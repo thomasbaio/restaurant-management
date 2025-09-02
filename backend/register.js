@@ -1,7 +1,7 @@
 // register.js — versione MongoDB
 const express = require("express");
 const router = express.Router();
-const User = require("./models/User"); // 👉 modello Mongoose User
+const User = require("./models/user"); // 👉 modello Mongoose User
 
 // ✅ Registrazione utente
 router.post("/register", async (req, res) => {

@@ -1,7 +1,7 @@
 // orders.js — versione MongoDB (Mongoose)
 const express = require("express");
 const router = express.Router();
-const Order = require("./models/Order"); // 👉 modello Mongoose
+const Order = require("./models/order"); 
 
 // Stati consentiti e transizioni base
 const VALID_STATES = ["ordinato", "preparazione", "consegna", "consegnato"];
