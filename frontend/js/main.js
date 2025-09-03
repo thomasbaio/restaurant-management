@@ -4,17 +4,9 @@ const API_BASE = isLocal ? "http://localhost:3000" : location.origin;
 
 // ---- Helpers di normalizzazione ----
 
-// Estrai array ingredienti da vari formati (ingredients[] o strIngredient1..20)
+// Estrai array ingredienti (il backend ora garantisce "ingredients")
 function extractIngredients(p) {
-  if (Array.isArray(p.ingredients)) return p.ingredients.filter(Boolean);
-
-  // supporto schema tipo TheMealDB: strIngredient1..20
-  const ings = [];
-  for (let i = 1; i <= 20; i++) {
-    const v = p[`strIngredient${i}`];
-    if (v && String(v).trim()) ings.push(String(v).trim());
-  }
-  return ings;
+  return Array.isArray(p.ingredients) ? p.ingredients.filter(Boolean) : [];
 }
 
 // Normalizza un piatto a un formato coerente per il rendering
@@ -72,7 +64,10 @@ window.onload = async () => {
 
   try {
     const res = await fetch(`${API_BASE}/meals`);
-    if (!res.ok) throw new Error(`GET /meals ${res.status}`);
+    if (!res.ok) {
+      const body = await res.text().catch(() => "");
+      throw new Error(`GET /meals ${res.status} – ${body}`);
+    }
     const allData = await res.json();
 
     // Capisco se la struttura è annidata (array di ristoranti con menu) oppure piatta (lista piatti)
@@ -168,6 +163,7 @@ function renderTable(piatti, isRistoratore) {
 
   piatti.forEach(piatto => {
     const tr = document.createElement("tr");
+    const ings = Array.isArray(piatto.ingredients) ? piatto.ingredients.filter(Boolean) : [];
 
     const imgHTML = piatto.immagine && piatto.immagine.startsWith("http")
       ? `<img src="${piatto.immagine}" width="80" alt="Foto">`
@@ -181,7 +177,7 @@ function renderTable(piatti, isRistoratore) {
       <td>${piatto.nome}</td>
       <td>€ ${formatPrice(piatto.prezzo)}</td>
       <td>${piatto.tipologia || "-"}</td>
-      <td>${(piatto.ingredients || []).join(", ")}</td>
+      <td>${ings.length ? ings.join(", ") : "-"}</td>
       <td>${imgHTML}</td>
       <td>${eliminaHTML}</td>
     `;
