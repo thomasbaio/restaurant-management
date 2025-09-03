@@ -59,6 +59,28 @@ function sanitizePayload(payload, { isUpdate = false } = {}) {
   return p;
 }
 
+// ---------- Helpers: campo calcolato "ingredients" in uscita ----------
+function computeIngredients(rec) {
+  if (!rec || typeof rec !== "object") return [];
+  if (Array.isArray(rec.ingredients) && rec.ingredients.length)
+    return rec.ingredients.filter(Boolean).map(String);
+  if (Array.isArray(rec.ingredienti) && rec.ingredienti.length)
+    return rec.ingredienti.filter(Boolean).map(String);
+
+  const out = [];
+  for (let i = 1; i <= 20; i++) {
+    const v = rec[`strIngredient${i}`];
+    if (v && String(v).trim()) out.push(String(v).trim());
+  }
+  return out;
+}
+function withIngredients(rec) {
+  if (!rec) return rec;
+  const clone = { ...rec };
+  clone.ingredients = computeIngredients(clone);
+  return clone;
+}
+
 // ---------- Rotte ----------
 
 // Sorgente corrente (debug)
@@ -85,12 +107,12 @@ router.get("/common-meals", async (_req, res) => {
   try {
     if (mongoReady()) {
       const common = await Meal.find({ $or: [{ isCommon: true }, { origine: "comune" }] }).lean();
-      if (common.length) return res.json(common);
+      if (common.length) return res.json(common.map(withIngredients));
     }
     const { data, path, error } = readFileMeals();
     if (error) return res.status(500).json({ error: "Impossibile leggere file di fallback", detail: error });
     res.setHeader("X-Meals-Source", `file:${path}`);
-    res.json(data);
+    res.json(data.map(withIngredients));
   } catch (err) {
     console.error("Errore common-meals:", err);
     res.status(500).json({ error: "Errore nella lettura dei piatti comuni" });
@@ -115,7 +137,7 @@ router.get("/", async (req, res) => {
   if (mongoReady()) {
     try {
       const meals = await Meal.find(q).lean();
-      if (meals.length) return res.json(meals);
+      if (meals.length) return res.json(meals.map(withIngredients));
     } catch (e) {
       console.warn("Mongo query error /meals:", e.message);
     }
@@ -129,7 +151,7 @@ router.get("/", async (req, res) => {
     return res.status(500).json({ error: "Impossibile leggere i piatti di fallback", detail: error, file: path });
   }
   res.setHeader("X-Meals-Source", `file:${path}`);
-  return res.json(data); // meglio 200 [] che 500
+  return res.json(data.map(withIngredients)); // meglio 200 [] che 500
 });
 
 // GET per id (prova Mongo, poi file)
@@ -139,14 +161,14 @@ router.get("/:id", async (req, res) => {
     if (mongoReady()) {
       const n = Number.parseInt(id, 10);
       const meal = Number.isNaN(n) ? null : await Meal.findOne({ idmeals: n }).lean();
-      if (meal) return res.json(meal);
+      if (meal) return res.json(withIngredients(meal));
     }
     const { data } = readFileMeals();
-    let found = data.find(x =>
+    const found = data.find(x =>
       String(x.idmeals) === id || String(x.id) === id || String(x.idMeal) === id
     );
     if (!found) return res.status(404).json({ error: "Piatto non trovato" });
-    res.json(found);
+    res.json(withIngredients(found));
   } catch (err) {
     console.error("Errore GET /meals/:id:", err);
     res.status(500).json({ error: "Errore nel recupero del piatto" });
@@ -232,4 +254,3 @@ router.delete("/:id", async (req, res) => {
 });
 
 module.exports = router;
-
