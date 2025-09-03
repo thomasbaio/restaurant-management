@@ -1,4 +1,4 @@
-// users.js — versione MongoDB (Mongoose)
+// users.js — versione MongoDB (Mongoose) robusta
 const express = require("express");
 const router = express.Router();
 const User = require("./models/user");
@@ -13,14 +13,32 @@ async function nextLegacyId() {
   return (last?.legacyId || 0) + 1;
 }
 
+// Helper: normalizza i campi tra vecchi e nuovi nomi
+function normalizeBody(b) {
+  return {
+    username: b.username,
+    email: b.email,
+    password: b.password,
+    role: b.role,
+
+    // accetta entrambe le versioni dei nomi
+    telefono: b.telefono ?? b.phone ?? "",
+    luogo: b.luogo ?? b.location ?? "",
+    partitaIva: b.partitaIva ?? b.vat ?? "",
+    indirizzo: b.indirizzo ?? b.address ?? "",
+
+    nome: b.nome ?? "",
+    cognome: b.cognome ?? "",
+    pagamento: b.pagamento ?? "",
+    preferenza: b.preferenza ?? ""
+  };
+}
+
 // ✅ REGISTRAZIONE
 router.post("/register", async (req, res) => {
   try {
-    const {
-      username, email, password, role,
-      phone, location, vat, address,
-      nome, cognome, pagamento, preferenza
-    } = req.body;
+    const body = normalizeBody(req.body);
+    const { username, email, password, role } = body;
 
     if (!username || !email || !password || !role) {
       return res.status(400).send("Tutti i campi obbligatori non sono stati forniti.");
@@ -33,52 +51,73 @@ router.post("/register", async (req, res) => {
     // legacy id numerico come nel vecchio file JSON
     const legacyId = await nextLegacyId();
 
-    // Se ristoratore, generiamo/colleghiamo un restaurantId
+    // Prepara restaurantId solo per ristoratore
     let restaurantId = null;
     if (role === "ristoratore") {
       restaurantId = `r_${username.toLowerCase().replace(/\s+/g, "")}`;
-
-      // Crea (se non esiste) il documento Restaurant
-      const existingR = await Restaurant.findOne({ restaurantId }).lean();
-      if (!existingR) {
-        await Restaurant.create({
-          restaurantId,
-          nome: `${username} Ristorante`,
-          email,
-          telefono: phone || "",
-          luogo: location || "",
-          partitaIva: vat || "",
-          indirizzo: address || ""
-        });
-      }
     }
 
-    // Crea utente
+    // Crea utente (password in chiaro come nel tuo file attuale)
     const newUser = await User.create({
       legacyId,
       username,
       email,
-      password,   // ⚠️ plain-text (puoi passare in seguito a bcrypt)
+      password,
       role,
-      phone: phone || "",
-      location: location || "",
-      vat: vat || "",
-      address: address || "",
-      nome: nome || "",
-      cognome: cognome || "",
-      pagamento: pagamento || "",
-      preferenza: preferenza || "",
+      telefono: role === "ristoratore" ? body.telefono : "",
+      luogo: role === "ristoratore" ? body.luogo : "",
+      partitaIva: role === "ristoratore" ? body.partitaIva : "",
+      indirizzo: role === "ristoratore" ? (typeof body.indirizzo === "string" ? body.indirizzo : (body.indirizzo?.via ?? "")) : "",
+      nome: body.nome,
+      cognome: body.cognome,
+      pagamento: body.pagamento,
+      preferenza: body.preferenza,
       restaurantId
     });
 
-    res.status(201).json({ message: "Registrazione completata", user: {
-      id: newUser.legacyId,
-      _id: newUser._id,
-      username: newUser.username,
-      email: newUser.email,
-      role: newUser.role,
-      restaurantId: newUser.restaurantId || undefined
-    }});
+    // Se è ristoratore, prova a creare/aggiornare il Restaurant in modo compatibile con il suo schema
+    if (role === "ristoratore") {
+      try {
+        // Se il tuo Restaurant richiede ownerUserId e indirizzo oggetto, li forniamo qui
+        const indirizzoObj =
+          typeof body.indirizzo === "object" && body.indirizzo !== null
+            ? body.indirizzo
+            : { via: body.indirizzo || "" };
+
+        // upsert: se esiste con restaurantId lo aggiorno, altrimenti lo creo
+        await Restaurant.findOneAndUpdate(
+          { restaurantId },
+          {
+            $set: {
+              ownerUserId: newUser._id,                  // <-- requisito del tuo schema
+              restaurantId,
+              nome: `${username} Ristorante`,
+              email,
+              telefono: body.telefono || "",
+              luogo: body.luogo || "",
+              partitaIva: body.partitaIva || "",
+              indirizzo: indirizzoObj                    // <-- oggetto, non stringa
+            }
+          },
+          { upsert: true, new: true, setDefaultsOnInsert: true }
+        );
+      } catch (errR) {
+        // Non blocco la registrazione se fallisce la creazione del Restaurant
+        console.error("⚠️  Creazione/aggiornamento Restaurant fallita:", errR?.message);
+      }
+    }
+
+    res.status(201).json({
+      message: "Registrazione completata",
+      user: {
+        id: newUser.legacyId,
+        _id: newUser._id,
+        username: newUser.username,
+        email: newUser.email,
+        role: newUser.role,
+        restaurantId: newUser.restaurantId || undefined
+      }
+    });
   } catch (err) {
     console.error("Errore registrazione:", err);
     res.status(500).send("Errore durante la registrazione");
@@ -90,17 +129,15 @@ router.post("/login", async (req, res) => {
   try {
     const { username, password } = req.body;
 
-    const user = await User.findOne({ username, password }).lean(); // ⚠️ plain-text
+    // plain-text (coerente col tuo attuale salvataggio)
+    const user = await User.findOne({ username, password }).lean();
     if (!user) return res.status(401).send("Credenziali non valide");
 
     // Se ristoratore e non ha restaurantId in user, prova a recuperarlo da Restaurant
     let restaurantId = user.restaurantId || null;
     if (user.role === "ristoratore" && !restaurantId) {
       const r = await Restaurant.findOne({
-        $or: [
-          { email: user.email },
-          { nome: `${user.username} Ristorante` }
-        ]
+        $or: [{ ownerUserId: user._id }, { email: user.email }, { nome: `${user.username} Ristorante` }]
       }).lean();
       if (r) restaurantId = r.restaurantId;
     }
@@ -130,12 +167,15 @@ router.put("/:id", async (req, res) => {
     const param = String(req.params.id);
     const filter = isObjectId(param) ? { _id: param } : { legacyId: parseInt(param) };
 
-    const updates = { ...req.body };
+    const body = normalizeBody(req.body);
+    const updates = { ...body };
+
     // non permettere di cambiare campi chiave direttamente:
     delete updates._id;
     delete updates.legacyId;
     delete updates.username; // opzionale: rimuovi se vuoi permettere cambio username
     delete updates.role;     // opzionale
+    delete updates.password; // evita di sovrascrivere per sbaglio
 
     const updated = await User.findOneAndUpdate(filter, { $set: updates }, { new: true });
     if (!updated) return res.status(404).send("Utente non trovato");
@@ -166,7 +206,7 @@ router.delete("/:id", async (req, res) => {
 // ✅ Lista “ristoratori” (compat con vecchio /users/restaurants)
 router.get("/restaurants", async (req, res) => {
   try {
-    // Prima fonte: tabella ristoranti dedicata (più ricca e affidabile)
+    // Preferisci la tabella ristoranti dedicata (più completa)
     const restaurants = await Restaurant.find().lean();
     if (restaurants.length) {
       const out = restaurants.map(r => ({
@@ -183,9 +223,9 @@ router.get("/restaurants", async (req, res) => {
     const users = await User.find({ role: "ristoratore" }).lean();
     const out = users.map(u => ({
       nome: `${u.username} Ristorante`,
-      location: u.location || "",
-      telefono: u.phone || "",
-      partitaIVA: u.vat || "",
+      location: u.luogo || "",
+      telefono: u.telefono || "",
+      partitaIVA: u.partitaIva || "",
       restaurantId: u.restaurantId || null
     }));
     res.json(out);
