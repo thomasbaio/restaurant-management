@@ -1,6 +1,12 @@
 const express = require("express");
 const router = express.Router();
-const Meal = require("./models/meal"); // file: backend/models/meal.js (minuscolo)
+const Meal = require("./models/meal"); // backend/models/meal.js (minuscolo)
+const fs = require("fs");
+const path = require("path");
+
+// --- Fallback file ---
+const DATA_FILE = path.join(__dirname, "..", "meals1.json");
+const readJson = () => JSON.parse(fs.readFileSync(DATA_FILE, "utf8"));
 
 // ---------- Helpers ----------
 function toNumber(v) {
@@ -64,10 +70,27 @@ router.get("/common-meals", async (_req, res) => {
     const common = await Meal.find({
       $or: [{ isCommon: true }, { origine: "comune" }],
     }).lean();
+
+    // fallback se DB vuoto
+    if (!common.length) {
+      try {
+        const fileMeals = readJson();
+        return res.json(fileMeals);
+      } catch (e) {
+        return res.status(500).json({ error: "Impossibile leggere i piatti comuni di fallback", detail: e.message });
+      }
+    }
+
     res.json(common);
   } catch (err) {
     console.error("Errore nel leggere i piatti comuni:", err);
-    res.status(500).json({ error: "Errore nella lettura dei piatti comuni" });
+    // ultimo tentativo: file
+    try {
+      const fileMeals = readJson();
+      return res.json(fileMeals);
+    } catch (e2) {
+      res.status(500).json({ error: "Errore nella lettura dei piatti comuni", detail: e2.message });
+    }
   }
 });
 
@@ -89,26 +112,59 @@ router.get("/", async (req, res) => {
     }
 
     const meals = await Meal.find(q).lean();
+
+    // fallback: DB vuoto / nessun match -> restituisco meals1.json
+    if (!meals.length) {
+      try {
+        const fileMeals = readJson();
+        return res.json(fileMeals);
+      } catch (e) {
+        console.error("Fallback readJson failed:", e.message, "FILE:", DATA_FILE);
+        return res.status(500).json({ error: "Impossibile leggere i piatti di fallback", detail: e.message });
+      }
+    }
+
     res.json(meals);
   } catch (err) {
     console.error("Errore GET /meals:", err);
-    res.status(500).json({ error: "Errore nel recupero dei piatti" });
+    // ultimo tentativo: prova comunque il file
+    try {
+      const fileMeals = readJson();
+      return res.json(fileMeals);
+    } catch (e2) {
+      return res.status(500).json({ error: "Errore nel recupero dei piatti", detail: e2.message });
+    }
   }
 });
 
-// Singolo piatto per idmeals
+// Singolo piatto per idmeals (prova DB, poi file)
 router.get("/:id", async (req, res) => {
+  const id = String(req.params.id);
   try {
-    const id = Number.parseInt(req.params.id, 10);
-    if (Number.isNaN(id)) return res.status(400).json({ error: "id non valido" });
+    const n = Number.parseInt(id, 10);
+    let meal = Number.isNaN(n) ? null : await Meal.findOne({ idmeals: n }).lean();
+    if (meal) return res.json(meal);
 
-    const meal = await Meal.findOne({ idmeals: id }).lean();
-    if (!meal) return res.status(404).json({ error: "Piatto non trovato" });
-
-    res.json(meal);
+    // fallback su file (supporta lista piatta o annidata)
+    const data = readJson();
+    let found = null;
+    if (Array.isArray(data) && data.some(r => Array.isArray(r.menu))) {
+      for (const r of data) {
+        const m = (r.menu || []).find(x =>
+          String(x.idmeals) === id || String(x.id) === id || String(x.idMeal) === id
+        );
+        if (m) { found = m; break; }
+      }
+    } else {
+      found = (data || []).find(x =>
+        String(x.idmeals) === id || String(x.id) === id || String(x.idMeal) === id
+      );
+    }
+    if (!found) return res.status(404).json({ error: "Piatto non trovato" });
+    res.json(found);
   } catch (err) {
     console.error("Errore GET /meals/:id:", err);
-    res.status(500).json({ error: "Errore nel recupero del piatto" });
+    res.status(500).json({ error: "Errore nel recupero del piatto", detail: err.message });
   }
 });
 
@@ -193,6 +249,36 @@ router.delete("/:id", async (req, res) => {
   } catch (err) {
     console.error("Errore DELETE /meals/:id:", err);
     res.status(500).json({ error: "Errore nell'eliminazione del piatto", detail: err.message });
+  }
+});
+
+// ====== DEV ONLY: seed DB da file (puoi rimuovere in produzione) ======
+router.post("/seed-from-file", async (_req, res) => {
+  try {
+    const rows = readJson(); // lista piatta TheMealDB
+    if (!Array.isArray(rows)) return res.status(400).json({ error: "Formato file non valido" });
+
+    const docs = rows.map((r, idx) => ({
+      idmeals: idx + 1,
+      restaurantId: "r_o", // cambia se vuoi
+      nome: r.strMeal,
+      prezzo: 8 + (idx % 5),
+      tipologia: r.strCategory || "",
+      ingredienti: Array.from({ length: 20 })
+        .map((_, i) => r[`strIngredient${i + 1}`])
+        .filter(Boolean)
+        .map(String),
+      immagine: r.strMealThumb || "",
+      origine: "comune",
+      isCommon: true,
+    }));
+
+    await Meal.deleteMany({});
+    await Meal.insertMany(docs);
+    res.json({ inserted: docs.length });
+  } catch (e) {
+    console.error("Seed error:", e);
+    res.status(500).json({ error: "Seed fallito", detail: e.message });
   }
 });
 
