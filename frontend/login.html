@@ -8,16 +8,17 @@
 <body>
   <h1>Login</h1>
 
-  <form id="login-form">
+  <form id="login-form" autocomplete="on">
     <label for="username">Username:</label>
-    <input type="text" id="username" required><br><br>
+    <input type="text" id="username" required autocomplete="username"><br><br>
 
     <label for="password">Password:</label>
-    <input type="password" id="password" required><br><br>
+    <input type="password" id="password" required autocomplete="current-password"><br><br>
 
     <button type="submit">Accedi</button>
   </form>
 
-<script src="login.js" defer></script>
+  <!-- Se il file è in una cartella /js/, aggiorna il percorso a js/login.js?v=2 -->
+  <script src="login.js?v=2" defer></script>
 </body>
 </html>
