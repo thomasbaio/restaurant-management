@@ -331,5 +331,56 @@ router.delete("/:id", async (req, res) => {
     return res.status(500).json({ error: "Errore nella rimozione del piatto", detail: String(err?.message || err) });
   }
 });
+// GET /meals — lista ristoranti con menu (DB se c'è, altrimenti file)
+// Opzionale: ?restaurantId=r_1 per filtrare un solo ristorante
+router.get("/", async (req, res) => {
+  try {
+    const wantedRid = req.query.restaurantId ? String(req.query.restaurantId) : null;
+
+    // --- DB ---
+    if (mongoReady()) {
+      const query = wantedRid ? { restaurantId: wantedRid } : {};
+      const docs = await Meal.find(query).lean();
+      const meals = docs.map(withIngredients);
+
+      // Raggruppo per restaurantId
+      const byRid = {};
+      for (const m of meals) {
+        const rid = String(m.restaurantId || "");
+        if (!byRid[rid]) byRid[rid] = { restaurantId: rid, menu: [] };
+        byRid[rid].menu.push(m);
+      }
+      return res.json(Object.values(byRid));
+    }
+
+    // --- Fallback file ---
+    const { data } = readFileMeals();
+
+    // Se il file è nel formato [{ restaurantId, menu:[...] }]
+    if (Array.isArray(data) && data.length && (data[0].menu || data[0].restaurantId)) {
+      const shaped = data.map(r => ({
+        restaurantId: r.restaurantId ?? r.id ?? r._id ?? "",
+        menu: Array.isArray(r.menu) ? r.menu.map(withIngredients) : []
+      }));
+      return res.json(
+        wantedRid ? shaped.filter(r => String(r.restaurantId) === wantedRid) : shaped
+      );
+    }
+
+    // Se il file è una lista di piatti top-level, raggruppo qui
+    const flat = flattenFileMeals(data).map(withIngredients);
+    const byRid = {};
+    for (const m of flat) {
+      const rid = String(m.restaurantId || "");
+      if (wantedRid && rid !== wantedRid) continue;
+      if (!byRid[rid]) byRid[rid] = { restaurantId: rid, menu: [] };
+      byRid[rid].menu.push(m);
+    }
+    return res.json(Object.values(byRid));
+  } catch (err) {
+    console.error("GET /meals error:", err);
+    res.status(500).json({ error: "Errore nel caricamento dei menu", detail: String(err?.message || err) });
+  }
+});
 
 module.exports = router;
