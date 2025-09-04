@@ -54,149 +54,191 @@
 
   <p><a href="index.html">Torna alla Home</a></p>
 
-  <script>
-    // ---- Config dinamica API ----
-    const isLocal =
-      location.hostname === "localhost" ||
-      location.hostname === "127.0.0.1";
-    const API_BASE = isLocal
-      ? "http://localhost:3000"
-      : "https://restaurant-management-wzhj.onrender.com";
+<script>
+  // ---- Config dinamica API ----
+  const isLocal = location.hostname === "localhost" || location.hostname === "127.0.0.1";
+  const API_BASE = isLocal
+    ? "http://localhost:3000"
+    : "https://restaurant-management-wzhj.onrender.com";
 
-    // ---- User e ID sicuri ----
-    const params = new URLSearchParams(window.location.search);
-    const storedUser = JSON.parse(localStorage.getItem("loggedUser") || "null");
+  const params = new URLSearchParams(window.location.search);
+  let storedUser = null;
 
-    if (!storedUser) {
-      alert("Devi essere loggato per modificare il profilo");
+  try {
+    storedUser = JSON.parse(localStorage.getItem("loggedUser") || "null");
+  } catch { storedUser = null; }
+
+  if (!storedUser) {
+    alert("Devi essere loggato per modificare il profilo");
+    window.location.href = "login.html";
+  }
+
+  // ——— Risoluzione robusta dell'ID utente ———
+  async function resolveUserId() {
+    // 1) da query string ?id=
+    const fromQuery = params.get("id");
+    if (fromQuery && !Number.isNaN(Number(fromQuery))) return Number(fromQuery);
+
+    // 2) da localStorage: supporta id numerico o _id string (Mongo)
+    if (storedUser && storedUser.id != null) return storedUser.id;
+    if (storedUser && storedUser._id) return storedUser._id; // backend Mongo
+
+    // 3) lookup sul backend: prova endpoint lista utenti
+    try {
+      // Preferisci un endpoint /users?username=... se esiste, altrimenti fallback /users
+      let res = await fetch(`${API_BASE}/users?username=${encodeURIComponent(storedUser.username || "")}`);
+      if (!res.ok) {
+        // fallback: prendi tutti gli utenti e cerca localmente
+        res = await fetch(`${API_BASE}/users`);
+      }
+      if (res.ok) {
+        const data = await res.json();
+        // data può essere singolo utente o array
+        const list = Array.isArray(data) ? data : [data];
+        const match = list.find(u =>
+          (u.username && storedUser.username && u.username === storedUser.username) ||
+          (u.email && storedUser.email && u.email === storedUser.email)
+        );
+        if (match) return match.id ?? match._id ?? null;
+      }
+    } catch (e) {
+      console.warn("Lookup ID fallito:", e);
+    }
+    return null;
+  }
+
+  // ——— Prefill e UI ———
+  function showRoleBlocks(role) {
+    document.getElementById("ristoratore-extra").style.display = role === "ristoratore" ? "block" : "none";
+    document.getElementById("cliente-extra").style.display = role === "cliente" ? "block" : "none";
+  }
+  function safeSet(id, val) {
+    const el = document.getElementById(id);
+    if (el) el.value = val ?? "";
+  }
+
+  (async function init() {
+    const resolvedId = await resolveUserId();
+    if (!resolvedId) {
+      alert("Impossibile determinare l'ID utente. Prova a rifare il login.");
+      // Evita loop infinito: non rimandare subito al login se siamo su Render offline
       window.location.href = "login.html";
+      return;
     }
 
-    // id può arrivare dal localStorage oppure da ?id= (fallback)
-    const userIdFromQuery = params.get("id");
-    const userId =
-      (storedUser && storedUser.id != null ? storedUser.id : null) ??
-      (userIdFromQuery ? parseInt(userIdFromQuery) : null);
+    // Aggiorna localStorage con l'id risolto (manteniamo il resto invariato)
+    storedUser = { ...storedUser, id: resolvedId };
+    localStorage.setItem("loggedUser", JSON.stringify(storedUser));
 
-    if (userId == null || Number.isNaN(userId)) {
-      alert("Impossibile determinare l'ID utente. Effettua di nuovo il login.");
-      window.location.href = "login.html";
-    }
+    // Prefill
+    safeSet("username", storedUser.username);
+    safeSet("email", storedUser.email);
+    safeSet("password", storedUser.password);
 
-    const user = { ...storedUser, id: userId };
-
-    // ---- Prefill form ----
-    function showRoleBlocks(role) {
-      document.getElementById("ristoratore-extra").style.display =
-        role === "ristoratore" ? "block" : "none";
-      document.getElementById("cliente-extra").style.display =
-        role === "cliente" ? "block" : "none";
-    }
-
-    function safeSet(id, val) {
-      const el = document.getElementById(id);
-      if (el) el.value = val ?? "";
-    }
-
-    // Precompila campi base
-    safeSet("username", user.username);
-    safeSet("email", user.email);
-    safeSet("password", user.password);
-
-    const role = user.role === "ristoratore" || user.role === "cliente" ? user.role : "cliente";
+    const role = storedUser.role === "ristoratore" || storedUser.role === "cliente" ? storedUser.role : "cliente";
     const roleInput = document.querySelector(`input[name="role"][value="${role}"]`);
     if (roleInput) roleInput.checked = true;
     showRoleBlocks(role);
 
     // Ristoratore extra
-    safeSet("piva", user.piva);
-    safeSet("telefono", user.telefono);
-    safeSet("luogo", user.luogo);
-    safeSet("via", user.via);
+    safeSet("piva", storedUser.piva);
+    safeSet("telefono", storedUser.telefono);
+    safeSet("luogo", storedUser.luogo);
+    safeSet("via", storedUser.via);
 
     // Cliente extra
-    safeSet("nome", user.nome);
-    safeSet("cognome", user.cognome);
-    safeSet("pagamento", user.pagamento);
-    safeSet("preferenza", user.preferenza);
+    safeSet("nome", storedUser.nome);
+    safeSet("cognome", storedUser.cognome);
+    safeSet("pagamento", storedUser.pagamento);
+    safeSet("preferenza", storedUser.preferenza);
+  })();
 
-    // Toggle dinamico al cambio ruolo
-    document.querySelectorAll('input[name="role"]').forEach(radio => {
-      radio.addEventListener("change", function () {
-        showRoleBlocks(this.value);
+  // Toggle dinamico ruolo
+  document.querySelectorAll('input[name="role"]').forEach(radio => {
+    radio.addEventListener("change", function () { showRoleBlocks(this.value); });
+  });
+
+  // ——— Submit Modifica ———
+  document.getElementById("edit-user-form").addEventListener("submit", async function (e) {
+    e.preventDefault();
+
+    const current = JSON.parse(localStorage.getItem("loggedUser") || "null");
+    if (!current || current.id == null) {
+      alert("Sessione scaduta. Effettua di nuovo il login.");
+      window.location.href = "login.html";
+      return;
+    }
+
+    const selectedRole = document.querySelector('input[name="role"]:checked')?.value || "cliente";
+    const updatedUser = {
+      username: document.getElementById("username").value.trim(),
+      email: document.getElementById("email").value.trim(),
+      password: document.getElementById("password").value,
+      role: selectedRole
+    };
+
+    if (selectedRole === "ristoratore") {
+      updatedUser.piva = document.getElementById("piva").value.trim();
+      updatedUser.telefono = document.getElementById("telefono").value.trim();
+      updatedUser.luogo = document.getElementById("luogo").value.trim();
+      updatedUser.via = document.getElementById("via").value.trim();
+    } else {
+      updatedUser.nome = document.getElementById("nome").value.trim();
+      updatedUser.cognome = document.getElementById("cognome").value.trim();
+      updatedUser.pagamento = document.getElementById("pagamento").value;
+      updatedUser.preferenza = document.getElementById("preferenza").value;
+    }
+
+    try {
+      const res = await fetch(`${API_BASE}/users/${current.id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(updatedUser)
       });
-    });
 
-    // ---- Submit Modifica ----
-    document.getElementById("edit-user-form").addEventListener("submit", async function (e) {
-      e.preventDefault();
-
-      const selectedRole = document.querySelector('input[name="role"]:checked')?.value || "cliente";
-
-      const updatedUser = {
-        username: document.getElementById("username").value.trim(),
-        email: document.getElementById("email").value.trim(),
-        password: document.getElementById("password").value,
-        role: selectedRole
-      };
-
-      if (updatedUser.role === "ristoratore") {
-        updatedUser.piva = document.getElementById("piva").value.trim();
-        updatedUser.telefono = document.getElementById("telefono").value.trim();
-        updatedUser.luogo = document.getElementById("luogo").value.trim();
-        updatedUser.via = document.getElementById("via").value.trim();
+      if (res.ok) {
+        let saved = null;
+        try { saved = await res.json(); } catch {}
+        const finalUser = saved && typeof saved === "object" ? saved : { ...updatedUser, id: current.id };
+        localStorage.setItem("loggedUser", JSON.stringify(finalUser));
+        alert("Profilo aggiornato con successo!");
+        window.location.href = "index.html";
       } else {
-        updatedUser.nome = document.getElementById("nome").value.trim();
-        updatedUser.cognome = document.getElementById("cognome").value.trim();
-        updatedUser.pagamento = document.getElementById("pagamento").value;
-        updatedUser.preferenza = document.getElementById("preferenza").value;
+        const msg = await res.text();
+        alert("Errore durante la modifica del profilo: " + (msg || res.status));
       }
+    } catch (err) {
+      console.error("Errore:", err);
+      alert("Errore di rete. Verifica la connessione o l'URL del server.");
+    }
+  });
 
-      try {
-        const res = await fetch(`${API_BASE}/users/${user.id}`, {
-          method: "PUT",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(updatedUser)
-        });
+  // ——— Delete account ———
+  document.getElementById("delete-btn").addEventListener("click", async function () {
+    const current = JSON.parse(localStorage.getItem("loggedUser") || "null");
+    if (!current || current.id == null) {
+      alert("Sessione scaduta. Effettua di nuovo il login.");
+      window.location.href = "login.html";
+      return;
+    }
+    if (!confirm("Sei sicuro di voler cancellare il tuo account?")) return;
 
-        if (res.ok) {
-          // Tieni l'id esistente; se il backend restituisce l'oggetto aggiornato, usalo
-          let saved = null;
-          try { saved = await res.json(); } catch { /* può restituire vuoto */ }
-          const finalUser = saved && typeof saved === "object" ? saved : { ...updatedUser, id: user.id };
-          localStorage.setItem("loggedUser", JSON.stringify(finalUser));
-          alert("Profilo aggiornato con successo!");
-          window.location.href = "index.html";
-        } else {
-          const msg = await res.text();
-          alert("Errore durante la modifica del profilo: " + (msg || res.status));
-        }
-      } catch (err) {
-        console.error("Errore:", err);
-        alert("Errore di rete. Verifica la connessione o l'URL del server.");
+    try {
+      const res = await fetch(`${API_BASE}/users/${current.id}`, { method: "DELETE" });
+      if (res.ok) {
+        alert("Account eliminato");
+        localStorage.removeItem("loggedUser");
+        window.location.href = "index.html";
+      } else {
+        const msg = await res.text();
+        alert("Errore nella cancellazione dell’account: " + (msg || res.status));
       }
-    });
+    } catch (err) {
+      console.error("Errore:", err);
+      alert("Errore di rete. Verifica la connessione o l'URL del server.");
+    }
+  });
+</script>
 
-    // ---- Delete account ----
-    document.getElementById("delete-btn").addEventListener("click", async function () {
-      if (!confirm("Sei sicuro di voler cancellare il tuo account?")) return;
-
-      try {
-        const res = await fetch(`${API_BASE}/users/${user.id}`, { method: "DELETE" });
-
-        if (res.ok) {
-          alert("Account eliminato");
-          localStorage.removeItem("loggedUser");
-          window.location.href = "index.html";
-        } else {
-          const msg = await res.text();
-          alert("Errore nella cancellazione dell’account: " + (msg || res.status));
-        }
-      } catch (err) {
-        console.error("Errore:", err);
-        alert("Errore di rete. Verifica la connessione o l'URL del server.");
-      }
-    });
-  </script>
 </body>
 </html>
