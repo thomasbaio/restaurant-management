@@ -50,7 +50,11 @@ function formatPrice(n) {
 }
 
 window.onload = async () => {
-  const user = JSON.parse(localStorage.getItem("loggedUser"));
+  let user = null;
+  try {
+    user = JSON.parse(localStorage.getItem("loggedUser"));
+  } catch { /* ignore */ }
+
   const isRistoratore = user && user.role === "ristoratore";
 
   // Nascondi link "aggiungi" se non ristoratore
@@ -110,7 +114,7 @@ window.onload = async () => {
       const preferenza = user.preferenza;
       const offerteContainer = document.getElementById("offerte-speciali");
       if (offerteContainer) {
-        if (!preferenza || preferenza è === "") {
+        if (!preferenza || preferenza === "") { // ← FIX: rimossa la “è” spuria
           offerteContainer.innerHTML = "<li>Nessuna preferenza selezionata.</li>";
         } else {
           const piattiConsigliati = allMealsNormalized.filter(
@@ -207,7 +211,10 @@ function renderTable(piatti, isRistoratore) {
 
 // ---- Elimina piatto (ristoratore) ----
 async function rimuovi(idMeals, oid, rid) {
-  const user = JSON.parse(localStorage.getItem("loggedUser"));
+  let user = null;
+  try {
+    user = JSON.parse(localStorage.getItem("loggedUser"));
+  } catch { /* ignore */ }
   if (!user || !user.restaurantId) return;
 
   if (!confirm("Vuoi davvero eliminare questo piatto?")) return;
