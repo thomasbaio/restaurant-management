@@ -8,12 +8,10 @@ const Meal = require("./models/meal");
 
 // --------------------- Helpers ---------------------
 
-// Verifica stato connessione Mongo
 function mongoReady() {
   return mongoose?.connection?.readyState === 1; // 1 = connected
 }
 
-// Legge il file meals1.json e restituisce { data, filePath, error }
 function readFileMeals() {
   try {
     const filePath = path.join(__dirname, "meals1.json");
@@ -28,26 +26,19 @@ function readFileMeals() {
   }
 }
 
-// Appiattisce una struttura tipo [{restaurantId, menu:[...]}, ...] in un array di piatti
 function flattenFileMeals(data) {
   if (!Array.isArray(data)) return [];
   const out = [];
   for (const r of data) {
     const menu = Array.isArray(r?.menu) ? r.menu : [];
     for (const m of menu) {
-      // mantengo info minime utili
       out.push({ ...m, restaurantId: r.restaurantId ?? r.id ?? r._id });
     }
   }
   return out;
 }
 
-// Normalizza gli ingredienti su una proprietà "ingredienti" (array di stringhe)
 function withIngredients(m) {
-  // Varianti possibili nei tuoi dati:
-  // - ingredienti (array)
-  // - ingredients (array)
-  // - TheMealDB: strIngredient1..20 + strMeasure1..20
   if (Array.isArray(m.ingredienti)) return m;
 
   const clone = { ...m };
@@ -58,7 +49,6 @@ function withIngredients(m) {
     return clone;
   }
 
-  // Estrazione stile TheMealDB
   const list = [];
   for (let i = 1; i <= 20; i++) {
     const ing = m[`strIngredient${i}`];
@@ -67,9 +57,7 @@ function withIngredients(m) {
       list.push(meas ? `${meas} ${ing}`.trim() : String(ing).trim());
     }
   }
-  if (list.length) {
-    clone.ingredienti = list;
-  }
+  if (list.length) clone.ingredienti = list;
   return clone;
 }
 
@@ -77,20 +65,18 @@ function withIngredients(m) {
 
 // GET /meals/common-meals
 // Unisce piatti "comuni" da file + DB (dedup, priorità DB)
-// Opzionale: ?source=file | db | all
+// Query opzionali: ?source=file|db|all  ?dedup=global|perRestaurant|off
 router.get("/common-meals", async (req, res) => {
   try {
     const source = String(req.query.source || "all").toLowerCase(); // 'all' | 'file' | 'db'
+    const dedupMode = String(req.query.dedup || "perRestaurant").toLowerCase(); // 'perRestaurant' | 'global' | 'off'
 
     // --- File ---
     let fileMeals = [];
     if (source !== "db") {
       const { data, filePath, error } = readFileMeals();
-      if (error) {
-        // Non blocco tutto: restituisco 500 solo se hai chiesto esplicitamente source=file
-        if (source === "file") {
-          return res.status(500).json({ error: "Impossibile leggere il file dei piatti comuni", detail: error });
-        }
+      if (error && source === "file") {
+        return res.status(500).json({ error: "Impossibile leggere il file dei piatti comuni", detail: error });
       }
       fileMeals = flattenFileMeals(data).map(withIngredients);
       res.setHeader("X-Meals-File", filePath);
@@ -106,7 +92,6 @@ router.get("/common-meals", async (req, res) => {
       dbMeals = dbMeals.map(withIngredients);
       res.setHeader("X-Meals-DB-Count", String(dbMeals.length));
     } else if (source === "db" && !mongoReady()) {
-      // Se è stato richiesto il DB ma non è connesso
       return res.status(503).json({ error: "Database non connesso" });
     }
 
@@ -114,9 +99,15 @@ router.get("/common-meals", async (req, res) => {
     const keyOf = (m) => {
       const id = m.idmeals ?? m.idMeal ?? m.id ?? m._id;
       if (id != null) return String(id).toLowerCase();
+
       const name = (m.nome || m.name || m.strMeal || "").toLowerCase().trim();
       const cat  = (m.tipologia || m.category || m.strCategory || "").toLowerCase().trim();
-      return `${name}|${cat}`;
+      const rid  = (m.restaurantId || "").toString().toLowerCase().trim();
+
+      if (dedupMode === "off")     return `${Math.random()}|${name}|${cat}`;
+      if (dedupMode === "global")  return `${name}|${cat}`;
+      // default: per ristorante
+      return rid ? `${rid}|${name}|${cat}` : `${name}|${cat}`;
     };
 
     const seen = new Set();
