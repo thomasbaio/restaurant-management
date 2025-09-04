@@ -13,19 +13,42 @@ function extractIngredients(p) {
 function isValidImgPath(s) {
   if (typeof s !== "string") return false;
   const t = s.trim();
-  if (!t || t === "-") return false;
-  return /^https?:\/\//i.test(t) || t.startsWith("/");
+  if (!t || t === "-" || t === "#") return false;
+  // http(s)://...  oppure  //cdn...  oppure  /uploads/...
+  return /^https?:\/\//i.test(t) || t.startsWith("//") || t.startsWith("/");
 }
 
 // Trova il primo campo immagine davvero valido tra vari alias
+// Funziona sia con l’oggetto normalizzato sia con quello originale (p.raw)
 function firstImage(p) {
-  const cands = [
-    p.immagine, p.foto, p.strMealThumb, p.image, p.thumb, p.picture, p.img
+  const src = p || {};
+  const raw = src.raw || {};
+
+  const candidates = [
+    // normalizzato
+    src.immagine, src.foto, src.strMealThumb, src.image, src.thumb, src.picture, src.img,
+    // originale (raw) – ultima spiaggia
+    raw.immagine, raw.foto, raw.strMealThumb, raw.image, raw.thumb, raw.picture, raw.img
   ];
-  for (const c of cands) {
-    if (isValidImgPath(c)) return String(c).trim();
+
+  for (let c of candidates) {
+    if (!isValidImgPath(c)) continue;
+    c = String(c).trim();
+    if (c.startsWith("//")) return "https:" + c;    // protocol-relative -> forziamo https
+    return c;
   }
   return "";
+}
+
+// Selezione URL immagine con fallback/placeholder
+function pickImageURL(p) {
+  const cand = firstImage(p);
+  if (isValidImgPath(cand)) {
+    if (cand.startsWith("/")) return `${location.origin}${cand}`; // path relativo -> assolutizzato
+    return cand; // http/https
+  }
+  const label = encodeURIComponent((p.nome || "Food").split(" ")[0]);
+  return `https://placehold.co/80x60?text=${label}`;
 }
 
 // Normalizza un piatto a un formato coerente per il rendering
@@ -40,11 +63,11 @@ function normalizeMeal(p, restaurantIdFallback) {
   // tipologia/categoria
   const tipologia = p.tipologia ?? p.strCategory ?? p.category ?? "";
 
-  // prezzo
+  // prezzo (se non numerico, lo segniamo come undefined)
   let prezzo = p.prezzo ?? p.price;
   prezzo = (prezzo !== undefined && prezzo !== null && !isNaN(Number(prezzo))) ? Number(prezzo) : undefined;
 
-  // immagine: prendi SOLO una URL valida, ignorando "-", ""
+  // immagine: prendi SOLO una URL valida, ignorando "-", "" ecc.
   const immagine = firstImage(p);
 
   // restaurantId (se esiste)
@@ -66,20 +89,6 @@ function normalizeMeal(p, restaurantIdFallback) {
 // Rende sicuro il toFixed
 function formatPrice(n) {
   return (typeof n === "number" && isFinite(n)) ? n.toFixed(2) : "n.d.";
-}
-
-// ---- Selezione URL immagine con fallback/placeholder ----
-function pickImageURL(p) {
-  // p è già normalizzato e ha p.immagine pulita; ma restiamo robusti
-  let cand = firstImage(p);
-  if (isValidImgPath(cand)) {
-    // Se è path relativo, attacca l'origine
-    if (cand.startsWith("/")) return `${location.origin}${cand}`;
-    return cand; // http/https
-  }
-  // Placeholder
-  const label = encodeURIComponent((p.nome || "Food").split(" ")[0]);
-  return `https://placehold.co/80x60?text=${label}`;
 }
 
 window.onload = async () => {
@@ -127,10 +136,12 @@ window.onload = async () => {
         }
         piattiDaMostrare = (ristorante.menu || []).map(m => normalizeMeal(m, ristorante.restaurantId));
       } else {
+        // lista piatta: provo a filtrare per restaurantId se presente, altrimenti mostro tutto
         const filtered = allMealsNormalized.filter(m => String(m.restaurantId) === String(user.restaurantId));
         piattiDaMostrare = filtered.length ? filtered : allMealsNormalized;
       }
     } else {
+      // cliente: mostra tutto
       piattiDaMostrare = allMealsNormalized;
     }
 
@@ -206,11 +217,16 @@ function renderTable(piatti, isRistoratore) {
       ? `<img src="${imgURL}" width="80" height="60" alt="Foto">`
       : "-";
 
+    // Bottone elimina solo se ristoratore e abbiamo un id (idmeals o _id valido)
     const hasIdMeals = piatto.idmeals != null && piatto.idmeals !== "";
+
+    // vero _id Mongo (se presente e valido 24 hex)
     const oidRaw = piatto.raw && typeof piatto.raw._id === "string" ? piatto.raw._id : "";
     const oidIsValid = /^[0-9a-fA-F]{24}$/.test(oidRaw);
+
     const canDelete = isRistoratore && (hasIdMeals || oidIsValid);
 
+    // salvo entrambi gli id nel dataset per tentare in ordine, ma solo se validi
     const eliminaHTML = canDelete
       ? `<button class="btn-delete"
                   data-idmeals="${hasIdMeals ? String(piatto.idmeals) : ""}"
@@ -227,6 +243,7 @@ function renderTable(piatti, isRistoratore) {
       <td>${eliminaHTML}</td>
     `;
 
+    // attach delete
     if (canDelete) {
       const btn = tr.querySelector(".btn-delete");
       btn.addEventListener("click", () => rimuovi(btn.dataset.idmeals, btn.dataset.oid, btn.dataset.rid));
@@ -248,17 +265,19 @@ async function rimuovi(idMeals, oid, rid) {
 
   const restaurantId = rid || user.restaurantId;
 
+  // preparo gli ID validi
   const hasMealsId = idMeals != null && idMeals !== "";
   const hasOid = typeof oid === "string" && /^[0-9a-fA-F]{24}$/.test(oid);
 
+  // creo la lista di tentativi in ordine preciso
   const attempts = [];
   if (hasMealsId) {
-    attempts.push(`${API_BASE}/meals/${encodeURIComponent(idMeals)}`);
-    attempts.push(`${API_BASE}/meals/${encodeURIComponent(restaurantId)}/${encodeURIComponent(idMeals)}`);
+    attempts.push(`${API_BASE}/meals/${encodeURIComponent(idMeals)}`);                       // 1) semplice con idmeals
+    attempts.push(`${API_BASE}/meals/${encodeURIComponent(restaurantId)}/${encodeURIComponent(idMeals)}`); // 2) annidata con idmeals
   }
   if (hasOid) {
-    attempts.push(`${API_BASE}/meals/${encodeURIComponent(oid)}`);
-    attempts.push(`${API_BASE}/meals/${encodeURIComponent(restaurantId)}/${encodeURIComponent(oid)}`);
+    attempts.push(`${API_BASE}/meals/${encodeURIComponent(oid)}`);                          // 3) semplice con _id
+    attempts.push(`${API_BASE}/meals/${encodeURIComponent(restaurantId)}/${encodeURIComponent(oid)}`);     // 4) annidata con _id
   }
 
   if (!attempts.length) {
@@ -282,6 +301,7 @@ async function rimuovi(idMeals, oid, rid) {
       return;
     } catch (e) {
       console.warn("Tentativo fallito:", e.message);
+      // continua col prossimo
     }
   }
 
