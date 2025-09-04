@@ -78,7 +78,6 @@ function flattenFileMeals(data) {
 
 // ---------- Normalizzazione + alias ingredienti ----------
 
-// Normalizza gli ingredienti in array canonico "ingredienti"
 function normalizeIngredients(obj) {
   if (Array.isArray(obj?.ingredienti)) {
     return obj.ingredienti.filter(Boolean).map(x => String(x).trim()).filter(Boolean);
@@ -97,14 +96,10 @@ function normalizeIngredients(obj) {
   return list;
 }
 
-// Restituisce un oggetto con ingredienti sempre presenti come:
-// - ingredienti: array
-// - ingredients: array (alias)
-// - ingredient:  string (comma-separated)
+// Restituisce un oggetto con ingredienti sempre presenti
 function withIngredients(m) {
   const clone = { ...m };
 
-  // Se già presenti
   if (Array.isArray(clone.ingredienti)) {
     clone.ingredienti = clone.ingredienti.filter(Boolean).map(x => String(x).trim()).filter(Boolean);
     clone.ingredients  = clone.ingredienti.slice();
@@ -112,7 +107,6 @@ function withIngredients(m) {
     return clone;
   }
 
-  // Alias da "ingredients"
   if (Array.isArray(clone.ingredients)) {
     const arr = clone.ingredients.filter(Boolean).map(x => String(x).trim()).filter(Boolean);
     clone.ingredienti = arr;
@@ -121,7 +115,6 @@ function withIngredients(m) {
     return clone;
   }
 
-  // Estrazione stile TheMealDB con pulizia campi
   const list = [];
   for (let i = 1; i <= 20; i++) {
     const ing  = clone[`strIngredient${i}`];
@@ -143,7 +136,6 @@ function withIngredients(m) {
 
 // GET /meals/common-meals
 // Unisce piatti "comuni" da file + DB (dedup, priorità DB)
-// Query: ?source=file|db|all  ?dedup=global|perRestaurant|off
 router.get("/common-meals", async (req, res) => {
   try {
     const source = String(req.query.source || "all").toLowerCase();
@@ -185,7 +177,7 @@ router.get("/common-meals", async (req, res) => {
 
       if (dedupMode === "off")     return `${Math.random()}|${name}|${cat}`;
       if (dedupMode === "global")  return `${name}|${cat}`;
-      return rid ? `${rid}|${name}|${cat}` : `${name}|${cat}`; // default per ristorante
+      return rid ? `${rid}|${name}|${cat}` : `${name}|${cat}`;
     };
 
     const seen = new Set();
@@ -206,7 +198,6 @@ router.get("/common-meals", async (req, res) => {
 });
 
 // ✅ POST /meals — crea un piatto con fallback robusto (DB se c'è, altrimenti file)
-// Include normalizzazione + alias ingredienti prima del salvataggio
 router.post("/", async (req, res) => {
   try {
     const b = req.body || {};
@@ -215,34 +206,29 @@ router.post("/", async (req, res) => {
       return res.status(400).json({ error: "restaurantId mancante" });
     }
 
-    // Ingredienti canonici + alias (indipendenti da come li manda il frontend)
     const ingr = normalizeIngredients(b);
     const ingrArr = ingr.filter(Boolean).map(x => String(x).trim()).filter(Boolean);
     const ingrStr = ingrArr.join(", ");
 
-    // Mappatura campi “elastici”
     const newMeal = {
       restaurantId: b.restaurantId,
       nome: b.nome || b.name || b.strMeal || "Senza nome",
       tipologia: b.tipologia || b.category || b.strCategory || "Altro",
       prezzo: Number(b.prezzo ?? 0),
       foto: b.foto || b.image || b.strMealThumb || "",
-      ingredienti: ingrArr,                 // canonico
-      ingredients: ingrArr.slice(),         // alias array
-      ingredient: ingrStr,                  // alias stringa
+      ingredienti: ingrArr,
+      ingredients: ingrArr.slice(),
+      ingredient: ingrStr,
       origine: b.origine || "personalizzato",
       isCommon: typeof b.isCommon === "boolean" ? b.isCommon : (b.origine === "comune")
     };
 
-    // Pulizia eventuali campi temporanei stile TheMealDB (se arrivano nel body)
     for (let i = 1; i <= 20; i++) {
       delete newMeal[`strIngredient${i}`];
       delete newMeal[`strMeasure${i}`];
     }
 
-    // ---- Salvataggio preferendo MongoDB ----
     if (mongoReady()) {
-      // 🔧 Assegna sempre un idmeals progressivo per evitare E11000 (idmeals: null)
       if (newMeal.idmeals == null) {
         const maxDoc = await Meal
           .findOne({ idmeals: { $ne: null } })
@@ -264,7 +250,6 @@ router.post("/", async (req, res) => {
     const { data, filePath } = readFileMeals();
     const restaurants = Array.isArray(data) ? data : [];
 
-    // Trova o crea il ristorante
     let rest = restaurants.find(r => String(r.restaurantId) === String(newMeal.restaurantId));
     if (!rest) {
       rest = { restaurantId: newMeal.restaurantId, menu: [] };
@@ -272,12 +257,10 @@ router.post("/", async (req, res) => {
     }
     if (!Array.isArray(rest.menu)) rest.menu = [];
 
-    // Genera idmeals progressivo
     const allMeals = restaurants.flatMap(r => Array.isArray(r.menu) ? r.menu : []);
     const maxId = allMeals.reduce((acc, m) => Math.max(acc, Number(m.idmeals || 0)), 0);
     newMeal.idmeals = maxId + 1;
 
-    // Inserisci e salva
     rest.menu.push(newMeal);
     writeFileMeals(restaurants, filePath);
 
@@ -288,24 +271,38 @@ router.post("/", async (req, res) => {
   }
 });
 
-// ✅ DELETE /meals/:id — rimuove un piatto per idmeals (Mongo se c'è, altrimenti file)
+// ---- Helpers cancellazione ----
+function isHex24(s) {
+  return typeof s === "string" && /^[0-9a-fA-F]{24}$/.test(s);
+}
+
+// ✅ DELETE /meals/:id — accetta sia ObjectId che idmeals numerico, con fallback file
 router.delete("/:id", async (req, res) => {
   try {
-    const id = Number(req.params.id);
+    const raw = String(req.params.id);
+
+    // --- MongoDB ---
+    if (mongoReady()) {
+      // 1) prova con _id ObjectId
+      if (isHex24(raw)) {
+        const del = await Meal.deleteOne({ _id: raw });
+        if (del.deletedCount > 0) return res.json({ ok: true, deleted: 1 });
+      }
+      // 2) prova con idmeals numerico
+      const n = Number(raw);
+      if (Number.isFinite(n)) {
+        const del = await Meal.deleteOne({ idmeals: n });
+        if (del.deletedCount > 0) return res.json({ ok: true, deleted: 1 });
+      }
+      // Se non trovato in DB, continuo col file
+    }
+
+    // --- Fallback su file: solo id numerico ---
+    const id = Number(raw);
     if (!Number.isFinite(id)) {
       return res.status(400).json({ error: "id non valido" });
     }
 
-    // --- MongoDB ---
-    if (mongoReady()) {
-      const del = await Meal.deleteOne({ idmeals: id });
-      if (del.deletedCount > 0) {
-        return res.json({ ok: true, deleted: 1 });
-      }
-      return res.status(404).json({ error: "Piatto non trovato" });
-    }
-
-    // --- Fallback su file ---
     const { data, filePath } = readFileMeals();
     const restaurants = Array.isArray(data) ? data : [];
 
@@ -331,8 +328,51 @@ router.delete("/:id", async (req, res) => {
     return res.status(500).json({ error: "Errore nella rimozione del piatto", detail: String(err?.message || err) });
   }
 });
+
+// (Opzionale) DELETE /meals/:restaurantId/:id — compatibilità con frontend annidato
+router.delete("/:restaurantId/:id", async (req, res) => {
+  try {
+    const rid = String(req.params.restaurantId);
+    const raw = String(req.params.id);
+
+    if (mongoReady()) {
+      if (isHex24(raw)) {
+        const del = await Meal.deleteOne({ _id: raw, restaurantId: rid });
+        if (del.deletedCount > 0) return res.json({ ok: true, deleted: 1 });
+      }
+      const n = Number(raw);
+      if (Number.isFinite(n)) {
+        const del = await Meal.deleteOne({ restaurantId: rid, idmeals: n });
+        if (del.deletedCount > 0) return res.json({ ok: true, deleted: 1 });
+      }
+      // se non trovato, passo al file
+    }
+
+    // Fallback file (serve id numerico)
+    const id = Number(raw);
+    if (!Number.isFinite(id)) {
+      return res.status(400).json({ error: "id non valido" });
+    }
+
+    const { data, filePath } = readFileMeals();
+    const restaurants = Array.isArray(data) ? data : [];
+    const rest = restaurants.find(r => String(r.restaurantId) === rid);
+    if (!rest || !Array.isArray(rest.menu)) {
+      return res.status(404).json({ error: "Ristorante o menu non trovato" });
+    }
+    const idx = rest.menu.findIndex(m => Number(m.idmeals) === id);
+    if (idx < 0) return res.status(404).json({ error: "Piatto non trovato" });
+
+    rest.menu.splice(idx, 1);
+    writeFileMeals(restaurants, filePath);
+    return res.json({ ok: true, deleted: 1 });
+  } catch (err) {
+    console.error("DELETE /meals/:restaurantId/:id error:", err);
+    return res.status(500).json({ error: "Errore nella rimozione del piatto", detail: String(err?.message || err) });
+  }
+});
+
 // GET /meals — lista ristoranti con menu (DB se c'è, altrimenti file)
-// Opzionale: ?restaurantId=r_1 per filtrare un solo ristorante
 router.get("/", async (req, res) => {
   try {
     const wantedRid = req.query.restaurantId ? String(req.query.restaurantId) : null;
@@ -356,7 +396,6 @@ router.get("/", async (req, res) => {
     // --- Fallback file ---
     const { data } = readFileMeals();
 
-    // Se il file è nel formato [{ restaurantId, menu:[...] }]
     if (Array.isArray(data) && data.length && (data[0].menu || data[0].restaurantId)) {
       const shaped = data.map(r => ({
         restaurantId: r.restaurantId ?? r.id ?? r._id ?? "",
@@ -367,7 +406,6 @@ router.get("/", async (req, res) => {
       );
     }
 
-    // Se il file è una lista di piatti top-level, raggruppo qui
     const flat = flattenFileMeals(data).map(withIngredients);
     const byRid = {};
     for (const m of flat) {
