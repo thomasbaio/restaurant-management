@@ -91,6 +91,55 @@ function formatPrice(n) {
   return (typeof n === "number" && isFinite(n)) ? n.toFixed(2) : "n.d.";
 }
 
+// ---------- Fallback foto da file (meals1.json via backend) ----------
+
+// normalizzazione chiave "nome|categoria" senza accenti/maiuscole/spazi multipli
+function normalizeKey(nome, cat) {
+  const strip = (s) => String(s || "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")   // rimuove diacritici
+    .toLowerCase()
+    .trim()
+    .replace(/\s+/g, " ");
+  return `${strip(nome)}|${strip(cat)}`;
+}
+
+// costruisce una mappa da piatti del FILE: key -> url immagine
+async function buildFileImageMap() {
+  try {
+    const res = await fetch(`${API_BASE}/meals/common-meals?source=file`);
+    if (!res.ok) throw new Error(`GET /meals/common-meals?source=file ${res.status}`);
+    const list = await res.json();
+    const map = new Map();
+    for (const m of Array.isArray(list) ? list : []) {
+      const url = firstImage(m);
+      if (!isValidImgPath(url)) continue;
+      const nome = m.nome ?? m.strMeal ?? m.name ?? "";
+      const cat  = m.tipologia ?? m.strCategory ?? m.category ?? "";
+      const key = normalizeKey(nome, cat);
+      if (!map.has(key)) map.set(key, url);
+    }
+    return map;
+  } catch (e) {
+    console.warn("Impossibile costruire la mappa immagini dal file:", e.message);
+    return new Map();
+  }
+}
+
+// se il piatto non ha immagine, prova a prenderla dalla mappa del file
+function applyImageFallbackFromMap(meal, imgMap) {
+  if (!meal) return meal;
+  if (isValidImgPath(meal.immagine) || isValidImgPath(firstImage(meal))) return meal;
+  const key = normalizeKey(meal.nome, meal.tipologia);
+  const url = imgMap.get(key);
+  if (isValidImgPath(url)) {
+    meal.immagine = url; // arricchisco il campo normalizzato
+  }
+  return meal;
+}
+
+// --------------------------------------------------------------------
+
 window.onload = async () => {
   let user = null;
   try {
@@ -109,20 +158,28 @@ window.onload = async () => {
   }
 
   try {
-    const res = await fetch(`${API_BASE}/meals`);
-    if (!res.ok) {
-      const body = await res.text().catch(() => "");
-      throw new Error(`GET /meals ${res.status} – ${body}`);
+    // 1) in parallelo: a) menu dal backend, b) mappa immagini dal file
+    const [menuRes, imgMap] = await Promise.all([
+      fetch(`${API_BASE}/meals`),
+      buildFileImageMap(),
+    ]);
+
+    if (!menuRes.ok) {
+      const body = await menuRes.text().catch(() => "");
+      throw new Error(`GET /meals ${menuRes.status} – ${body}`);
     }
-    const allData = await res.json();
+    const allData = await menuRes.json();
 
     // Capisco se la struttura è annidata (array di ristoranti con menu) oppure piatta (lista piatti)
     const isNested = Array.isArray(allData) && allData.some(r => Array.isArray(r.menu));
 
-    // Tutti i piatti normalizzati (per offerte/filtri)
+    // Tutti i piatti normalizzati
     const allMealsNormalized = isNested
       ? allData.flatMap(r => (r.menu || []).map(m => normalizeMeal(m, r.restaurantId)))
       : (Array.isArray(allData) ? allData.map(m => normalizeMeal(m)) : []);
+
+    // Applico fallback immagine da file dove mancante
+    allMealsNormalized.forEach(m => applyImageFallbackFromMap(m, imgMap));
 
     // Piatti da mostrare in tabella
     let piattiDaMostrare = [];
@@ -145,6 +202,9 @@ window.onload = async () => {
       piattiDaMostrare = allMealsNormalized;
     }
 
+    // Fallback anche sui piatti mostrati (per sicurezza)
+    piattiDaMostrare.forEach(m => applyImageFallbackFromMap(m, imgMap));
+
     // salvo per filtro ingredienti
     window.__tuttiIPiatti = piattiDaMostrare;
 
@@ -159,9 +219,10 @@ window.onload = async () => {
         if (!preferenza || preferenza === "") {
           offerteContainer.innerHTML = "<li>Nessuna preferenza selezionata.</li>";
         } else {
-          const piattiConsigliati = allMealsNormalized.filter(
-            p => (p.tipologia || "").toLowerCase() === String(preferenza).toLowerCase()
-          );
+          const piattiConsigliati = allMealsNormalized
+            .filter(p => (p.tipologia || "").toLowerCase() === String(preferenza).toLowerCase())
+            .map(p => applyImageFallbackFromMap(p, imgMap));
+
           if (!piattiConsigliati.length) {
             offerteContainer.innerHTML = `<li>Nessun piatto trovato per la categoria "${preferenza}".</li>`;
           } else {
