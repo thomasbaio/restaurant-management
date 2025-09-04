@@ -55,49 +55,89 @@
   <p><a href="index.html">Torna alla Home</a></p>
 
   <script>
-    const user = JSON.parse(localStorage.getItem("loggedUser"));
-    if (!user) {
+    // ---- Config dinamica API ----
+    const isLocal =
+      location.hostname === "localhost" ||
+      location.hostname === "127.0.0.1";
+    const API_BASE = isLocal
+      ? "http://localhost:3000"
+      : "https://restaurant-management-wzhj.onrender.com";
+
+    // ---- User e ID sicuri ----
+    const params = new URLSearchParams(window.location.search);
+    const storedUser = JSON.parse(localStorage.getItem("loggedUser") || "null");
+
+    if (!storedUser) {
       alert("Devi essere loggato per modificare il profilo");
       window.location.href = "login.html";
     }
 
-    // Precompila il form
-    document.getElementById("username").value = user.username;
-    document.getElementById("email").value = user.email || "";
-    document.getElementById("password").value = user.password || "";
-    document.querySelector(`input[name="role"][value="${user.role}"]`).checked = true;
+    // id può arrivare dal localStorage oppure da ?id= (fallback)
+    const userIdFromQuery = params.get("id");
+    const userId =
+      (storedUser && storedUser.id != null ? storedUser.id : null) ??
+      (userIdFromQuery ? parseInt(userIdFromQuery) : null);
 
-    if (user.role === "ristoratore") {
-      document.getElementById("ristoratore-extra").style.display = "block";
-      document.getElementById("piva").value = user.piva || "";
-      document.getElementById("telefono").value = user.telefono || "";
-      document.getElementById("luogo").value = user.luogo || "";
-      document.getElementById("via").value = user.via || "";
+    if (userId == null || Number.isNaN(userId)) {
+      alert("Impossibile determinare l'ID utente. Effettua di nuovo il login.");
+      window.location.href = "login.html";
     }
 
-    if (user.role === "cliente") {
-      document.getElementById("cliente-extra").style.display = "block";
-      document.getElementById("nome").value = user.nome || "";
-      document.getElementById("cognome").value = user.cognome || "";
-      document.getElementById("pagamento").value = user.pagamento || "";
-      document.getElementById("preferenza").value = user.preferenza || "";
+    const user = { ...storedUser, id: userId };
+
+    // ---- Prefill form ----
+    function showRoleBlocks(role) {
+      document.getElementById("ristoratore-extra").style.display =
+        role === "ristoratore" ? "block" : "none";
+      document.getElementById("cliente-extra").style.display =
+        role === "cliente" ? "block" : "none";
     }
 
+    function safeSet(id, val) {
+      const el = document.getElementById(id);
+      if (el) el.value = val ?? "";
+    }
+
+    // Precompila campi base
+    safeSet("username", user.username);
+    safeSet("email", user.email);
+    safeSet("password", user.password);
+
+    const role = user.role === "ristoratore" || user.role === "cliente" ? user.role : "cliente";
+    const roleInput = document.querySelector(`input[name="role"][value="${role}"]`);
+    if (roleInput) roleInput.checked = true;
+    showRoleBlocks(role);
+
+    // Ristoratore extra
+    safeSet("piva", user.piva);
+    safeSet("telefono", user.telefono);
+    safeSet("luogo", user.luogo);
+    safeSet("via", user.via);
+
+    // Cliente extra
+    safeSet("nome", user.nome);
+    safeSet("cognome", user.cognome);
+    safeSet("pagamento", user.pagamento);
+    safeSet("preferenza", user.preferenza);
+
+    // Toggle dinamico al cambio ruolo
     document.querySelectorAll('input[name="role"]').forEach(radio => {
       radio.addEventListener("change", function () {
-        document.getElementById("ristoratore-extra").style.display = this.value === "ristoratore" ? "block" : "none";
-        document.getElementById("cliente-extra").style.display = this.value === "cliente" ? "block" : "none";
+        showRoleBlocks(this.value);
       });
     });
 
+    // ---- Submit Modifica ----
     document.getElementById("edit-user-form").addEventListener("submit", async function (e) {
       e.preventDefault();
+
+      const selectedRole = document.querySelector('input[name="role"]:checked')?.value || "cliente";
 
       const updatedUser = {
         username: document.getElementById("username").value.trim(),
         email: document.getElementById("email").value.trim(),
         password: document.getElementById("password").value,
-        role: document.querySelector('input[name="role"]:checked').value
+        role: selectedRole
       };
 
       if (updatedUser.role === "ristoratore") {
@@ -105,9 +145,7 @@
         updatedUser.telefono = document.getElementById("telefono").value.trim();
         updatedUser.luogo = document.getElementById("luogo").value.trim();
         updatedUser.via = document.getElementById("via").value.trim();
-      }
-
-      if (updatedUser.role === "cliente") {
+      } else {
         updatedUser.nome = document.getElementById("nome").value.trim();
         updatedUser.cognome = document.getElementById("cognome").value.trim();
         updatedUser.pagamento = document.getElementById("pagamento").value;
@@ -115,43 +153,48 @@
       }
 
       try {
-        const res = await fetch(`http://localhost:3000/users/${user.id}`, {
+        const res = await fetch(`${API_BASE}/users/${user.id}`, {
           method: "PUT",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(updatedUser)
         });
 
         if (res.ok) {
+          // Tieni l'id esistente; se il backend restituisce l'oggetto aggiornato, usalo
+          let saved = null;
+          try { saved = await res.json(); } catch { /* può restituire vuoto */ }
+          const finalUser = saved && typeof saved === "object" ? saved : { ...updatedUser, id: user.id };
+          localStorage.setItem("loggedUser", JSON.stringify(finalUser));
           alert("Profilo aggiornato con successo!");
-          localStorage.setItem("loggedUser", JSON.stringify({ ...updatedUser, id: user.id }));
           window.location.href = "index.html";
         } else {
-          alert("Errore durante la modifica del profilo");
+          const msg = await res.text();
+          alert("Errore durante la modifica del profilo: " + (msg || res.status));
         }
       } catch (err) {
         console.error("Errore:", err);
-        alert("Errore di rete");
+        alert("Errore di rete. Verifica la connessione o l'URL del server.");
       }
     });
 
+    // ---- Delete account ----
     document.getElementById("delete-btn").addEventListener("click", async function () {
       if (!confirm("Sei sicuro di voler cancellare il tuo account?")) return;
 
       try {
-        const res = await fetch(`http://localhost:3000/users/${user.id}`, {
-          method: "DELETE"
-        });
+        const res = await fetch(`${API_BASE}/users/${user.id}`, { method: "DELETE" });
 
         if (res.ok) {
           alert("Account eliminato");
           localStorage.removeItem("loggedUser");
           window.location.href = "index.html";
         } else {
-          alert("Errore nella cancellazione dell’account");
+          const msg = await res.text();
+          alert("Errore nella cancellazione dell’account: " + (msg || res.status));
         }
       } catch (err) {
         console.error("Errore:", err);
-        alert("Errore di rete");
+        alert("Errore di rete. Verifica la connessione o l'URL del server.");
       }
     });
   </script>
