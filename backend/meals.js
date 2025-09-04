@@ -76,21 +76,55 @@ function flattenFileMeals(data) {
   return out;
 }
 
-// Normalizza gli ingredienti in "ingredienti" (array di stringhe)
-function withIngredients(m) {
-  if (Array.isArray(m.ingredienti)) return m;
+// ---------- Normalizzazione + alias ingredienti ----------
 
+// Normalizza gli ingredienti in array canonico "ingredienti"
+function normalizeIngredients(obj) {
+  if (Array.isArray(obj?.ingredienti)) {
+    return obj.ingredienti.filter(Boolean).map(x => String(x).trim()).filter(Boolean);
+  }
+  const list = [];
+  for (let i = 1; i <= 20; i++) {
+    const ing = obj?.[`strIngredient${i}`];
+    const meas = obj?.[`strMeasure${i}`];
+    if (ing && String(ing).trim()) {
+      list.push(meas ? `${meas} ${ing}`.trim() : String(ing).trim());
+    }
+  }
+  if (!list.length && Array.isArray(obj?.ingredients)) {
+    return obj.ingredients.filter(Boolean).map(x => String(x).trim()).filter(Boolean);
+  }
+  return list;
+}
+
+// Restituisce un oggetto con ingredienti sempre presenti come:
+// - ingredienti: array
+// - ingredients: array (alias)
+// - ingredient:  string (comma-separated)
+function withIngredients(m) {
   const clone = { ...m };
 
-  if (Array.isArray(m.ingredients)) {
-    clone.ingredienti = m.ingredients.filter(Boolean);
-    delete clone.ingredients;
+  // Se già presenti
+  if (Array.isArray(clone.ingredienti)) {
+    clone.ingredienti = clone.ingredienti.filter(Boolean).map(x => String(x).trim()).filter(Boolean);
+    clone.ingredients  = clone.ingredienti.slice();
+    clone.ingredient   = clone.ingredienti.join(", ");
     return clone;
   }
 
+  // Alias da "ingredients"
+  if (Array.isArray(clone.ingredients)) {
+    const arr = clone.ingredients.filter(Boolean).map(x => String(x).trim()).filter(Boolean);
+    clone.ingredienti = arr;
+    clone.ingredients  = arr.slice();
+    clone.ingredient   = arr.join(", ");
+    return clone;
+  }
+
+  // Estrazione stile TheMealDB con pulizia campi
   const list = [];
   for (let i = 1; i <= 20; i++) {
-    const ing = clone[`strIngredient${i}`];
+    const ing  = clone[`strIngredient${i}`];
     const meas = clone[`strMeasure${i}`];
     if (ing && String(ing).trim()) {
       list.push(meas ? `${meas} ${ing}`.trim() : String(ing).trim());
@@ -98,27 +132,11 @@ function withIngredients(m) {
     delete clone[`strIngredient${i}`];
     delete clone[`strMeasure${i}`];
   }
-  if (list.length) clone.ingredienti = list;
-  return clone;
-}
 
-// ✅ Normalizzazione ingredienti lato POST (fallback robusto)
-function normalizeIngredients(obj) {
-  if (Array.isArray(obj.ingredienti)) {
-    return obj.ingredienti.filter(Boolean);
-  }
-  const list = [];
-  for (let i = 1; i <= 20; i++) {
-    const ing = obj[`strIngredient${i}`];
-    const meas = obj[`strMeasure${i}`];
-    if (ing && String(ing).trim()) {
-      list.push(meas ? `${meas} ${ing}`.trim() : String(ing).trim());
-    }
-  }
-  if (!list.length && Array.isArray(obj.ingredients)) {
-    return obj.ingredients.filter(Boolean);
-  }
-  return list;
+  clone.ingredienti = list;
+  clone.ingredients  = list.slice();
+  clone.ingredient   = list.join(", ");
+  return clone;
 }
 
 // --------------------- Rotte ----------------------
@@ -188,6 +206,7 @@ router.get("/common-meals", async (req, res) => {
 });
 
 // ✅ POST /meals — crea un piatto con fallback robusto (DB se c'è, altrimenti file)
+// Include normalizzazione + alias ingredienti prima del salvataggio
 router.post("/", async (req, res) => {
   try {
     const b = req.body || {};
@@ -196,6 +215,11 @@ router.post("/", async (req, res) => {
       return res.status(400).json({ error: "restaurantId mancante" });
     }
 
+    // Ingredienti canonici + alias (indipendenti da come li manda il frontend)
+    const ingr = normalizeIngredients(b);
+    const ingrArr = ingr.filter(Boolean).map(x => String(x).trim()).filter(Boolean);
+    const ingrStr = ingrArr.join(", ");
+
     // Mappatura campi “elastici”
     const newMeal = {
       restaurantId: b.restaurantId,
@@ -203,12 +227,14 @@ router.post("/", async (req, res) => {
       tipologia: b.tipologia || b.category || b.strCategory || "Altro",
       prezzo: Number(b.prezzo ?? 0),
       foto: b.foto || b.image || b.strMealThumb || "",
-      ingredienti: normalizeIngredients(b),
+      ingredienti: ingrArr,                 // canonico
+      ingredients: ingrArr.slice(),         // alias array
+      ingredient: ingrStr,                  // alias stringa
       origine: b.origine || "personalizzato",
       isCommon: typeof b.isCommon === "boolean" ? b.isCommon : (b.origine === "comune")
     };
 
-    // Pulizia eventuali campi temporanei stile TheMealDB
+    // Pulizia eventuali campi temporanei stile TheMealDB (se arrivano nel body)
     for (let i = 1; i <= 20; i++) {
       delete newMeal[`strIngredient${i}`];
       delete newMeal[`strMeasure${i}`];
