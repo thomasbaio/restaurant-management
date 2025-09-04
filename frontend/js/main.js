@@ -49,6 +49,23 @@ function formatPrice(n) {
   return (typeof n === "number" && isFinite(n)) ? n.toFixed(2) : "n.d.";
 }
 
+// ---- Selezione URL immagine con fallback/placeholder ----
+function pickImageURL(p) {
+  const cand = p.immagine || p.foto || p.strMealThumb || p.image || "";
+
+  // 1) URL assoluto http/https
+  if (typeof cand === "string" && /^https?:\/\//i.test(cand)) return cand;
+
+  // 2) Path relativo (es. /uploads/..): attacca l'origine del sito
+  if (typeof cand === "string" && cand.startsWith("/")) {
+    return `${location.origin}${cand}`;
+  }
+
+  // 3) Placeholder elegante (sempre https)
+  const label = encodeURIComponent((p.nome || "Food").split(" ")[0]);
+  return `https://placehold.co/80x60?text=${label}`;
+}
+
 window.onload = async () => {
   let user = null;
   try {
@@ -114,7 +131,7 @@ window.onload = async () => {
       const preferenza = user.preferenza;
       const offerteContainer = document.getElementById("offerte-speciali");
       if (offerteContainer) {
-        if (!preferenza || preferenza === "") { // ← FIX: rimossa la “è” spuria
+        if (!preferenza || preferenza === "") {
           offerteContainer.innerHTML = "<li>Nessuna preferenza selezionata.</li>";
         } else {
           const piattiConsigliati = allMealsNormalized.filter(
@@ -125,8 +142,9 @@ window.onload = async () => {
           } else {
             offerteContainer.innerHTML = piattiConsigliati.map(p => `
               <li style="margin-bottom: 10px;">
-                <img src="${p.immagine && p.immagine.startsWith('http') ? p.immagine : 'https://via.placeholder.com/80'}"
-                     alt="Foto" width="80" style="vertical-align: middle; margin-right: 10px;">
+                <img src="${pickImageURL(p)}"
+                     alt="Foto" width="80" height="60"
+                     style="vertical-align: middle; margin-right: 10px;">
                 <strong>${p.nome}</strong> - €${formatPrice(p.prezzo)} ${p.tipologia ? `(${p.tipologia})` : ""}
               </li>
             `).join("");
@@ -169,8 +187,9 @@ function renderTable(piatti, isRistoratore) {
     const tr = document.createElement("tr");
     const ings = Array.isArray(piatto.ingredients) ? piatto.ingredients.filter(Boolean) : [];
 
-    const imgHTML = piatto.immagine && piatto.immagine.startsWith("http")
-      ? `<img src="${piatto.immagine}" width="80" alt="Foto">`
+    const imgURL = pickImageURL(piatto);
+    const imgHTML = imgURL
+      ? `<img src="${imgURL}" width="80" height="60" alt="Foto">`
       : "-";
 
     // Bottone elimina solo se ristoratore e abbiamo un id (idmeals o _id valido)
