@@ -1,12 +1,29 @@
-// 🎯 Ingredienti dinamici
-// add.js — aggiunta piatto + piatti comuni (compat)
+// add.js — aggiunta piatto + piatti comuni (robusto)
+
 // Base URL: localhost in dev, Render in produzione
 const API_BASE =
   (location.hostname === 'localhost' || location.hostname === '127.0.0.1')
     ? 'http://localhost:3000'
     : 'https://restaurant-management-wzhj.onrender.com';
 
+console.log('add.js loaded:', document.currentScript?.src);
 console.log('API_BASE ->', API_BASE);
+
+// Helper: parse JSON in modo sicuro (se il server risponde HTML non andiamo in "Unexpected token <")
+async function safeJson(res) {
+  const ct = res.headers.get('content-type') || '';
+  const text = await res.text();
+  if (!ct.includes('application/json')) {
+    // Mostra un estratto utile per il debug
+    const snippet = text.slice(0, 200).replace(/\s+/g, ' ');
+    throw new Error(`Risposta non-JSON (${res.status}) → ${snippet}`);
+  }
+  try {
+    return JSON.parse(text);
+  } catch (e) {
+    throw new Error(`JSON parse error (${res.status}): ${e.message}`);
+  }
+}
 
 // =================== Gestione ingredienti manuali ===================
 const ingredientInput = document.getElementById("ingredient-input");
@@ -17,7 +34,7 @@ let ingredients = [];
 
 addBtn.addEventListener("click", () => {
   const ing = (ingredientInput.value || "").trim();
-  if (ing && !ingredients.includes(ing)) {
+  if (ing && !ingredients.map(x => x.toLowerCase()).includes(ing.toLowerCase())) {
     ingredients.push(ing);
     updateIngredientList();
     ingredientInput.value = "";
@@ -42,7 +59,9 @@ window.removeIngredient = function(index) {
 document.getElementById("meal-form").addEventListener("submit", async function (e) {
   e.preventDefault();
 
-  const user = JSON.parse(localStorage.getItem("loggedUser") || "null");
+  const userStr = localStorage.getItem("loggedUser");
+  const user = userStr ? JSON.parse(userStr) : null;
+
   if (!user || user.role !== "ristoratore") {
     alert("Accesso non autorizzato: serve un account ristoratore.");
     return;
@@ -81,8 +100,10 @@ document.getElementById("meal-form").addEventListener("submit", async function (
       body: JSON.stringify(newMeal)
     });
 
-    const txt = await res.text();
-    if (!res.ok) throw new Error(`HTTP ${res.status} - ${txt || 'Errore nel salvataggio'}`);
+    if (!res.ok) {
+      const errText = await res.text();
+      throw new Error(`HTTP ${res.status} - ${errText || 'Errore nel salvataggio'}`);
+    }
 
     alert("Piatto aggiunto!");
     window.location.href = "index.html";
@@ -93,31 +114,34 @@ document.getElementById("meal-form").addEventListener("submit", async function (
 });
 
 // =================== Piatti comuni (cards + "Aggiungi al mio menu") ===================
-window.onload = async function () {
+window.addEventListener('DOMContentLoaded', async () => {
   const container = document.getElementById("common-meals-container");
-  const user = JSON.parse(localStorage.getItem("loggedUser") || "null");
+  if (!container) return;
+
+  const userStr = localStorage.getItem("loggedUser");
+  const user = userStr ? JSON.parse(userStr) : null;
 
   if (!user || user.role !== "ristoratore" || !user.restaurantId) {
-    if (container) container.innerHTML = "<p>Solo i ristoratori possono vedere i piatti comuni.</p>";
+    container.innerHTML = "<p>Solo i ristoratori possono vedere i piatti comuni.</p>";
     return;
   }
 
-  if (!container) return;
-
   try {
     const res = await fetch(`${API_BASE}/meals/common-meals`);
-    const txt = await res.text();
-    if (!res.ok) throw new Error(`HTTP ${res.status} - ${txt || 'Errore nel caricamento'}`);
+    if (!res.ok) {
+      const t = await res.text();
+      throw new Error(`HTTP ${res.status} - ${t || 'Errore nel caricamento'}`);
+    }
 
-    const commonMeals = JSON.parse(txt); // può essere TheMealDB-like o nostro JSON
-
+    const commonMeals = await safeJson(res); // evita "Unexpected token <" su error pages
     container.innerHTML = "";
+
     commonMeals.forEach(raw => {
       // Normalizzazione campi (TheMealDB oppure schema locale)
-      const nome        = raw.strMeal       || raw.nome        || raw.name || "Senza nome";
-      const categoria   = raw.strCategory   || raw.tipologia   || raw.category || "-";
+      const nome        = raw.strMeal         || raw.nome        || raw.name || "Senza nome";
+      const categoria   = raw.strCategory     || raw.tipologia   || raw.category || "-";
       const istruzioni  = raw.strInstructions || raw.descrizione || "-";
-      const img         = raw.strMealThumb  || raw.immagine    || "";
+      const img         = raw.strMealThumb    || raw.immagine    || "";
       let ings = [];
 
       // Se formato TheMealDB: strIngredient1..20
@@ -147,7 +171,7 @@ window.onload = async function () {
 
       card.querySelector(".add-btn").addEventListener("click", async () => {
         const nuovoPiatto = {
-          restaurantId: user.restaurantId,   // richiesto dal backend
+          restaurantId: user.restaurantId,
           nome,
           prezzo: raw.prezzo || 10,
           descrizione: istruzioni,
@@ -164,8 +188,10 @@ window.onload = async function () {
             body: JSON.stringify(nuovoPiatto)
           });
 
-          const addTxt = await addRes.text();
-          if (!addRes.ok) throw new Error(`HTTP ${addRes.status} - ${addTxt || 'Errore nel salvataggio'}`);
+          if (!addRes.ok) {
+            const addTxt = await addRes.text();
+            throw new Error(`HTTP ${addRes.status} - ${addTxt || 'Errore nel salvataggio'}`);
+          }
 
           alert("Piatto aggiunto al menu!");
           window.location.href = "index.html";
@@ -180,6 +206,6 @@ window.onload = async function () {
 
   } catch (err) {
     console.error("Errore nel caricamento dei piatti comuni:", err);
-    container.innerHTML = "<p>Errore nel caricamento dei piatti comuni.</p>";
+    container.innerHTML = `<p style="color:#b00;">${String(err.message || 'Errore nel caricamento dei piatti comuni.')}</p>`;
   }
-};
+});
