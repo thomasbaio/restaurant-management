@@ -1,3 +1,10 @@
+const express = require("express");
+const router = express.Router();
+
+const Meal = require("./models/meal");
+const fs = require("fs");
+const path = require("path");
+const mongoose = require("mongoose");
 // Piatti comuni — UNIONE file + DB, con deduplica (DB ha priorità)
 // Opzionale: ?source=file | db | all  (default: all)
 router.get("/common-meals", async (req, res) => {
