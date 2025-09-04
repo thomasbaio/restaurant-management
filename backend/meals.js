@@ -23,11 +23,8 @@ function resolveMealsFile() {
   ].filter(Boolean);
 
   for (const p of candidates) {
-    try {
-      if (fs.existsSync(p)) return p;
-    } catch {}
+    try { if (fs.existsSync(p)) return p; } catch {}
   }
-  // fallback: ultimo candidato (anche se non esiste, per messaggi)
   return candidates[candidates.length - 1] || "meals1.json";
 }
 
@@ -45,6 +42,11 @@ function readFileMeals() {
   }
 }
 
+function writeFileMeals(data, filePath) {
+  const out = Array.isArray(data) ? data : [];
+  fs.writeFileSync(filePath, JSON.stringify(out, null, 2), "utf8");
+}
+
 // Riconosce “aspetto piatto”
 function looksLikeMeal(o) {
   if (!o || typeof o !== "object") return false;
@@ -60,7 +62,6 @@ function flattenFileMeals(data) {
 
   // Caso A: array di piatti top-level
   if (data.length && looksLikeMeal(data[0])) {
-    // non abbiamo info ristorante; manteniamo comunque i piatti
     return data.map(m => ({ ...m }));
   }
 
@@ -89,14 +90,35 @@ function withIngredients(m) {
 
   const list = [];
   for (let i = 1; i <= 20; i++) {
-    const ing = m[`strIngredient${i}`];
-    const meas = m[`strMeasure${i}`];
+    const ing = clone[`strIngredient${i}`];
+    const meas = clone[`strMeasure${i}`];
+    if (ing && String(ing).trim()) {
+      list.push(meas ? `${meas} ${ing}`.trim() : String(ing).trim());
+    }
+    delete clone[`strIngredient${i}`];
+    delete clone[`strMeasure${i}`];
+  }
+  if (list.length) clone.ingredienti = list;
+  return clone;
+}
+
+// ✅ Normalizzazione ingredienti lato POST (fallback robusto)
+function normalizeIngredients(obj) {
+  if (Array.isArray(obj.ingredienti)) {
+    return obj.ingredienti.filter(Boolean);
+  }
+  const list = [];
+  for (let i = 1; i <= 20; i++) {
+    const ing = obj[`strIngredient${i}`];
+    const meas = obj[`strMeasure${i}`];
     if (ing && String(ing).trim()) {
       list.push(meas ? `${meas} ${ing}`.trim() : String(ing).trim());
     }
   }
-  if (list.length) clone.ingredienti = list;
-  return clone;
+  if (!list.length && Array.isArray(obj.ingredients)) {
+    return obj.ingredients.filter(Boolean);
+  }
+  return list;
 }
 
 // --------------------- Rotte ----------------------
@@ -162,6 +184,67 @@ router.get("/common-meals", async (req, res) => {
   } catch (err) {
     console.error("Errore /meals/common-meals:", err);
     return res.status(500).json({ error: "Errore nella lettura dei piatti comuni", detail: String(err?.message || err) });
+  }
+});
+
+// ✅ POST /meals — crea un piatto con fallback robusto (DB se c'è, altrimenti file)
+router.post("/", async (req, res) => {
+  try {
+    const b = req.body || {};
+
+    if (!b.restaurantId) {
+      return res.status(400).json({ error: "restaurantId mancante" });
+    }
+
+    // Mappatura campi “elastici”
+    const newMeal = {
+      restaurantId: b.restaurantId,
+      nome: b.nome || b.name || b.strMeal || "Senza nome",
+      tipologia: b.tipologia || b.category || b.strCategory || "Altro",
+      prezzo: Number(b.prezzo ?? 0),
+      foto: b.foto || b.image || b.strMealThumb || "",
+      ingredienti: normalizeIngredients(b),
+      origine: b.origine || "personalizzato",
+      isCommon: typeof b.isCommon === "boolean" ? b.isCommon : (b.origine === "comune")
+    };
+
+    // Pulizia eventuali campi temporanei stile TheMealDB
+    for (let i = 1; i <= 20; i++) {
+      delete newMeal[`strIngredient${i}`];
+      delete newMeal[`strMeasure${i}`];
+    }
+
+    // ---- Salvataggio preferendo MongoDB ----
+    if (mongoReady()) {
+      const created = await Meal.create(newMeal);
+      return res.status(201).json(created);
+    }
+
+    // ---- Fallback su file meals1.json ----
+    const { data, filePath } = readFileMeals();
+    const restaurants = Array.isArray(data) ? data : [];
+
+    // Trova o crea il ristorante
+    let rest = restaurants.find(r => String(r.restaurantId) === String(newMeal.restaurantId));
+    if (!rest) {
+      rest = { restaurantId: newMeal.restaurantId, menu: [] };
+      restaurants.push(rest);
+    }
+    if (!Array.isArray(rest.menu)) rest.menu = [];
+
+    // Genera idmeals progressivo
+    const allMeals = restaurants.flatMap(r => Array.isArray(r.menu) ? r.menu : []);
+    const maxId = allMeals.reduce((acc, m) => Math.max(acc, Number(m.idmeals || 0)), 0);
+    newMeal.idmeals = maxId + 1;
+
+    // Inserisci e salva
+    rest.menu.push(newMeal);
+    writeFileMeals(restaurants, filePath);
+
+    return res.status(201).json(newMeal);
+  } catch (err) {
+    console.error("POST /meals error:", err);
+    return res.status(500).json({ error: "Errore nel salvataggio del piatto", detail: String(err?.message || err) });
   }
 });
 
