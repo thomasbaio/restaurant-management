@@ -57,3 +57,6 @@ router.get("/common-meals", async (req, res) => {
     res.status(500).json({ error: "Errore nella lettura dei piatti comuni" });
   }
 });
+
+
+module.exports = router;
