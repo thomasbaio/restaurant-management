@@ -242,6 +242,20 @@ router.post("/", async (req, res) => {
 
     // ---- Salvataggio preferendo MongoDB ----
     if (mongoReady()) {
+      // 🔧 Assegna sempre un idmeals progressivo per evitare E11000 (idmeals: null)
+      if (newMeal.idmeals == null) {
+        const maxDoc = await Meal
+          .findOne({ idmeals: { $ne: null } })
+          .sort({ idmeals: -1 })
+          .select("idmeals")
+          .lean()
+          .catch(() => null);
+
+        const maxId = Number(maxDoc?.idmeals) || 0;
+        newMeal.idmeals = maxId + 1;
+      }
+      newMeal.idmeals = Number(newMeal.idmeals);
+
       const created = await Meal.create(newMeal);
       return res.status(201).json(created);
     }
@@ -271,6 +285,50 @@ router.post("/", async (req, res) => {
   } catch (err) {
     console.error("POST /meals error:", err);
     return res.status(500).json({ error: "Errore nel salvataggio del piatto", detail: String(err?.message || err) });
+  }
+});
+
+// ✅ DELETE /meals/:id — rimuove un piatto per idmeals (Mongo se c'è, altrimenti file)
+router.delete("/:id", async (req, res) => {
+  try {
+    const id = Number(req.params.id);
+    if (!Number.isFinite(id)) {
+      return res.status(400).json({ error: "id non valido" });
+    }
+
+    // --- MongoDB ---
+    if (mongoReady()) {
+      const del = await Meal.deleteOne({ idmeals: id });
+      if (del.deletedCount > 0) {
+        return res.json({ ok: true, deleted: 1 });
+      }
+      return res.status(404).json({ error: "Piatto non trovato" });
+    }
+
+    // --- Fallback su file ---
+    const { data, filePath } = readFileMeals();
+    const restaurants = Array.isArray(data) ? data : [];
+
+    let removed = 0;
+    for (const r of restaurants) {
+      if (!Array.isArray(r.menu)) continue;
+      const idx = r.menu.findIndex(m => Number(m.idmeals) === id);
+      if (idx >= 0) {
+        r.menu.splice(idx, 1);
+        removed = 1;
+        break;
+      }
+    }
+
+    if (removed) {
+      writeFileMeals(restaurants, filePath);
+      return res.json({ ok: true, deleted: 1 });
+    } else {
+      return res.status(404).json({ error: "Piatto non trovato" });
+    }
+  } catch (err) {
+    console.error("DELETE /meals/:id error:", err);
+    return res.status(500).json({ error: "Errore nella rimozione del piatto", detail: String(err?.message || err) });
   }
 });
 
