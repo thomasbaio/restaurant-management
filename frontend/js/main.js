@@ -110,7 +110,7 @@ window.onload = async () => {
       const preferenza = user.preferenza;
       const offerteContainer = document.getElementById("offerte-speciali");
       if (offerteContainer) {
-        if (!preferenza || preferenza === "") {
+        if (!preferenza || preferenza è === "") {
           offerteContainer.innerHTML = "<li>Nessuna preferenza selezionata.</li>";
         } else {
           const piattiConsigliati = allMealsNormalized.filter(
@@ -178,7 +178,7 @@ function renderTable(piatti, isRistoratore) {
 
     const canDelete = isRistoratore && (hasIdMeals || oidIsValid);
 
-    // salvo entrambi gli id nel dataset per tentare in ordine
+    // salvo entrambi gli id nel dataset per tentare in ordine, ma solo se validi
     const eliminaHTML = canDelete
       ? `<button class="btn-delete"
                   data-idmeals="${hasIdMeals ? String(piatto.idmeals) : ""}"
@@ -212,9 +212,30 @@ async function rimuovi(idMeals, oid, rid) {
 
   if (!confirm("Vuoi davvero eliminare questo piatto?")) return;
 
-  const ids = [idMeals, oid].filter(Boolean); // proviamo entrambi se presenti
+  const restaurantId = rid || user.restaurantId;
+
+  // preparo gli ID validi
+  const hasMealsId = idMeals != null && idMeals !== "";
+  const hasOid = typeof oid === "string" && /^[0-9a-fA-F]{24}$/.test(oid);
+
+  // creo la lista di tentativi in ordine preciso
+  const attempts = [];
+  if (hasMealsId) {
+    attempts.push(`${API_BASE}/meals/${encodeURIComponent(idMeals)}`);                       // 1) semplice con idmeals
+    attempts.push(`${API_BASE}/meals/${encodeURIComponent(restaurantId)}/${encodeURIComponent(idMeals)}`); // 2) annidata con idmeals
+  }
+  if (hasOid) {
+    attempts.push(`${API_BASE}/meals/${encodeURIComponent(oid)}`);                          // 3) semplice con _id
+    attempts.push(`${API_BASE}/meals/${encodeURIComponent(restaurantId)}/${encodeURIComponent(oid)}`);     // 4) annidata con _id
+  }
+
+  if (!attempts.length) {
+    alert("Impossibile eliminare: ID mancante o non valido.");
+    return;
+  }
 
   const tryDelete = async (url) => {
+    console.log("DELETE ->", url);
     const res = await fetch(url, { method: "DELETE" });
     if (!res.ok) {
       const body = await res.text().catch(() => "");
@@ -222,19 +243,15 @@ async function rimuovi(idMeals, oid, rid) {
     }
   };
 
-  // Ordine tentativi: 1) semplice, 2) annidata
-  for (const id of ids) {
+  for (const url of attempts) {
     try {
-      await tryDelete(`${API_BASE}/meals/${encodeURIComponent(id)}`);           // 1) /meals/:id
+      await tryDelete(url);
       window.location.reload();
       return;
-    } catch (e1) { /* continua con annidata */ }
-
-    try {
-      await tryDelete(`${API_BASE}/meals/${encodeURIComponent(rid || user.restaurantId)}/${encodeURIComponent(id)}`); // 2) /meals/:rid/:id
-      window.location.reload();
-      return;
-    } catch (e2) { /* continua con prossimo id */ }
+    } catch (e) {
+      console.warn("Tentativo fallito:", e.message);
+      // continua col prossimo
+    }
   }
 
   alert("Errore nella rimozione del piatto");
