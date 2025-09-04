@@ -1,51 +1,37 @@
+// ./models/meal.js
 const mongoose = require("mongoose");
 
-const MealSchema = new mongoose.Schema(
+const mealSchema = new mongoose.Schema(
   {
-    // Opzionale in inserimento (lo assegniamo lato backend); univoco quando presente
-    idmeals: { type: Number, index: true, default: undefined },
+    restaurantId: { type: String, required: true },     // niente index/unique sul campo
+    idmeals:      { type: Number, required: true },     // niente index/unique sul campo
 
-    nome: { type: String, required: true, trim: true },
-    prezzo: { type: Number, required: true, min: 0 },
+    // campi descrittivi
+    nome:       { type: String, default: "Senza nome" },
+    tipologia:  { type: String, default: "Altro" },
+    prezzo:     { type: Number, default: 0 },
+    foto:       { type: String, default: "" },
 
-    tipologia: { type: String, trim: true }, // es. "primo", "secondo", "pizza"
-    ingredienti: { type: [String], default: [] }, // canonico nel DB
-    foto: { type: String, trim: true }, // URL o base64
+    // ingredienti (canonico + alias, NON indicizzati)
+    ingredienti: { type: [String], default: [] },
+    ingredients: { type: [String], default: [] },
+    ingredient:  { type: String,  default: "" },
 
-    restaurantId: { type: String, required: true, index: true, trim: true }, // es. "r_o"
-
-    origine: {
-      type: String,
-      enum: ["comune", "personalizzato"],
-      default: "personalizzato",
-      index: true,
-    },
-
-    isCommon: { type: Boolean, default: false, index: true },
+    // meta
+    origine:  { type: String, default: "personalizzato" },
+    isCommon: { type: Boolean, default: false },
   },
-  {
-    timestamps: true,
-    toJSON: { virtuals: true },
-    toObject: { virtuals: true },
-  }
+  { timestamps: true, autoIndex: true }
 );
 
-// ---------- Indici ----------
-// idmeals univoco SOLO quando presente (sparse evita conflitti con null/undefined)
-MealSchema.index({ idmeals: 1 }, { unique: true, sparse: true });
+// ✅ Indice composto UNICO — niente altri indici su idmeals!
+mealSchema.index(
+  { restaurantId: 1, idmeals: 1 },
+  { unique: true, name: "uniq_restaurant_meal" }
+);
 
-// Query comuni per ristorante e ordinamento per idmeals
-MealSchema.index({ restaurantId: 1, idmeals: 1 });
+// (facoltativi, NON unici) per /common-meals
+mealSchema.index({ isCommon: 1 });
+mealSchema.index({ origine: 1 });
 
-// ---------- Virtuals di comodo per l'output ----------
-// Alias array
-MealSchema.virtual("ingredients").get(function () {
-  return Array.isArray(this.ingredienti) ? this.ingredienti : [];
-});
-
-// Alias stringa "a, b, c"
-MealSchema.virtual("ingredient").get(function () {
-  return Array.isArray(this.ingredienti) ? this.ingredienti.join(", ") : "";
-});
-
-module.exports = mongoose.model("Meal", MealSchema);
+module.exports = mongoose.models.Meal || mongoose.model("Meal", mealSchema);
