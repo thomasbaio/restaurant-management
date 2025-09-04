@@ -1,57 +1,86 @@
-// Base URL: localhost in dev, Render in produzione
-const API_BASE =
-  (location.hostname === 'localhost' || location.hostname === '127.0.0.1')
-    ? 'http://localhost:3000'
-    : 'https://restaurant-management-wzhj.onrender.com';
+// js/ricerca_piatti.js
 
-async function cercaPiatti() {
-  const nome       = (document.getElementById("nome")?.value || "").toLowerCase();
-  const tipologia  = (document.getElementById("tipologia")?.value || "").toLowerCase();
-  const prezzo     = parseFloat(document.getElementById("prezzo")?.value);
-  const lista      = document.getElementById("risultati-piatti");
+// Base URL per API: locale vs produzione
+const isLocal = location.hostname === "localhost" || location.hostname === "127.0.0.1";
+const API_BASE = isLocal ? "http://localhost:3000" : location.origin;
 
-  lista.innerHTML = "⏳ Caricamento...";
+// Normalizza i campi dei piatti da sorgenti diverse
+function normalizeMeal(m) {
+  const nome = m.nome ?? m.strMeal ?? m.name ?? "";
+  const tipologia = m.tipologia ?? m.strCategory ?? m.category ?? "";
+  const prezzoRaw = m.prezzo ?? m.price ?? m.cost ?? null;
+  const prezzo = prezzoRaw === null ? null : Number(prezzoRaw);
+  const foto = m.foto ?? m.strMealThumb ?? m.image ?? "";
+  const ingredienti = Array.isArray(m.ingredienti) ? m.ingredienti
+                    : Array.isArray(m.ingredients) ? m.ingredients
+                    : [];
+
+  return { nome, tipologia, prezzo, foto, ingredienti, _raw: m };
+}
+
+// Utility per testo incluso (case-insensitive)
+function includesCI(hay, needle) {
+  if (!needle) return true;
+  if (!hay) return false;
+  return String(hay).toLowerCase().includes(String(needle).toLowerCase());
+}
+
+// Espongo la funzione globalmente per l'onclick inline
+window.cercaPiatti = async function cercaPiatti() {
+  const ul = document.getElementById("risultati-piatti");
+  ul.innerHTML = "<li>⏳ Ricerca in corso...</li>";
+
+  const qNome = document.getElementById("nome").value.trim();
+  const qTipo = document.getElementById("tipologia").value.trim();
+  const qPrezzoMaxStr = document.getElementById("prezzo").value.trim();
+  const qPrezzoMax = qPrezzoMaxStr ? Number(qPrezzoMaxStr) : null;
 
   try {
+    // /meals ritorna array di ristoranti con menu annidato
     const res = await fetch(`${API_BASE}/meals`);
-    const txt = await res.text();
-    if (!res.ok) throw new Error(`HTTP ${res.status} - ${txt || 'Errore nel fetch'}`);
-    const data = JSON.parse(txt);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const data = await res.json();
 
-    const piatti = data.flatMap(r => r.menu || []);
+    // Flatten dei piatti
+    const allMeals = (Array.isArray(data) ? data : [])
+      .flatMap(r => Array.isArray(r.menu) ? r.menu : [])
+      .map(normalizeMeal);
 
-    const filtrati = piatti.filter(p => {
-      const nomeP  = (p.nome || p.name || "").toLowerCase();
-      const tipoP  = (p.tipologia || p.category || "").toLowerCase();
-      const prezzoP = Number(p.prezzo);
-
-      const matchNome   = !nome || nomeP.includes(nome);
-      const matchTipo   = !tipologia || tipoP.includes(tipologia);
-      const matchPrezzo = isNaN(prezzo) || (!isNaN(prezzoP) && prezzoP <= prezzo);
-      return matchNome && matchTipo && matchPrezzo;
+    // Filtri
+    const filtered = allMeals.filter(p => {
+      if (!includesCI(p.nome, qNome)) return false;
+      if (!includesCI(p.tipologia, qTipo)) return false;
+      if (qPrezzoMax !== null && Number.isFinite(p.prezzo) && p.prezzo > qPrezzoMax) return false;
+      return true;
     });
 
-    if (filtrati.length === 0) {
-      lista.innerHTML = "<li>Nessun piatto trovato.</li>";
-    } else {
-      lista.innerHTML = filtrati.map(p => {
-        const price = !isNaN(Number(p.prezzo)) ? Number(p.prezzo).toFixed(2) : "-";
-        const ingr  = Array.isArray(p.ingredients)
-          ? p.ingredients.join(", ")
-          : (p.ingredients ? String(p.ingredients) : "");
-        return `
-          <li>
-            <strong>${p.nome || p.name}</strong><br>
-            🍽️ ${p.tipologia || p.category || "-"}<br>
-            💶 €${price}<br>
-            🧂 ${ingr}
-          </li>
-        `;
-      }).join("");
+    // Render
+    if (!filtered.length) {
+      ul.innerHTML = "<li>Nessun piatto trovato.</li>";
+      return;
     }
 
+    ul.innerHTML = "";
+    filtered.forEach(p => {
+      const li = document.createElement("li");
+      li.style.marginBottom = "10px";
+
+      li.innerHTML = `
+        <div style="display:flex; gap:10px; align-items:flex-start;">
+          ${p.foto ? `<img src="${p.foto}" alt="${p.nome}" style="width:80px;height:80px;object-fit:cover;border-radius:6px;">` : ""}
+          <div>
+            <strong>${p.nome || "Senza nome"}</strong><br>
+            ${p.tipologia ? `<em>${p.tipologia}</em><br>` : ""}
+            ${Number.isFinite(p.prezzo) ? `Prezzo: €${p.prezzo.toFixed(2)}<br>` : ""}
+            ${p.ingredienti?.length ? `Ingredienti: ${p.ingredienti.join(", ")}` : ""}
+          </div>
+        </div>
+      `;
+      ul.appendChild(li);
+    });
+
   } catch (err) {
-    console.error("Errore:", err);
-    lista.innerHTML = `<li>⚠️ ${err.message || "Errore durante la ricerca."}</li>`;
+    console.error("Errore ricerca piatti:", err);
+    ul.innerHTML = `<li style="color:#b00;">Errore durante la ricerca. Dettagli in console.</li>`;
   }
-}
+};
