@@ -1,3 +1,38 @@
+// statistiche_ristoratore.js
+
+// --- Base URL per API: locale vs produzione ---
+const isLocal =
+  location.hostname === "localhost" || location.hostname === "127.0.0.1";
+
+const API_BASE = isLocal
+  ? "http://localhost:3000"
+  : (window.API_BASE // se lo hai già definito altrove, lo riusa
+      || (location.origin.includes("onrender.com")
+            ? "https://restaurant-management-wzhj.onrender.com"
+            : location.origin));
+
+// --- Helper fetch JSON con gestione errori ---
+async function getJson(path) {
+  const res = await fetch(`${API_BASE}${path}`);
+  if (!res.ok) {
+    const body = await res.text().catch(() => "");
+    throw new Error(`HTTP ${res.status} ${res.statusText}${body ? " · " + body : ""}`);
+  }
+  return res.json();
+}
+
+// Normalizza ID piatto (string per confronto sicuro)
+function mealId(p) {
+  const id = p?.idmeals ?? p?.idMeal ?? p?.id ?? (typeof p?._id === "string" ? p._id : undefined);
+  return id !== undefined && id !== null ? String(id) : undefined;
+}
+
+// Normalizza prezzo
+function mealPrice(p) {
+  const val = Number(p?.prezzo ?? p?.price ?? p?.costo ?? 0);
+  return isNaN(val) ? 0 : val;
+}
+
 window.onload = async () => {
   const user = JSON.parse(localStorage.getItem("loggedUser"));
   if (!user || user.role !== "ristoratore") {
@@ -11,51 +46,66 @@ window.onload = async () => {
   const totIncasso = document.getElementById("tot-incasso");
   const piattiPopolari = document.getElementById("piatti-popolari");
 
+  // Set placeholder iniziali (facoltativo)
+  if (totOrdini) totOrdini.textContent = "—";
+  if (totPiatti) totPiatti.textContent = "—";
+  if (totIncasso) totIncasso.textContent = "—";
+
   try {
-    const [ordersRes, mealsRes] = await Promise.all([
-      fetch("http://localhost:3000/orders"),
-      fetch("http://localhost:3000/meals")
+    // 1) Carico ordini e menu (tutti i ristoranti)
+    const [allOrders, allMeals] = await Promise.all([
+      getJson("/orders"),
+      getJson("/meals"),
     ]);
 
-    const allOrders = await ordersRes.json();
-    const allMeals = await mealsRes.json();
+    // 2) Estraggo il menu del mio ristorante
+    const mineMenu = (allMeals.find(r => r.restaurantId === user.restaurantId)?.menu) || [];
+    const mineIds = new Set(mineMenu.map(mealId).filter(Boolean));
 
-    const mieiPiatti = (allMeals.find(r => r.restaurantId === user.restaurantId)?.menu) || [];
-    const mieiPiattiMap = new Map(mieiPiatti.map(p => [p.idmeals, p]));
-
+    // 3) Filtra ordini che contengono almeno un mio piatto
     const ordiniDelMioRistorante = allOrders.filter(o =>
-      o.meals.some(id => mieiPiattiMap.has(id))
+      Array.isArray(o.meals) && o.meals.some(id => mineIds.has(String(id)))
     );
 
-    const piattiVenduti = {};
+    // 4) Statistiche: conteggio piatti venduti + incasso
+    const piattiVenduti = Object.create(null);
     let totalePiatti = 0;
     let totaleIncasso = 0;
 
+    // Mappa veloce id->piatto
+    const mapById = new Map(mineMenu.map(p => [mealId(p), p]));
+
     ordiniDelMioRistorante.forEach(ordine => {
-      ordine.meals.forEach(id => {
-        if (mieiPiattiMap.has(id)) {
-          const piatto = mieiPiattiMap.get(id);
+      (ordine.meals || []).forEach(idRaw => {
+        const id = String(idRaw);
+        if (mapById.has(id)) {
+          const piatto = mapById.get(id);
           totalePiatti++;
-          totaleIncasso += piatto.prezzo;
-          piattiVenduti[piatto.nome] = (piattiVenduti[piatto.nome] || 0) + 1;
+          totaleIncasso += mealPrice(piatto);
+          const nome = piatto?.nome ?? piatto?.strMeal ?? piatto?.name ?? "Senza nome";
+          piattiVenduti[nome] = (piattiVenduti[nome] || 0) + 1;
         }
       });
     });
 
-    // Riempimento DOM
-    totOrdini.textContent = ordiniDelMioRistorante.length;
-    totPiatti.textContent = totalePiatti;
-    totIncasso.textContent = `€${totaleIncasso.toFixed(2)}`;
+    // 5) Riempimento DOM (mantiene le stesse funzionalità)
+    if (totOrdini) totOrdini.textContent = String(ordiniDelMioRistorante.length);
+    if (totPiatti) totPiatti.textContent = String(totalePiatti);
+    if (totIncasso) totIncasso.textContent = `€${totaleIncasso.toFixed(2)}`;
 
     const topPiatti = Object.entries(piattiVenduti)
       .sort((a, b) => b[1] - a[1])
       .map(([nome, count]) => `<li>${nome} - ${count}x</li>`);
 
-    piattiPopolari.innerHTML = topPiatti.join("") || "<li>Nessun ordine ricevuto.</li>";
-
+    if (piattiPopolari) {
+      piattiPopolari.innerHTML = topPiatti.join("") || "<li>Nessun ordine ricevuto.</li>";
+    }
   } catch (err) {
     console.error("Errore caricamento statistiche:", err);
-    totOrdini.textContent = totPiatti.textContent = totIncasso.textContent = "Errore";
-    piattiPopolari.innerHTML = "<li>⚠️ Errore nel caricamento.</li>";
+    if (totOrdini) totOrdini.textContent = "Errore";
+    if (totPiatti) totPiatti.textContent = "Errore";
+    if (totIncasso) totIncasso.textContent = "Errore";
+    if (piattiPopolari) piattiPopolari.innerHTML = "<li>⚠️ Errore nel caricamento.</li>";
+    alert("Errore caricamento statistiche: " + err.message);
   }
 };
