@@ -25,15 +25,15 @@ function normalizeMeal(p, restaurantIdFallback) {
   let prezzo = p.prezzo ?? p.price;
   prezzo = (prezzo !== undefined && prezzo !== null && !isNaN(Number(prezzo))) ? Number(prezzo) : undefined;
 
-  // immagine
-  const immagine = p.immagine ?? p.strMealThumb ?? p.image ?? "";
+  // immagine (aggiungo fallback a "foto")
+  const immagine = p.immagine ?? p.foto ?? p.strMealThumb ?? p.image ?? "";
 
   // restaurantId (se esiste)
   const restaurantId = p.restaurantId ?? restaurantIdFallback ?? null;
 
   return {
     raw: p,                // originale, se serve
-    idmeals: p.idmeals,    // mantengo per compatibilità col DELETE esistente
+    idmeals: p.idmeals,    // mantengo per compatibilità
     id,
     nome,
     tipologia,
@@ -169,9 +169,18 @@ function renderTable(piatti, isRistoratore) {
       ? `<img src="${piatto.immagine}" width="80" alt="Foto">`
       : "-";
 
-    // Mostro il bottone elimina solo se ristoratore e abbiamo un id "idmeals" (compatibile con la tua DELETE)
-    const canDelete = isRistoratore && (piatto.idmeals || piatto.id);
-    const eliminaHTML = canDelete ? `<button class="btn-delete" data-id="${piatto.idmeals ?? piatto.id}">Elimina</button>` : "";
+    // Bottone elimina solo se ristoratore e abbiamo un id (idmeals o _id)
+    const hasIdMeals = piatto.idmeals != null && piatto.idmeals !== "";
+    const hasOid = typeof piatto.id === "string" && piatto.id.length >= 12; // ObjectId-like
+    const canDelete = isRistoratore && (hasIdMeals || hasOid);
+
+    // salvo entrambi gli id nel dataset per tentare in ordine
+    const eliminaHTML = canDelete
+      ? `<button class="btn-delete"
+                  data-idmeals="${hasIdMeals ? String(piatto.idmeals) : ""}"
+                  data-oid="${hasOid ? String(piatto.id) : ""}"
+                  data-rid="${piatto.restaurantId || ""}">Elimina</button>`
+      : "";
 
     tr.innerHTML = `
       <td>${piatto.nome}</td>
@@ -185,7 +194,7 @@ function renderTable(piatti, isRistoratore) {
     // attach delete
     if (canDelete) {
       const btn = tr.querySelector(".btn-delete");
-      btn.addEventListener("click", () => rimuovi(btn.dataset.id));
+      btn.addEventListener("click", () => rimuovi(btn.dataset.idmeals, btn.dataset.oid, btn.dataset.rid));
     }
 
     tbody.appendChild(tr);
@@ -193,29 +202,58 @@ function renderTable(piatti, isRistoratore) {
 }
 
 // ---- Elimina piatto (ristoratore) ----
-async function rimuovi(id) {
+async function rimuovi(idMeals, oid, rid) {
   const user = JSON.parse(localStorage.getItem("loggedUser"));
   if (!user || !user.restaurantId) return;
 
   if (!confirm("Vuoi davvero eliminare questo piatto?")) return;
 
-  // Tenta prima la DELETE "annidata" /meals/:restaurantId/:id (come suggerito per il tuo backend file-based)
-  // Se fallisce, prova la DELETE "semplice" /meals/:id (eventuale backend Mongo)
+  const ids = [idMeals, oid].filter(Boolean); // proviamo entrambi se presenti
+
   const tryDelete = async (url) => {
     const res = await fetch(url, { method: "DELETE" });
-    if (!res.ok) throw new Error(`DELETE failed ${res.status}`);
+    if (!res.ok) {
+      const body = await res.text().catch(() => "");
+      throw new Error(`DELETE failed ${res.status} – ${body}`);
+    }
   };
 
-  try {
-    await tryDelete(`${API_BASE}/meals/${user.restaurantId}/${id}`);
-    window.location.reload();
-  } catch {
+  // Tenta in ordine tutte le combinazioni supportate dal backend
+  for (const id of ids) {
+    // 1) con restaurantId
     try {
-      await tryDelete(`${API_BASE}/meals/${id}`);
+      await tryDelete(`${API_BASE}/meals/${encodeURIComponent(rid || user.restaurantId)}/${encodeURIComponent(id)}`);
       window.location.reload();
+      return;
+    } catch (e1) {
+      // continuo
+    }
+    // 2) semplice
+    try {
+      await tryDelete(`${API_BASE}/meals/${encodeURIComponent(id)}`);
+      window.location.reload();
+      return;
+    } catch (e2) {
+      // continuo
+    }
+  }
+
+  // Se non c'erano id, provo un ultimo giro con solo id string passato prima (vecchio caso)
+  if (!ids.length) {
+    try {
+      await tryDelete(`${API_BASE}/meals/${encodeURIComponent(rid || user.restaurantId)}/${encodeURIComponent(idMeals || oid || "")}`);
+      window.location.reload();
+      return;
+    } catch {}
+    try {
+      await tryDelete(`${API_BASE}/meals/${encodeURIComponent(idMeals || oid || "")}`);
+      window.location.reload();
+      return;
     } catch (err2) {
       console.error("Errore nella rimozione del piatto:", err2);
       alert("Errore nella rimozione del piatto");
     }
+  } else {
+    alert("Errore nella rimozione del piatto");
   }
 }
