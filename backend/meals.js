@@ -1,61 +1,96 @@
 const express = require("express");
 const router = express.Router();
-const Meal = require("./models/meal"); // backend/models/meal.js (minuscolo)
+const Meal = require("./models/meal");
 const fs = require("fs");
 const path = require("path");
 const mongoose = require("mongoose");
 
-// ===== FILE di fallback: è in backend/meals1.json =====
+// ===== FILE di fallback: backend/meals1.json =====
 const DATA_FILE = path.join(__dirname, "meals1.json");
+
+function mongoReady() {
+  return mongoose.connection && mongoose.connection.readyState === 1; // 1=connected
+}
+
 function readFileMeals() {
   try {
-    if (!fs.existsSync(DATA_FILE)) return { data: [], path: null };
+    if (!fs.existsSync(DATA_FILE)) return { data: [], path: DATA_FILE };
     const json = JSON.parse(fs.readFileSync(DATA_FILE, "utf8"));
-    return { data: Array.isArray(json) ? json : [], path: DATA_FILE };
+    // Il file è atteso come: [{ restaurantId, menu:[...] }, ...]
+    const data = Array.isArray(json) ? json : [];
+    return { data, path: DATA_FILE };
   } catch (e) {
     console.error("readFileMeals error:", e.message, "FILE:", DATA_FILE);
     return { data: [], path: DATA_FILE, error: e.message };
   }
 }
-function mongoReady() {
-  return mongoose.connection && mongoose.connection.readyState === 1; // 1=connected
+
+// --- Helpers per il fallback file ---
+function flattenFileMeals(data) {
+  // Ritorna tutti i piatti di tutti i ristoranti aggiungendo il restaurantId
+  const out = [];
+  for (const r of data) {
+    const rid = r?.restaurantId ?? r?.id ?? r?.restaurant?.id ?? null;
+    const menu = Array.isArray(r?.menu) ? r.menu : [];
+    for (const m of menu) {
+      out.push({ ...m, restaurantId: m.restaurantId ?? rid ?? undefined });
+    }
+  }
+  return out;
 }
 
-// ---------- Helpers ----------
 function toNumber(v) {
   const n = Number(v);
   return Number.isFinite(n) ? n : undefined;
 }
+
 function extractIngredients(obj) {
+  // Supporta sia "ingredients" che "ingredienti" o TheMealDB (strIngredient1..20)
+  if (Array.isArray(obj.ingredients) && obj.ingredients.length) {
+    return obj.ingredients.filter(Boolean).map(String);
+  }
   if (Array.isArray(obj.ingredienti) && obj.ingredienti.length) {
     return obj.ingredienti.filter(Boolean).map(String);
   }
   const out = [];
   for (let i = 1; i <= 20; i++) {
     const k = `strIngredient${i}`;
-    if (obj[k] && String(obj[k]).trim()) {
-      out.push(String(obj[k]).trim());
-      delete obj[k];
-    }
+    if (obj[k] && String(obj[k]).trim()) out.push(String(obj[k]).trim());
   }
   return out;
 }
+
 async function nextMealId() {
   const last = await Meal.findOne().sort({ idmeals: -1 }).select("idmeals").lean();
   return (last?.idmeals || 0) + 1;
 }
+
 function sanitizePayload(payload, { isUpdate = false } = {}) {
   const p = { ...payload };
+
+  // Normalizzazioni campi
   if (!p.immagine && p.foto) p.immagine = p.foto;
+
+  // prezzo numerico
   if (p.prezzo !== undefined) {
     const n = toNumber(p.prezzo);
     if (n === undefined) throw new Error("prezzo non numerico");
     p.prezzo = n;
   }
+
+  // ingredienti: prendo da ingredients/ingredienti/strIngredient*
   const ing = extractIngredients(p);
-  if (ing.length) p.ingredienti = ing;
+  if (ing.length) {
+    p.ingredienti = ing;
+    // opzionale: mantieni anche "ingredients" per compat
+    p.ingredients = ing;
+    // pulizia eventuali chiavi TheMealDB
+    for (let i = 1; i <= 20; i++) delete p[`strIngredient${i}`];
+  }
+
   if (!isUpdate && !p.origine) p.origine = "personalizzato";
   if (isUpdate) delete p.idmeals;
+
   return p;
 }
 
@@ -66,7 +101,6 @@ function computeIngredients(rec) {
     return rec.ingredients.filter(Boolean).map(String);
   if (Array.isArray(rec.ingredienti) && rec.ingredienti.length)
     return rec.ingredienti.filter(Boolean).map(String);
-
   const out = [];
   for (let i = 1; i <= 20; i++) {
     const v = rec[`strIngredient${i}`];
@@ -94,15 +128,17 @@ router.get("/_debug-source", async (_req, res) => {
       if (count > 0) source = "mongo";
     } catch {}
   }
+
   if (source !== "mongo") {
     const { data, path } = readFileMeals();
-    count = data.length;
+    const all = flattenFileMeals(data);
+    count = all.length;
     source = path ? `file:${path}` : "none";
   }
   res.json({ source, count });
 });
 
-// Piatti comuni
+// Piatti comuni (lista piatta di tutti i piatti)
 router.get("/common-meals", async (_req, res) => {
   try {
     if (mongoReady()) {
@@ -111,10 +147,11 @@ router.get("/common-meals", async (_req, res) => {
     }
     const { data, path, error } = readFileMeals();
     if (error) return res.status(500).json({ error: "Impossibile leggere file di fallback", detail: error });
+    const all = flattenFileMeals(data);
     res.setHeader("X-Meals-Source", `file:${path}`);
-    res.json(data.map(withIngredients));
+    res.json(all.map(withIngredients));
   } catch (err) {
-    console.error("Errore common-meals:", err);
+    console.error("Errore /meals/common-meals:", err);
     res.status(500).json({ error: "Errore nella lettura dei piatti comuni" });
   }
 });
@@ -122,36 +159,57 @@ router.get("/common-meals", async (_req, res) => {
 // LISTA con filtri; usa Mongo se pronto e con risultati, altrimenti file
 router.get("/", async (req, res) => {
   const { restaurantId, tipologia, search } = req.query;
-  const q = {};
-  if (restaurantId) q.restaurantId = restaurantId;
-  if (tipologia) q.tipologia = tipologia;
-  if (search && String(search).trim()) {
-    const s = String(search).trim();
-    q.$or = [
-      { nome: { $regex: s, $options: "i" } },
-      { ingredienti: { $elemMatch: { $regex: s, $options: "i" } } },
-    ];
-  }
 
-  // 1) prova Mongo
+  // 1) Prova Mongo
   if (mongoReady()) {
     try {
+      const q = {};
+      if (restaurantId) q.restaurantId = restaurantId;
+      if (tipologia) q.tipologia = tipologia;
+      if (search && String(search).trim()) {
+        const s = String(search).trim();
+        q.$or = [
+          { nome: { $regex: s, $options: "i" } },
+          { ingredienti: { $elemMatch: { $regex: s, $options: "i" } } },
+          { ingredients: { $elemMatch: { $regex: s, $options: "i" } } },
+          { tipologia: { $regex: s, $options: "i" } },
+          { descrizione: { $regex: s, $options: "i" } },
+        ];
+      }
+
       const meals = await Meal.find(q).lean();
       if (meals.length) return res.json(meals.map(withIngredients));
     } catch (e) {
       console.warn("Mongo query error /meals:", e.message);
     }
   } else {
-    console.warn("Mongo non connesso: fallback file per /meals");
+    console.warn("Mongo non connesso: fallback file per GET /meals");
   }
 
-  // 2) fallback file
+  // 2) Fallback file: flatten + filtri
   const { data, path, error } = readFileMeals();
   if (error) {
     return res.status(500).json({ error: "Impossibile leggere i piatti di fallback", detail: error, file: path });
   }
+  const all = flattenFileMeals(data);
+
+  const filtered = all.filter((m) => {
+    const ridOk = !restaurantId || String(m.restaurantId || "").includes(String(restaurantId));
+    const tipoOk = !tipologia || String(m.tipologia || m.category || "").toLowerCase().includes(String(tipologia).toLowerCase());
+    if (!search || !String(search).trim()) return ridOk && tipoOk;
+    const s = String(search).toLowerCase().trim();
+    const hay = [
+      m.nome || m.name || "",
+      m.tipologia || m.category || "",
+      m.descrizione || m.description || "",
+      ...(Array.isArray(m.ingredients) ? m.ingredients : []),
+      ...(Array.isArray(m.ingredienti) ? m.ingredienti : []),
+    ].join(" ").toLowerCase();
+    return ridOk && tipoOk && hay.includes(s);
+  });
+
   res.setHeader("X-Meals-Source", `file:${path}`);
-  return res.json(data.map(withIngredients)); // meglio 200 [] che 500
+  return res.json(filtered.map(withIngredients)); // 200 [] invece di 500
 });
 
 // GET per id (prova Mongo, poi file)
@@ -164,7 +222,8 @@ router.get("/:id", async (req, res) => {
       if (meal) return res.json(withIngredients(meal));
     }
     const { data } = readFileMeals();
-    const found = data.find(x =>
+    const all = flattenFileMeals(data);
+    const found = all.find((x) =>
       String(x.idmeals) === id || String(x.id) === id || String(x.idMeal) === id
     );
     if (!found) return res.status(404).json({ error: "Piatto non trovato" });
@@ -187,7 +246,7 @@ router.post("/", async (req, res) => {
 
     payload.idmeals = await nextMealId();
     const created = await Meal.create(payload);
-    res.status(201).json(created);
+    res.status(201).json(withIngredients(created.toObject()));
   } catch (err) {
     if (err?.code === 11000 && err?.keyPattern?.idmeals) {
       return res.status(409).json({ error: "idmeals duplicato, riprova" });
@@ -211,7 +270,7 @@ router.put("/:id", async (req, res) => {
       { new: true, runValidators: true }
     );
     if (!updated) return res.status(404).json({ error: "Piatto non trovato" });
-    res.json(updated);
+    res.json(withIngredients(updated.toObject()));
   } catch (err) {
     console.error("Errore PUT /meals/:id:", err);
     res.status(500).json({ error: "Errore nella modifica del piatto", detail: err.message });
@@ -229,7 +288,7 @@ router.delete("/:restaurantId/:idmeals", async (req, res) => {
     const deleted = await Meal.findOneAndDelete({ restaurantId, idmeals: id });
     if (!deleted) return res.status(404).json({ error: "Piatto non trovato" });
 
-    res.json({ success: true, removed: deleted });
+    res.json({ success: true, removed: withIngredients(deleted.toObject()) });
   } catch (err) {
     console.error("Errore DELETE /meals/:restaurantId/:idmeals:", err);
     res.status(500).json({ error: "Errore nell'eliminazione del piatto", detail: err.message });
