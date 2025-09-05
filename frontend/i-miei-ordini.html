@@ -43,35 +43,34 @@
   </script>
 
   <script>
+  // --- Helpers UI/format ---
   function mealName(p){ return p?.nome ?? p?.strMeal ?? p?.name ?? "Piatto"; }
   function mealPrice(p){ const n=Number(p?.prezzo ?? p?.price ?? 0); return Number.isFinite(n)?n:0; }
   function mealId(p){ return p?.idmeals ?? p?.idMeal ?? p?.id ?? p?._id; }
   function orderId(o){ return o?.id ?? o?._id ?? ""; }
   function fmtMoney(n){ return `€${Number(n||0).toFixed(2)}`; }
   function fmtDate(iso){ try{ return new Date(iso).toLocaleString(); }catch{ return ""; } }
-
-  // ➕ Helper: riconosciamo i tipi di ritiro
   function isPickupType(delivery) {
     const d = String(delivery || "").toLowerCase();
     return d.includes("asporto") || d.includes("ritiro") || d.includes("pickup");
   }
-
-  // ➕ Helper: ordine già chiuso?
   function isClosedStatus(status) {
     const s = String(status || "").toLowerCase();
     return ["consegnato","annullato","ritirato"].includes(s);
   }
+  function statusBadgeClass(s){ return `badge ${String(s||"").toLowerCase()}`; }
 
-  function statusBadgeClass(s){
-    const k = String(s||"").toLowerCase();
-    return `badge ${k}`;
-  }
+  // 🚫 NON usare window.onload = ...  (viene sovrascritto). Usa gli event listener:
+  document.addEventListener("DOMContentLoaded", initOrdini);
+  window.addEventListener("load", () => console.debug("[Ordini] window.load"));
 
-  window.onload = async () => {
+  async function initOrdini() {
+    console.debug("[Ordini] init — API_BASE:", window.API_BASE);
+
     const user = JSON.parse(localStorage.getItem("loggedUser"));
     if (!user || user.role !== "cliente") {
       alert("Accesso riservato ai clienti");
-      window.location.href = "login.html";
+      location.href = "login.html";
       return;
     }
 
@@ -83,13 +82,16 @@
       const res = await fetch(`${API_BASE}/orders?${qs.toString()}`, {
         headers: { "Accept": "application/json" },
       });
+      console.debug("[Ordini] GET /orders", res.status);
       if (!res.ok) throw new Error(`Orders HTTP ${res.status}`);
       const ordini = await res.json();
+      console.debug("[Ordini] ordini ricevuti:", ordini?.length);
 
       // 2) MENU completo
       const menuRes = await fetch(`${API_BASE}/meals`, {
         headers: { "Accept": "application/json" },
       });
+      console.debug("[Ordini] GET /meals", menuRes.status);
       if (!menuRes.ok) throw new Error(`Meals HTTP ${menuRes.status}`);
       const ristoranti = await menuRes.json();
       const tuttiIPiatti = Array.isArray(ristoranti)
@@ -130,7 +132,6 @@
 
         const azioniDiv = div.querySelector(".azioni");
 
-        // Evita pulsanti se non ho un id valido
         if (!idOrd) {
           const warn = document.createElement("p");
           warn.className = "muted";
@@ -140,7 +141,7 @@
           return;
         }
 
-        // ✅ Caso consegna a domicilio: conferma "Consegnato"
+        // Domicilio → “Consegnato”
         if (!isClosedStatus(stato) && String(consegna).toLowerCase() === "domicilio") {
           const btn = document.createElement("button");
           btn.textContent = "Segnala come consegnato";
@@ -157,8 +158,9 @@
                 const detail = await putRes.json().catch(() => ({}));
                 throw new Error(`PUT HTTP ${putRes.status} ${detail?.error||""}`);
               }
-              div.querySelector(".stato").textContent = "consegnato";
-              div.querySelector(".stato").className = statusBadgeClass("consegnato")+" stato";
+              const badge = div.querySelector(".stato");
+              badge.textContent = "consegnato";
+              badge.className = statusBadgeClass("consegnato")+" stato";
               btn.disabled = true;
               btn.textContent = "Consegnato ✅";
             } catch (err) {
@@ -169,7 +171,7 @@
           azioniDiv.appendChild(btn);
         }
 
-        // ➕ Caso ritiro/asporto: conferma "Ritirato" (con fallback a "consegnato")
+        // Asporto/Ritiro → “Ritirato” (fallback a “Consegnato”)
         if (!isClosedStatus(stato) && isPickupType(consegna)) {
           const btnPick = document.createElement("button");
           btnPick.textContent = "Ho ritirato l'ordine";
@@ -178,7 +180,6 @@
             if (!ok) return;
 
             try {
-              // Primo tentativo: 'ritirato'
               let putRes = await fetch(`${API_BASE}/orders/${encodeURIComponent(idOrd)}`, {
                 method: "PUT",
                 headers: { "Content-Type": "application/json" },
@@ -186,7 +187,6 @@
               });
 
               if (!putRes.ok) {
-                // Fallback: 'consegnato'
                 putRes = await fetch(`${API_BASE}/orders/${encodeURIComponent(idOrd)}`, {
                   method: "PUT",
                   headers: { "Content-Type": "application/json" },
@@ -196,16 +196,17 @@
                   const detail = await putRes.json().catch(() => ({}));
                   throw new Error(`PUT fallback HTTP ${putRes.status} ${detail?.error||""}`);
                 }
-                div.querySelector(".stato").textContent = "consegnato";
-                div.querySelector(".stato").className = statusBadgeClass("consegnato")+" stato";
+                const badge = div.querySelector(".stato");
+                badge.textContent = "consegnato";
+                badge.className = statusBadgeClass("consegnato")+" stato";
                 btnPick.disabled = true;
                 btnPick.textContent = "Ritiro confermato ✅";
                 return;
               }
 
-              // Stato 'ritirato' supportato
-              div.querySelector(".stato").textContent = "ritirato";
-              div.querySelector(".stato").className = statusBadgeClass("ritirato")+" stato";
+              const badge = div.querySelector(".stato");
+              badge.textContent = "ritirato";
+              badge.className = statusBadgeClass("ritirato")+" stato";
               btnPick.disabled = true;
               btnPick.textContent = "Ritiro confermato ✅";
             } catch (err) {
@@ -226,7 +227,7 @@
         <p>Verifica che <code>${API_BASE}/orders</code> e <code>${API_BASE}/meals</code> siano raggiungibili.</p>
       `;
     }
-  };
+  }
   </script>
 </body>
 </html>
