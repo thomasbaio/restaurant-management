@@ -4,78 +4,111 @@
   <meta charset="UTF-8">
   <title>Conferma Ordine</title>
   <link rel="stylesheet" href="css/style.css">
+  <style>
+    .box { padding: 12px; border: 1px solid #ddd; border-radius: 10px; margin: 10px 0; }
+    .ok { color: green; }
+    .err { color: #b00020; }
+  </style>
 </head>
 <body>
   <h1>✅ Ordine Confermato</h1>
-
   <h2>Grazie per il tuo ordine!</h2>
-<div id="riepilogo"></div>
-<div id="tempo-attesa"></div>
 
-    <h3>🛒 Piatti ordinati:</h3>
-    <ul id="lista-piatti"></ul>
+  <div id="riepilogo" class="box"></div>
+  <div id="tempo-attesa" class="box"></div>
 
-    <p><a href="index.html">🔙 Torna alla Home</a></p>
-  </div>
+  <h3>🛒 Piatti ordinati:</h3>
+  <ul id="lista-piatti" class="box"></ul>
+
+  <p><a href="index.html">🔙 Torna alla Home</a></p>
 
 <script>
 window.onload = async () => {
+  // Base URL per API: locale vs deploy
+  const isLocal = location.hostname === "localhost" || location.hostname === "127.0.0.1";
+  const API_BASE = isLocal
+    ? "http://localhost:3000"
+    : "https://restaurant-management-wzhj.onrender.com";
+
   const ordine = JSON.parse(localStorage.getItem("lastConfirmedOrder"));
   const riepilogo = document.getElementById("riepilogo");
   const attesaDiv = document.getElementById("tempo-attesa");
   const listaPiatti = document.getElementById("lista-piatti");
 
   if (!ordine) {
-    riepilogo.innerHTML = "<p>Nessun ordine trovato.</p>";
+    riepilogo.innerHTML = "<p class='err'>Nessun ordine trovato.</p>";
     return;
   }
 
   // Riepilogo ordine
+  const pagamento = ordine.payment || "carta";
+  const consegna = ordine.delivery || "-";
+  const indirizzo = ordine.delivery === "domicilio" ? (ordine.address || "-") : null;
+
   riepilogo.innerHTML = `
-    <p><strong>Consegna:</strong> ${ordine.delivery}</p>
-    <p><strong>Metodo di pagamento:</strong> ${ordine.payment || "carta"}</p>
-    ${ordine.delivery === "domicilio" ? `<p><strong>Indirizzo:</strong> ${ordine.address || "-"}</p>` : ""}
+    <p><strong>Consegna:</strong> ${consegna}</p>
+    <p><strong>Metodo di pagamento:</strong> ${pagamento}</p>
+    ${indirizzo ? `<p><strong>Indirizzo:</strong> ${indirizzo}</p>` : ""}
   `;
+
+  // Helper: normalizza un piatto in modo robusto
+  function normalizeMeal(p) {
+    const id = p.idmeals ?? p.idMeal ?? p.id ?? p._id;
+    const nome = p.nome ?? p.strMeal ?? p.name ?? "Senza nome";
+    const prezzoNum = Number(p.prezzo ?? p.price ?? 0);
+    return { id, nome, prezzo: isNaN(prezzoNum) ? 0 : prezzoNum };
+  }
 
   // Carica piatti per visualizzare i nomi
   try {
-    const res = await fetch("http://localhost:3000/meals");
+    const res = await fetch(`${API_BASE}/meals`, { mode: "cors" });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const data = await res.json();
-    const tuttiIPiatti = data.flatMap(r => r.menu || []);
 
-    const piattiOrdinati = tuttiIPiatti.filter(p => ordine.meals.includes(p.idmeals));
+    // data può essere un array di ristoranti con menu
+    const tuttiIPiatti = Array.isArray(data)
+      ? data.flatMap(r => Array.isArray(r.menu) ? r.menu : [])
+      : [];
+
+    // Normalizza e filtra per gli id nell'ordine
+    const setIds = new Set((ordine.meals || []).map(String));
+    const piattiOrdinati = tuttiIPiatti
+      .map(normalizeMeal)
+      .filter(p => setIds.has(String(p.id)));
 
     if (piattiOrdinati.length === 0) {
       listaPiatti.innerHTML = "<li>Nessun piatto trovato.</li>";
     } else {
-      listaPiatti.innerHTML = piattiOrdinati.map(p =>
-        `<li><strong>${p.nome}</strong> - €${p.prezzo.toFixed(2)}</li>`
-      ).join("");
+      listaPiatti.innerHTML = piattiOrdinati
+        .map(p => `<li><strong>${p.nome}</strong> - €${p.prezzo.toFixed(2)}</li>`)
+        .join("");
     }
   } catch (err) {
     console.error("Errore nel caricamento dei piatti:", err);
-    listaPiatti.innerHTML = "<li>Errore nel caricamento dei piatti.</li>";
+    listaPiatti.innerHTML = "<li class='err'>Errore nel caricamento dei piatti.</li>";
   }
 
-  // Timer di attesa se ritiro al ristorante
+  // Timer di attesa se ritiro al ristorante (asporto)
   if (ordine.delivery === "asporto") {
     try {
-      const res = await fetch("http://localhost:3000/orders");
+      const res = await fetch(`${API_BASE}/orders`, { mode: "cors" });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const tuttiGliOrdini = await res.json();
 
-      const ordiniInAttesa = tuttiGliOrdini.filter(o =>
-        o.delivery === "asporto" &&
-        (o.status === "ordinato" || o.status === "in preparazione")
+      // Stati supportati: "ordinato", "preparazione"
+      const ordiniInAttesa = (Array.isArray(tuttiGliOrdini) ? tuttiGliOrdini : []).filter(o =>
+        o.delivery === "asporto" && (o.status === "ordinato" || o.status === "preparazione")
       );
 
+      // Stima: 5 minuti per ordine in coda
       const minutiAttesa = ordiniInAttesa.length * 5;
-      let secondiRimanenti = minutiAttesa * 60;
+      let secondiRimanenti = Math.max(0, minutiAttesa * 60);
 
-      const formattaTempo = s => {
+      const formattaTempo = (s) => {
         const m = Math.floor(s / 60);
         const sec = s % 60;
-        return `${m}m ${sec}s`;
-      };
+        return `${m}m ${sec.toString().padStart(2, "0")}s`;
+        };
 
       const aggiornaTimer = () => {
         if (secondiRimanenti > 0) {
@@ -85,23 +118,21 @@ window.onload = async () => {
           secondiRimanenti--;
         } else {
           clearInterval(timer);
-          attesaDiv.innerHTML = `<p style="color:green;"><strong>✅ Il tuo ordine dovrebbe essere pronto!</strong></p>`;
+          attesaDiv.innerHTML = `<p class="ok"><strong>✅ Il tuo ordine dovrebbe essere pronto!</strong></p>`;
         }
       };
 
-      aggiornaTimer(); // avvio immediato
+      aggiornaTimer();                 // avvio immediato
       const timer = setInterval(aggiornaTimer, 1000); // ogni secondo
-
     } catch (err) {
       console.error("Errore nel calcolo tempo attesa:", err);
-      attesaDiv.innerHTML = "<p>Errore nel calcolo del tempo di attesa.</p>";
+      attesaDiv.innerHTML = "<p class='err'>Errore nel calcolo del tempo di attesa.</p>";
     }
+  } else {
+    // Se non è asporto, nascondo box tempo
+    attesaDiv.style.display = "none";
   }
 };
 </script>
-
-
-
-  </script>
 </body>
 </html>
