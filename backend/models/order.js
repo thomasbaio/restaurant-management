@@ -1,23 +1,36 @@
+// models/order.js
 const mongoose = require("mongoose");
 
 const OrderItemSchema = new mongoose.Schema(
   {
-    mealId: { type: String, required: true },  // id piatto (o _id se da Mongo)
-    name: { type: String, required: true },
-    qty: { type: Number, required: true, min: 1 },
-    price: { type: Number, required: true },   // prezzo unitario al momento dell'ordine
+    mealId: { type: String, required: true },    // id piatto (string o _id)
+    name:   { type: String },                    // snapshot nome (opzionale ma consigliato)
+    qty:    { type: Number, required: true, min: 1, default: 1 },
+    price:  { type: Number },                    // prezzo unitario snapshot (opzionale)
   },
   { _id: false }
 );
 
 const OrderSchema = new mongoose.Schema(
   {
-    userId: { type: String, required: true },        // cliente che ordina
-    restaurantId: { type: String, required: true },  // es: "r_o"
-    items: { type: [OrderItemSchema], required: true },
-    total: { type: Number, required: true },
+    // ---- Compatibilità con vecchie API / frontend ----
+    id: { type: Number, index: true },           // ID incrementale (settato dalla rotta)
+    username: { type: String, index: true },     // username del cliente (compat)
 
-    // stato ordine: ordinato → preparazione → consegna → consegnato
+    // ---- Campi "nuovi" che già usavi ----
+    userId: { type: String, index: true },       // id utente (se lo usi)
+    restaurantId: { type: String, index: true }, // es: "r_o"
+
+    // Snapshot degli articoli acquistati
+    items: { type: [OrderItemSchema], default: [], required: true },
+
+    // Lista semplice di id (compat per vecchio frontend)
+    meals: { type: [String], default: [] },
+
+    // Totale ordine (ricalcolato in pre-save)
+    total: { type: Number, default: 0, min: 0 },
+
+    // stato ordine
     status: {
       type: String,
       enum: ["ordinato", "preparazione", "consegna", "consegnato", "annullato"],
@@ -25,14 +38,16 @@ const OrderSchema = new mongoose.Schema(
       index: true,
     },
 
-    // consegna o ritiro
-    fulfillment: {
-      type: String,
-      enum: ["ritiro", "consegna"],
-      default: "ritiro",
-    },
+    // ---- Fulfillment/Delivery (con mapping) ----
+    // "fulfillment" è il tuo campo; "delivery" è quello che il frontend legge.
+    // ritiro  <-> asporto
+    // consegna <-> domicilio
+    fulfillment: { type: String, enum: ["ritiro", "consegna"], default: "ritiro" },
 
-    // indirizzo consegna (se fulfillment === "consegna")
+    delivery: { type: String, enum: ["asporto", "domicilio"], default: "asporto" },
+
+    // Indirizzo: tieni entrambi per compatibilità
+    address: { type: String }, // compat frontend
     deliveryAddress: {
       via: String,
       citta: String,
@@ -40,7 +55,7 @@ const OrderSchema = new mongoose.Schema(
       note: String,
     },
 
-    // pagamento (semplificato)
+    // pagamento
     payment: {
       method: { type: String, enum: ["carta", "contanti", "online"], default: "carta" },
       paid: { type: Boolean, default: false },
@@ -49,5 +64,60 @@ const OrderSchema = new mongoose.Schema(
   },
   { timestamps: true }
 );
+
+// ---- Normalizzazioni automatiche ----
+
+// Mappa fulfillment -> delivery e viceversa
+function syncFulfillmentDelivery(doc) {
+  // Se ho fulfillment ma non delivery, genero delivery
+  if (doc.isModified("fulfillment") || doc.delivery == null) {
+    if (doc.fulfillment === "ritiro") doc.delivery = "asporto";
+    else if (doc.fulfillment === "consegna") doc.delivery = "domicilio";
+  }
+  // Se ho delivery ma non fulfillment, genero fulfillment
+  if (doc.isModified("delivery") || doc.fulfillment == null) {
+    if (doc.delivery === "asporto") doc.fulfillment = "ritiro";
+    else if (doc.delivery === "domicilio") doc.fulfillment = "consegna";
+  }
+}
+
+// Calcola totale e lista meals dagli items
+function recomputeTotals(doc) {
+  let tot = 0;
+  const ids = [];
+  for (const it of doc.items || []) {
+    const qty = Number(it.qty || 1);
+    const price = Number(it.price || 0);
+    if (it.mealId) ids.push(String(it.mealId));
+    tot += qty * (isNaN(price) ? 0 : price);
+  }
+  doc.total = Number(tot.toFixed(2));
+  if (!Array.isArray(doc.meals) || doc.meals.length !== ids.length) {
+    doc.meals = ids;
+  }
+}
+
+OrderSchema.pre("validate", function(next) {
+  syncFulfillmentDelivery(this);
+  next();
+});
+
+OrderSchema.pre("save", function(next) {
+  syncFulfillmentDelivery(this);
+  recomputeTotals(this);
+
+  // Se address vuoto ma ho deliveryAddress, creo una stringa comoda (compat)
+  if (!this.address && this.deliveryAddress && (this.delivery === "domicilio")) {
+    const a = this.deliveryAddress;
+    const parts = [a?.via, a?.citta, a?.cap].filter(Boolean);
+    if (parts.length) this.address = parts.join(", ");
+  }
+
+  next();
+});
+
+// Indici utili
+OrderSchema.index({ createdAt: -1 });
+OrderSchema.index({ id: -1 }); // per nextOrderId e fetch per id
 
 module.exports = mongoose.model("Order", OrderSchema);

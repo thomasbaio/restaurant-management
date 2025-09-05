@@ -1,21 +1,22 @@
-// orders.js — Mongoose + inferenza userId/restaurantId
+// orders.js — Mongoose + normalizzazione items + snapshot name/price
 const express = require("express");
 const fs = require("fs");
 const path = require("path");
 const router = express.Router();
 const Order = require("./models/order");
 
-// === Costanti file locali (fallback) ===
+// === File locali (fallback)
 const USERS_FILE = path.join(__dirname, "users.json");
 const MEALS_FILE = path.join(__dirname, "meals1.json");
 
-// === Stati e transizioni ===
-const VALID_STATES = ["ordinato", "preparazione", "consegna", "consegnato"];
+// === Stati e transizioni
+const VALID_STATES = ["ordinato", "preparazione", "consegna", "consegnato", "annullato"];
 const NEXT_ALLOWED = {
-  ordinato: ["preparazione"],
-  preparazione: ["consegna"],
+  ordinato: ["preparazione", "annullato"],
+  preparazione: ["consegna", "annullato"],
   consegna: ["consegnato"],
-  consegnato: []
+  consegnato: [],
+  annullato: []
 };
 
 // ---------- Helpers ----------
@@ -36,107 +37,186 @@ function safeReadJSON(file) {
 function inferUserIdFromUsername(username) {
   const data = safeReadJSON(USERS_FILE);
   if (!data || !Array.isArray(data)) return String(username || "");
-  const u = data.find(
-    x => (x.username || "").toLowerCase() === String(username || "").toLowerCase()
-  );
-  // restituisci id se presente, altrimenti username come stringa
+  const u = data.find(x => (x.username || "").toLowerCase() === String(username || "").toLowerCase());
   return (u && (u._id || u.id)) ? String(u._id || u.id) : String(username || "");
 }
 
-function inferRestaurantIdFromMeals(mealIds) {
+function flattenFileMeals() {
   const data = safeReadJSON(MEALS_FILE);
-  if (!data || !Array.isArray(data)) return "";
-  // cerca il ristorante che contiene almeno uno degli id in menu[].idmeals
-  for (const r of data) {
-    const ids = (r.menu || []).map(m => Number(m.idmeals)).filter(Number.isFinite);
-    if (mealIds.some(id => ids.includes(id))) {
-      return String(r.restaurantId || r.id || "");
+  if (!data || !Array.isArray(data)) return [];
+  // ritorna array piatti con riferimento al ristorante
+  return data.flatMap(r =>
+    (r.menu || []).map(p => ({
+      restaurantId: String(r.restaurantId || r.id || ""),
+      id: String(p.idmeals ?? p.id ?? p._id ?? ""),
+      nome: p.nome ?? p.strMeal ?? p.name ?? "Senza nome",
+      prezzo: Number(p.prezzo ?? p.price ?? 0) || 0
+    }))
+  );
+}
+
+function inferRestaurantIdFromMeals(mealIds) {
+  const meals = flattenFileMeals();
+  const set = new Set(mealIds.map(String));
+  const hit = meals.find(m => set.has(m.id));
+  return hit ? hit.restaurantId : "";
+}
+
+const toStr = v => (v == null ? null : String(v).trim());
+
+function extractItemsFromAny(body) {
+  // supporta body.items / body.cart / body.cartItems / body.meals
+  const buckets = []
+    .concat(Array.isArray(body.items) ? body.items : [])
+    .concat(Array.isArray(body.cart) ? body.cart : [])
+    .concat(Array.isArray(body.cartItems) ? body.cartItems : [])
+    .concat(Array.isArray(body.meals) ? body.meals : []);
+
+  return buckets
+    .map(x => {
+      if (typeof x === "string" || typeof x === "number") {
+        return { mealId: toStr(x), qty: 1 };
+      }
+      if (x && typeof x === "object") {
+        const mealId = toStr(x.mealId ?? x.idmeals ?? x.idMeal ?? x.id ?? x._id);
+        const qty = Number(x.qty ?? x.quantity ?? 1) || 1;
+        const name = x.nome ?? x.strMeal ?? x.name ?? x.title;
+        const priceRaw = x.prezzo ?? x.price;
+        const price = priceRaw != null ? Number(priceRaw) : undefined;
+        return mealId ? { mealId, qty, name, price } : null;
+      }
+      return null;
+    })
+    .filter(Boolean);
+}
+
+function collapseItems(items) {
+  const map = new Map();
+  for (const it of items) {
+    const key = it.mealId;
+    if (!map.has(key)) map.set(key, { mealId: key, qty: 0, name: undefined, price: undefined });
+    const cur = map.get(key);
+    cur.qty += it.qty || 1;
+    if (!cur.name && it.name) cur.name = it.name;
+    if (cur.price == null && it.price != null && !Number.isNaN(Number(it.price))) {
+      cur.price = Number(it.price);
     }
   }
-  return "";
+  return [...map.values()];
+}
+
+function enrichItemsFromFile(items) {
+  const catalog = flattenFileMeals();
+  const byId = new Map(catalog.map(m => [m.id, m]));
+  return items.map(it => {
+    const m = byId.get(it.mealId);
+    return {
+      ...it,
+      name: it.name ?? m?.nome ?? "Senza nome",
+      price: it.price != null ? Number(it.price) : (m ? Number(m.prezzo) : 0)
+    };
+  });
+}
+
+function computeTotal(items) {
+  let tot = 0;
+  for (const it of items) {
+    const q = Number(it.qty || 1);
+    const pr = Number(it.price || 0);
+    tot += q * (Number.isFinite(pr) ? pr : 0);
+  }
+  return Number(tot.toFixed(2));
+}
+
+function normalizeDelivery(obj) {
+  // accetta delivery (asporto|domicilio) o fulfillment (ritiro|consegna)
+  let delivery = obj.delivery;
+  let fulfillment = obj.fulfillment;
+
+  if (!delivery && fulfillment) {
+    delivery = fulfillment === "ritiro" ? "asporto" : (fulfillment === "consegna" ? "domicilio" : undefined);
+  }
+  if (!fulfillment && delivery) {
+    fulfillment = delivery === "asporto" ? "ritiro" : (delivery === "domicilio" ? "consegna" : undefined);
+  }
+  return { delivery, fulfillment };
 }
 
 function normalizeBody(b) {
   const body = { ...(b || {}) };
 
   body.username = typeof body.username === "string" ? body.username.trim() : "";
+  body.payment = body.payment || "carta";
+  body.status = body.status && VALID_STATES.includes(body.status) ? body.status : "ordinato";
 
-  // meals -> array numeri
-  body.meals = Array.isArray(body.meals) ? body.meals : [];
-  body.meals = body.meals
-    .map(x => (typeof x === "string" ? x.trim() : x))
-    .map(Number)
-    .filter(Number.isFinite);
-
-  body.total = Number(body.total);
-  if (!Number.isFinite(body.total)) body.total = NaN;
-
-  body.payment = body.payment || "carta_credito";
-  body.status = body.status || "ordinato";
-
-  // opzionali
-  if (typeof body.note === "string") body.note = body.note.trim();
   if (typeof body.address === "string") body.address = body.address.trim();
-  if (typeof body.restaurantId === "string") body.restaurantId = body.restaurantId.trim();
   if (typeof body.userId === "string") body.userId = body.userId.trim();
+  if (typeof body.restaurantId === "string") body.restaurantId = body.restaurantId.trim();
+
+  // delivery/fulfillment mapping
+  const { delivery, fulfillment } = normalizeDelivery(body);
+  body.delivery = delivery;
+  body.fulfillment = fulfillment;
 
   return body;
 }
 
-function validateBody(body) {
+function validateForCreate(payload) {
   const errors = [];
-  if (!body.username) errors.push("username mancante");
-  if (!Array.isArray(body.meals) || body.meals.length === 0)
-    errors.push("meals deve essere un array non vuoto di id numerici");
-  if (!Number.isFinite(body.total)) errors.push("total mancante o non numerico");
-  if (!VALID_STATES.includes(body.status)) errors.push(`status non valido (${body.status})`);
-  if (!body.userId) errors.push("userId mancante");
-  if (!body.restaurantId) errors.push("restaurantId mancante");
+  if (!payload.username) errors.push("username mancante");
+  if (!payload.items || !payload.items.length) errors.push("nessun piatto nell'ordine");
+  if (!payload.userId) errors.push("userId mancante");
+  if (!payload.restaurantId) errors.push("restaurantId mancante");
   return errors;
 }
 
 // ---------- ROUTES ----------
 
-// POST /orders — crea ordine
+// POST /orders — crea ordine completo con snapshot items
 router.post("/", async (req, res) => {
   try {
-    const data = normalizeBody(req.body);
+    const raw = normalizeBody(req.body);
 
-    // Se non arrivano, prova ad inferirli
-    if (!data.userId) {
-      data.userId = inferUserIdFromUsername(data.username);
-    }
-    if (!data.restaurantId && Array.isArray(data.meals) && data.meals.length) {
-      data.restaurantId = inferRestaurantIdFromMeals(data.meals);
-    }
+    // 1) Estrai items da qualsiasi campo, collassa e arricchisci da file
+    let items = extractItemsFromAny(raw);
+    items = collapseItems(items);
+    items = enrichItemsFromFile(items);
 
-    const errors = validateBody(data);
+    // 2) Prepara altri campi
+    const meals = items.map(it => String(it.mealId));
+    if (!raw.userId) raw.userId = inferUserIdFromUsername(raw.username);
+    if (!raw.restaurantId) raw.restaurantId = inferRestaurantIdFromMeals(meals);
+
+    const payload = {
+      id: await nextOrderId(),
+      username: raw.username,
+      userId: raw.userId,
+      restaurantId: raw.restaurantId,
+      items,
+      meals,
+      // total calcolato lato server
+      total: computeTotal(items),
+      // stato + pagamento
+      status: raw.status,
+      payment: typeof raw.payment === "object" ? raw.payment : { method: String(raw.payment || "carta") },
+      // delivery/fulfillment + address
+      delivery: raw.delivery || "asporto",
+      fulfillment: raw.fulfillment || (raw.delivery === "domicilio" ? "consegna" : "ritiro"),
+      address: raw.address,
+      // opzionali
+      note: raw.note
+    };
+
+    const errors = validateForCreate(payload);
     if (errors.length) {
       return res.status(400).json({ error: "Payload non valido", details: errors });
     }
 
-    const id = await nextOrderId();
-
-    const created = await Order.create({
-      id,
-      username: data.username,
-      userId: data.userId,
-      restaurantId: data.restaurantId,
-      meals: data.meals,
-      total: data.total,
-      payment: data.payment,
-      status: data.status,
-      note: data.note,
-      address: data.address,
-      timestamp: new Date().toISOString()
-    });
-
+    const created = await Order.create(payload);
     return res.status(201).json(created);
   } catch (err) {
     console.error("Errore POST /orders:", err);
-    return res
-      .status(500)
-      .json({ error: "Errore creazione ordine", detail: String(err?.message || err) });
+    return res.status(500).json({ error: "Errore creazione ordine", detail: String(err?.message || err) });
   }
 });
 
@@ -149,7 +229,7 @@ router.get("/", async (req, res) => {
     if (restaurantId) q.restaurantId = restaurantId;
     if (status) q.status = status;
 
-    const orders = await Order.find(q).sort({ id: -1 }).lean();
+    const orders = await Order.find(q).sort({ createdAt: -1, id: -1 }).lean();
     return res.json(orders);
   } catch (err) {
     console.error("Errore GET /orders:", err);
@@ -157,7 +237,7 @@ router.get("/", async (req, res) => {
   }
 });
 
-// PUT /orders/:id — aggiorna stato
+// PUT /orders/:id — aggiorna stato con transizioni controllate
 router.put("/:id", async (req, res) => {
   try {
     const id = Number(req.params.id);
@@ -188,3 +268,4 @@ router.put("/:id", async (req, res) => {
 });
 
 module.exports = router;
+
