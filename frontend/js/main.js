@@ -138,6 +138,23 @@ function applyImageFallbackFromMap(meal, imgMap) {
   return meal;
 }
 
+// ====== Nuovo: utilità cliente "Aggiungi al carrello" (se non già definita) ======
+if (typeof window.addToCart !== "function") {
+  window.addToCart = function addToCart(meal) {
+    const key = "cart";
+    const cart = JSON.parse(localStorage.getItem(key) || "[]");
+    cart.push({
+      id: meal.id,
+      nome: meal.nome,
+      prezzo: meal.prezzo,
+      restaurantId: meal.restaurantId,
+      qty: 1
+    });
+    localStorage.setItem(key, JSON.stringify(cart));
+    alert(`🧺 Aggiunto al carrello: ${meal.nome}`);
+  };
+}
+
 // --------------------------------------------------------------------
 
 window.onload = async () => {
@@ -241,7 +258,7 @@ window.onload = async () => {
     // salvo per filtro ingredienti
     window.__tuttiIPiatti = piattiDaMostrare;
 
-    // render tabella
+    // render tabella classica
     renderTable(piattiDaMostrare, isRistoratore);
 
     // --- Offerte speciali SOLO per cliente ---
@@ -272,7 +289,7 @@ window.onload = async () => {
       }
     }
 
-    // Filtro ingredienti live: lo lascio attivo per tutti (se vuoi solo clienti, dimmelo)
+    // Filtro ingredienti live
     const filtroInput = document.getElementById("filtro-ingrediente");
     if (filtroInput) {
       filtroInput.addEventListener("input", () => {
@@ -281,8 +298,13 @@ window.onload = async () => {
           (p.ingredients || []).some(i => String(i).toLowerCase().includes(testo))
         );
         renderTable(filtrati, isRistoratore);
+        // aggiorna anche la vista a sezioni se presente
+        renderMenusGroupedSection(filtrati, allData);
       });
     }
+
+    // ====== Nuovo: render “menù per ristorante” se la pagina ha il contenitore ======
+    renderMenusGroupedSection(piattiDaMostrare, allData);
 
   } catch (err) {
     console.error("Errore nel caricamento del menu:", err);
@@ -400,4 +422,132 @@ async function rimuovi(idMeals, oid, rid) {
   }
 
   alert("Errore nella rimozione del piatto");
+}
+
+// ====== NUOVO: rendering “menù per ristorante” (sezioni con nome proprietario) ======
+function renderMenusGroupedSection(piatti, rawAllData) {
+  const root = document.getElementById("menu-per-ristorante");
+  if (!root) return; // la pagina non vuole la vista a sezioni
+
+  // Costruisco mappa restaurantId -> { name, items[] }
+  const groups = new Map();
+
+  // Provo a ricavare nomi ristorante da /meals (se annidato)
+  if (Array.isArray(rawAllData) && rawAllData.some(r => Array.isArray(r.menu))) {
+    for (const r of rawAllData) {
+      const rid = String(r.restaurantId ?? r.id ?? r._id ?? "");
+      const name = r.nome ?? r.name ?? r.restaurantName ?? (rid ? `Ristorante ${rid}` : "Ristorante");
+      if (!groups.has(rid)) groups.set(rid, { name, items: [] });
+    }
+  }
+
+  // Fallback: arricchisco coi piatti e riempio i gruppi
+  for (const p of piatti || []) {
+    const rid = String(p.restaurantId ?? "");
+    if (!groups.has(rid)) {
+      groups.set(rid, { name: rid ? `Ristorante ${rid}` : "Ristorante", items: [] });
+    }
+    groups.get(rid).items.push(p);
+  }
+
+  // Ultimo step: se ho il div, provo ad aggiornare i nomi con /users/restaurants
+  // (asincrono ma qui lo faccio sincrono: aggiornerò solo se necessario)
+  const needsLookup = [...groups.values()].some(g => !g.name || /^Ristorante\s/.test(g.name));
+  const enrichNames = async () => {
+    if (!needsLookup) return;
+    try {
+      const ures = await fetch(`${API_BASE}/users/restaurants`, { mode: "cors" });
+      if (!ures.ok) return;
+      const rUsers = await ures.json();
+      const byId = new Map(
+        (Array.isArray(rUsers) ? rUsers : []).map(u => [String(u.restaurantId ?? u.id ?? u._id ?? ""), u])
+      );
+      for (const [rid, g] of groups.entries()) {
+        const u = byId.get(rid);
+        if (u) g.name = u.nome ?? u.name ?? g.name;
+      }
+    } catch { /* ignore */ }
+  };
+
+  // Render iniziale (con nomi provvisori)
+  const draw = () => {
+    root.innerHTML = "";
+    const entries = [...groups.entries()].filter(([, g]) => (g.items || []).length > 0);
+
+    if (!entries.length) {
+      root.innerHTML = `<p>Nessun ristorante disponibile.</p>`;
+      return;
+    }
+
+    // Ordina alfabeticamente per nome ristorante
+    entries.sort((a, b) => a[1].name.localeCompare(b[1].name));
+
+    for (const [, g] of entries) {
+      const section = document.createElement("section");
+      section.className = "ristorante-section";
+
+      const header = document.createElement("h2");
+      header.className = "ristorante-title";
+      header.textContent = `🍽️ ${g.name}`;
+      section.appendChild(header);
+
+      const grid = document.createElement("div");
+      grid.className = "menu-grid";
+
+      for (const meal of g.items) {
+        const card = document.createElement("article");
+        card.className = "piatto-card";
+
+        const img = document.createElement("img");
+        img.className = "piatto-img";
+        img.alt = meal.nome;
+        img.loading = "lazy";
+        img.src = pickImageURL(meal);
+        card.appendChild(img);
+
+        const h3 = document.createElement("h3");
+        h3.className = "piatto-title";
+        h3.textContent = meal.nome;
+        card.appendChild(h3);
+
+        if (meal.tipologia) {
+          const badge = document.createElement("div");
+          badge.className = "badge";
+          badge.textContent = meal.tipologia;
+          card.appendChild(badge);
+        }
+
+        if (Array.isArray(meal.ingredients) && meal.ingredients.length) {
+          const ing = document.createElement("p");
+          ing.className = "piatto-ingredients";
+          ing.textContent = "Ingredienti: " + meal.ingredients.join(", ");
+          card.appendChild(ing);
+        }
+
+        const price = document.createElement("div");
+        price.className = "piatto-price";
+        price.textContent = `€ ${formatPrice(meal.prezzo)}`;
+        card.appendChild(price);
+
+        // se l'utente è cliente, mostra "Aggiungi al carrello"
+        const user = JSON.parse(localStorage.getItem("loggedUser") || "null");
+        if (user?.role === "cliente") {
+          const btn = document.createElement("button");
+          btn.className = "btn-add";
+          btn.textContent = "Aggiungi al carrello";
+          btn.addEventListener("click", () => addToCart(meal));
+          card.appendChild(btn);
+        }
+
+        grid.appendChild(card);
+      }
+
+      section.appendChild(grid);
+      root.appendChild(section);
+    }
+  };
+
+  draw();
+  // arricchisco i nomi e ridisegno se necessario
+  enrichNames().then(draw).catch(() => {});
 }

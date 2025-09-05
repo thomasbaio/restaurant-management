@@ -55,6 +55,14 @@
     <input type="text" id="filtro-ingrediente" placeholder="Es. pomodoro, mozzarella...">
   </div>
 
+  <!-- ✅ NUOVO: Menù raggruppati per ristorante -->
+  <section style="margin:24px 0;">
+    <h2 style="margin:0 0 10px;">🏷️ Menù per Ristorante (raggruppato)</h2>
+    <!-- Il main.js popolerà questo contenitore con sezioni "🍽️ Nome Ristorante" -->
+    <div id="menu-per-ristorante"></div>
+  </section>
+
+  <!-- Tabella tradizionale (rimane, per compatibilità) -->
   <div id="menu-container">
     <table border="1">
       <thead>
@@ -105,7 +113,7 @@
         }
 
         linkContainer.innerHTML = `
-          ${user.role === "ristoratore" ? '<a href="add.html">➕ Aggiungi Piatto</a> | ' : ''}
+          ${user.role === "ristoratore" ? '<a href="add.html" id="link-add">➕ Aggiungi Piatto</a> | ' : ''}
           ${user.role === "cliente" ? '<a href="i-miei-ordini.html">📦 I miei ordini</a> | ' : ''}
           <a href="edituser.html">✏️ Modifica Profilo</a> |
           <a href="login.html" onclick="localStorage.removeItem('loggedUser')">🚪 Logout</a>
@@ -120,4 +128,3 @@
   </script>
 </body>
 </html>
-
