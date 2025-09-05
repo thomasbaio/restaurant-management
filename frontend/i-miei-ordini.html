@@ -13,11 +13,13 @@
     .badge.annullato{ background:#ffd6d6; }
     .azioni button{ margin-right:8px; }
     .muted { color:#666; }
+    .success { background:#e8ffe8; border:1px solid #b6e3b6; padding:8px 10px; border-radius:8px; }
   </style>
 </head>
 <body>
   <h1>📦 I miei ordini</h1>
 
+  <div id="noti"></div>
   <div id="ordini-container">
     <p>Caricamento in corso...</p>
   </div>
@@ -25,7 +27,6 @@
   <p><a href="index.html">⬅️ Torna alla home</a></p>
   <p><a href="storico_clienti.html">vecchi ordini</a></p>
 
-  <!-- Se lo usi altrove, lascialo pure -->
   <script src="js/main.js" defer></script>
 
   <!-- Fallback API_BASE -->
@@ -39,7 +40,7 @@
   </script>
 
   <script>
-  // Helpers
+  // ---- Helpers ----
   const mealName  = p => p?.nome ?? p?.strMeal ?? p?.name ?? "Piatto";
   const mealPrice = p => Number(p?.prezzo ?? p?.price ?? 0) || 0;
   const mealId    = p => p?.idmeals ?? p?.idMeal ?? p?.id ?? p?._id;
@@ -47,7 +48,7 @@
   const fmtMoney  = n => `€${Number(n||0).toFixed(2)}`;
   const fmtDate   = iso => { try { return new Date(iso).toLocaleString(); } catch { return ""; } };
 
-  // Solo ritiro: stati finali
+  // stati chiusi (solo ritiro)
   const isClosedStatus = s => ["ritirato","annullato"].includes(String(s||"").toLowerCase());
   const badgeClass = s => `badge ${String(s||"").toLowerCase()}`;
 
@@ -62,37 +63,57 @@
     }
 
     const container = document.getElementById("ordini-container");
+    const noti = document.getElementById("noti");
 
     try {
       // 1) ordini del cliente
-      const qs = new URLSearchParams({ username: user.username });
-      const res = await fetch(`${API_BASE}/orders?${qs.toString()}`, { headers: { "Accept": "application/json" }});
+      const res = await fetch(`${API_BASE}/orders?` + new URLSearchParams({ username: user.username }), {
+        headers: { "Accept": "application/json" }
+      });
       if (!res.ok) throw new Error(`Orders HTTP ${res.status}`);
       const ordini = await res.json();
 
-      // 2) catalogo piatti (per nomi/prezzi)
+      // 2) catalogo piatti
       const menuRes = await fetch(`${API_BASE}/meals`, { headers: { "Accept": "application/json" }});
       if (!menuRes.ok) throw new Error(`Meals HTTP ${menuRes.status}`);
       const ristoranti = await menuRes.json();
-      const tuttiIPiatti = Array.isArray(ristoranti) ? ristoranti.flatMap(r => Array.isArray(r?.menu) ? r.menu : []) : [];
+      const tuttiIPiatti = Array.isArray(ristoranti)
+        ? ristoranti.flatMap(r => Array.isArray(r?.menu) ? r.menu : [])
+        : [];
 
-      if (!Array.isArray(ordini) || ordini.length === 0) {
-        container.innerHTML = "<p>Nessun ordine trovato.</p>";
+      // solo ordini NON chiusi in questa pagina
+      const attivi = (Array.isArray(ordini) ? ordini : [])
+        .filter(o => !isClosedStatus(o?.status ?? o?.state));
+
+      if (attivi.length === 0) {
+        container.innerHTML = `
+          <p>Nessun ordine attivo.</p>
+          <p class="muted">Trovi gli ordini ritirati nello <a href="storico_clienti.html">storico clienti</a>.</p>`;
         return;
       }
 
       container.innerHTML = "";
-      [...ordini].reverse().forEach(ordine => {
+      // mostro i più recenti in alto
+      [...attivi].sort((a,b) => new Date(b.createdAt||0) - new Date(a.createdAt||0))
+      .forEach(ordine => {
         const div = document.createElement("div");
         div.className = "ordine-box";
 
-        const elenco = (ordine?.meals ?? []).map(id => {
-          const p = tuttiIPiatti.find(m => String(mealId(m)) == String(id));
-          return p ? `${mealName(p)} (${fmtMoney(mealPrice(p))})` : `Piatto ID ${id}`;
-        }).join(", ");
+        // preferisci snapshot items se presente
+        let elenco = "-";
+        if (Array.isArray(ordine.items) && ordine.items.length) {
+          elenco = ordine.items
+            .map(it => `${it.name ?? "Piatto"} x${it.qty || 1} (${fmtMoney(it.price || 0)})`)
+            .join(", ");
+        } else {
+          elenco = (ordine?.meals ?? []).map(id => {
+            const p = tuttiIPiatti.find(m => String(mealId(m)) == String(id));
+            return p ? `${mealName(p)} (${fmtMoney(mealPrice(p))})` : `Piatto ID ${id}`;
+          }).join(", ");
+        }
 
-        const idOrd   = orderId(ordine);
-        const stato   = ordine?.status ?? "sconosciuto";
+        const idOrd = orderId(ordine);
+        const stato = (ordine?.status ?? ordine?.state ?? "sconosciuto");
 
         div.innerHTML = `
           <p><strong>ID:</strong> ${idOrd || "<span class='muted'>(n/d)</span>"}</p>
@@ -106,7 +127,7 @@
 
         const azioniDiv = div.querySelector(".azioni");
 
-        // Se l’ordine non è chiuso, mostra il pulsante "Ho ritirato l'ordine"
+        // bottone "Ho ritirato l'ordine"
         if (idOrd && !isClosedStatus(stato)) {
           const btnPick = document.createElement("button");
           btnPick.textContent = "Ho ritirato l'ordine";
@@ -114,20 +135,29 @@
             const ok = confirm("Confermi di aver ritirato l'ordine al banco?");
             if (!ok) return;
             try {
-              const putRes = await fetch(`${API_BASE}/orders/${encodeURIComponent(idOrd)}`, {
+              // alias endpoint compatibile con backend
+              const putRes = await fetch(`${API_BASE}/orders/${encodeURIComponent(idOrd)}/state`, {
                 method: "PUT",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ status: "ritirato", clienteConfermaRitiro: true })
+                body: JSON.stringify({ newState: "ritirato", clienteConfermaRitiro: true })
               });
               if (!putRes.ok) {
                 const detail = await putRes.json().catch(()=>({}));
                 throw new Error(`PUT ${putRes.status} ${detail?.error||""}`);
               }
-              const badge = div.querySelector(".stato");
-              badge.textContent = "ritirato";
-              badge.className = `stato ${badgeClass("ritirato")}`;
-              btnPick.disabled = true;
-              btnPick.textContent = "Ritiro confermato ✅";
+
+              // UI: rimuovo la card e notifico
+              div.remove();
+              noti.innerHTML = `
+                <p class="success">✅ Ritiro confermato. L'ordine è stato spostato nello
+                <a href="storico_clienti.html"><strong>storico clienti</strong></a>.</p>`;
+
+              // Se non rimangono ordini attivi, mostra il messaggio vuoto
+              if (!container.querySelector(".ordine-box")) {
+                container.innerHTML = `
+                  <p>Nessun ordine attivo.</p>
+                  <p class="muted">Trovi gli ordini ritirati nello <a href="storico_clienti.html">storico clienti</a>.</p>`;
+              }
             } catch (err) {
               console.error("Errore conferma ritiro:", err);
               alert("Errore nel confermare il ritiro.");

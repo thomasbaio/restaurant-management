@@ -11,11 +11,12 @@ const MEALS_FILE = path.join(__dirname, "meals1.json");
 
 // === Stati e transizioni (➕ 'ritirato')
 const VALID_STATES = ["ordinato", "preparazione", "consegna", "consegnato", "ritirato", "annullato"];
+const FINAL_STATES = new Set(["consegnato", "annullato", "ritirato"]);
 
 const NEXT_ALLOWED = {
-  ordinato:     ["preparazione", "annullato"],
-  preparazione: ["consegna", "ritirato", "annullato"], // pickup può andare diretto a "ritirato"
-  consegna:     ["consegnato", "ritirato"],             // ritiro in negozio consegnato a mano
+  ordinato:     ["preparazione", "annullato", "ritirato"], // pickup diretto
+  preparazione: ["consegna", "ritirato", "annullato"],
+  consegna:     ["consegnato"],
   consegnato:   [],
   ritirato:     [],
   annullato:    []
@@ -46,7 +47,6 @@ function inferUserIdFromUsername(username) {
 function flattenFileMeals() {
   const data = safeReadJSON(MEALS_FILE);
   if (!data || !Array.isArray(data)) return [];
-  // ritorna array piatti con riferimento al ristorante
   return data.flatMap(r =>
     (r.menu || []).map(p => ({
       restaurantId: String(r.restaurantId || r.id || ""),
@@ -67,7 +67,6 @@ function inferRestaurantIdFromMeals(mealIds) {
 const toStr = v => (v == null ? null : String(v).trim());
 
 function extractItemsFromAny(body) {
-  // supporta body.items / body.cart / body.cartItems / body.meals
   const buckets = []
     .concat(Array.isArray(body.items) ? body.items : [])
     .concat(Array.isArray(body.cart) ? body.cart : [])
@@ -131,7 +130,6 @@ function computeTotal(items) {
 }
 
 function normalizeDelivery(obj) {
-  // accetta delivery (asporto|domicilio) o fulfillment (ritiro|consegna)
   let delivery = obj.delivery;
   let fulfillment = obj.fulfillment;
 
@@ -155,7 +153,6 @@ function normalizeBody(b) {
   if (typeof body.userId === "string") body.userId = body.userId.trim();
   if (typeof body.restaurantId === "string") body.restaurantId = body.restaurantId.trim();
 
-  // delivery/fulfillment mapping
   const { delivery, fulfillment } = normalizeDelivery(body);
   body.delivery = delivery;
   body.fulfillment = fulfillment;
@@ -163,7 +160,6 @@ function normalizeBody(b) {
   return body;
 }
 
-// >>> normalizza i vari sinonimi del metodo di pagamento
 function normalizePaymentMethod(m) {
   const s = String(m || "carta").toLowerCase().replace(/\s+/g, "_").replace(/-/g, "_");
   if (["carta", "card", "credit_card", "carta_credito", "carta_di_credito"].includes(s)) return "carta";
@@ -174,13 +170,11 @@ function normalizePaymentMethod(m) {
 
 // Cerca ordine sia per id incrementale sia per _id Mongo
 async function findOrderByAnyId(idParam) {
-  // Prova numerico
   const asNumber = Number(idParam);
   if (Number.isFinite(asNumber)) {
     const byNumeric = await Order.findOne({ id: asNumber });
     if (byNumeric) return byNumeric;
   }
-  // fallback: _id Mongo
   try {
     const byMongo = await Order.findById(idParam);
     if (byMongo) return byMongo;
@@ -204,17 +198,14 @@ router.post("/", async (req, res) => {
   try {
     const raw = normalizeBody(req.body);
 
-    // 1) Estrai items da qualsiasi campo, collassa e arricchisci da file
     let items = extractItemsFromAny(raw);
     items = collapseItems(items);
     items = enrichItemsFromFile(items);
 
-    // 2) Prepara altri campi
     const meals = items.map(it => String(it.mealId));
     if (!raw.userId) raw.userId = inferUserIdFromUsername(raw.username);
     if (!raw.restaurantId) raw.restaurantId = inferRestaurantIdFromMeals(meals);
 
-    // normalizzazione pagamento
     const rawPayment = raw.payment;
     const methodIn = typeof rawPayment === "object" ? rawPayment.method : rawPayment;
     const method = normalizePaymentMethod(methodIn);
@@ -231,16 +222,13 @@ router.post("/", async (req, res) => {
       restaurantId: raw.restaurantId,
       items,
       meals,
-      // total calcolato lato server
       total: computeTotal(items),
-      // stato + pagamento
-      status: raw.status,
+      status: raw.status,               // campo nuovo
+      state: raw.status,                // compat con vecchio codice
       payment,
-      // delivery/fulfillment + address
       delivery: raw.delivery || "asporto",
       fulfillment: raw.fulfillment || (raw.delivery === "domicilio" ? "consegna" : "ritiro"),
       address: raw.address,
-      // opzionali
       note: raw.note
     };
 
@@ -260,11 +248,13 @@ router.post("/", async (req, res) => {
 // GET /orders — elenco (filtri opzionali)
 router.get("/", async (req, res) => {
   try {
-    const { username, restaurantId, status } = req.query;
+    const { username, restaurantId, status, state } = req.query;
     const q = {};
     if (username) q.username = username;
     if (restaurantId) q.restaurantId = restaurantId;
-    if (status) q.status = status;
+    // consenti filtro sia con status che state
+    if (status) q.$or = [{ status }, { state: status }];
+    else if (state) q.$or = [{ status: state }, { state }];
 
     const orders = await Order.find(q).sort({ createdAt: -1, id: -1 }).lean();
     return res.json(orders);
@@ -274,49 +264,63 @@ router.get("/", async (req, res) => {
   }
 });
 
-// PUT /orders/:id — aggiorna stato con transizioni controllate (➕ supporto 'ritirato')
+// --- funzione comune per cambio stato ---
+async function updateOrderStateGeneric(idParam, incomingBody, res) {
+  const desired = String(incomingBody?.status ?? incomingBody?.state ?? incomingBody?.newState ?? "").trim();
+  const clienteConfermaRitiro = incomingBody?.clienteConfermaRitiro;
+
+  if (!VALID_STATES.includes(desired)) {
+    return res.status(400).json({ error: `Stato non valido: ${desired}` });
+  }
+
+  const order = await findOrderByAnyId(idParam);
+  if (!order) return res.status(404).json({ error: "Ordine non trovato" });
+
+  const current = order.status || order.state || "ordinato";
+  const allowedNext = NEXT_ALLOWED[current] || [];
+  if (current !== desired && !allowedNext.includes(desired)) {
+    return res.status(422).json({
+      error: `Transizione non valida da "${current}" a "${desired}"`,
+      allowedNext
+    });
+  }
+
+  order.status = desired;
+  order.state  = desired;
+
+  if (typeof clienteConfermaRitiro !== "undefined") {
+    order.clienteConfermaRitiro = Boolean(clienteConfermaRitiro);
+  }
+
+  const s = desired.toLowerCase();
+  if (s === "consegnato" && !order.deliveredAt) order.deliveredAt = new Date();
+  if (s === "ritirato"   && !order.ritiratoAt)  order.ritiratoAt  = new Date();
+  if (s === "ritirato") order.ritiroConfermato = true;
+  if (FINAL_STATES.has(s)) order.closedAt = order.closedAt || new Date();
+
+  await order.save();
+  return res.json(order);
+}
+
+// PUT /orders/:id — aggiorna stato (compat con vecchio body)
 router.put("/:id", async (req, res) => {
   try {
-    const idParam = req.params.id;
-    const newStatus = String(req.body?.status || "");
-    const clienteConfermaRitiro = req.body?.clienteConfermaRitiro;
-
-    if (!VALID_STATES.includes(newStatus)) {
-      return res.status(400).json({ error: `Stato non valido: ${newStatus}` });
-    }
-
-    const order = await findOrderByAnyId(idParam);
-    if (!order) return res.status(404).json({ error: "Ordine non trovato" });
-
-    const allowedNext = NEXT_ALLOWED[order.status] || [];
-    if (order.status !== newStatus && !allowedNext.includes(newStatus)) {
-      return res.status(422).json({
-        error: `Transizione non valida da "${order.status}" a "${newStatus}"`,
-        allowedNext
-      });
-    }
-
-    // Applica stato
-    order.status = newStatus;
-
-    // Flag opzionale inviato dal client (frontend "Ho ritirato l'ordine")
-    if (typeof clienteConfermaRitiro !== "undefined") {
-      order.clienteConfermaRitiro = Boolean(clienteConfermaRitiro);
-    }
-
-    // NB: i timestamp deliveredAt/ritiratoAt verranno settati anche dal pre('save') del model,
-    // ma li impostiamo qui come ulteriore sicurezza in caso lo schema venisse modificato.
-    const s = newStatus.toLowerCase();
-    if (s === "consegnato" && !order.deliveredAt) order.deliveredAt = new Date();
-    if (s === "ritirato"   && !order.ritiratoAt)  order.ritiratoAt  = new Date();
-    if (s === "ritirato") order.ritiroConfermato = true;
-
-    await order.save();
-    return res.json(order);
+    await updateOrderStateGeneric(req.params.id, req.body, res);
   } catch (err) {
     console.error("Errore PUT /orders/:id:", err);
     return res.status(500).json({ error: "Errore aggiornamento ordine", detail: String(err?.message || err) });
   }
 });
 
+// PUT /orders/:id/state — alias (accetta { newState })
+router.put("/:id/state", async (req, res) => {
+  try {
+    await updateOrderStateGeneric(req.params.id, req.body, res);
+  } catch (err) {
+    console.error("Errore PUT /orders/:id/state:", err);
+    return res.status(500).json({ error: "Errore aggiornamento ordine", detail: String(err?.message || err) });
+  }
+});
+
 module.exports = router;
+
