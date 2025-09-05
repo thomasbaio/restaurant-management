@@ -9,8 +9,6 @@
     .badge { display:inline-block; padding:2px 8px; border-radius:999px; font-size:.85rem; }
     .badge.ordinato{ background:#eef; }
     .badge.preparazione{ background:#ffe9b3; }
-    .badge.consegna{ background:#d6f5ff; }
-    .badge.consegnato{ background:#d9f7be; }
     .badge.ritirato{ background:#c7f9cc; }
     .badge.annullato{ background:#ffd6d6; }
     .azioni button{ margin-right:8px; }
@@ -27,46 +25,35 @@
   <p><a href="index.html">⬅️ Torna alla home</a></p>
   <p><a href="storico_clienti.html">vecchi ordini</a></p>
 
-  <!-- ✅ CORREGGI QUI IL PATH se serve: js/main.js oppure main.js -->
+  <!-- Se lo usi altrove, lascialo pure -->
   <script src="js/main.js" defer></script>
 
-  <!-- Fallback nel caso main.js non carichi -->
+  <!-- Fallback API_BASE -->
   <script>
     (function () {
       if (!window.API_BASE) {
         const isLocal = ["localhost","127.0.0.1"].includes(location.hostname);
-        window.API_BASE = isLocal
-          ? "http://localhost:3000"
-          : (location.origin || "https://restaurant-management-wzhj.onrender.com");
+        window.API_BASE = isLocal ? "http://localhost:3000" : (location.origin || "https://restaurant-management-wzhj.onrender.com");
       }
     })();
   </script>
 
   <script>
-  // --- Helpers UI/format ---
-  function mealName(p){ return p?.nome ?? p?.strMeal ?? p?.name ?? "Piatto"; }
-  function mealPrice(p){ const n=Number(p?.prezzo ?? p?.price ?? 0); return Number.isFinite(n)?n:0; }
-  function mealId(p){ return p?.idmeals ?? p?.idMeal ?? p?.id ?? p?._id; }
-  function orderId(o){ return o?.id ?? o?._id ?? ""; }
-  function fmtMoney(n){ return `€${Number(n||0).toFixed(2)}`; }
-  function fmtDate(iso){ try{ return new Date(iso).toLocaleString(); }catch{ return ""; } }
-  function isPickupType(delivery) {
-    const d = String(delivery || "").toLowerCase();
-    return d.includes("asporto") || d.includes("ritiro") || d.includes("pickup");
-  }
-  function isClosedStatus(status) {
-    const s = String(status || "").toLowerCase();
-    return ["consegnato","annullato","ritirato"].includes(s);
-  }
-  function statusBadgeClass(s){ return `badge ${String(s||"").toLowerCase()}`; }
+  // Helpers
+  const mealName  = p => p?.nome ?? p?.strMeal ?? p?.name ?? "Piatto";
+  const mealPrice = p => Number(p?.prezzo ?? p?.price ?? 0) || 0;
+  const mealId    = p => p?.idmeals ?? p?.idMeal ?? p?.id ?? p?._id;
+  const orderId   = o => o?.id ?? o?._id ?? "";
+  const fmtMoney  = n => `€${Number(n||0).toFixed(2)}`;
+  const fmtDate   = iso => { try { return new Date(iso).toLocaleString(); } catch { return ""; } };
 
-  // 🚫 NON usare window.onload = ...  (viene sovrascritto). Usa gli event listener:
+  // Solo ritiro: stati finali
+  const isClosedStatus = s => ["ritirato","annullato"].includes(String(s||"").toLowerCase());
+  const badgeClass = s => `badge ${String(s||"").toLowerCase()}`;
+
   document.addEventListener("DOMContentLoaded", initOrdini);
-  window.addEventListener("load", () => console.debug("[Ordini] window.load"));
 
-  async function initOrdini() {
-    console.debug("[Ordini] init — API_BASE:", window.API_BASE);
-
+  async function initOrdini(){
     const user = JSON.parse(localStorage.getItem("loggedUser"));
     if (!user || user.role !== "cliente") {
       alert("Accesso riservato ai clienti");
@@ -77,26 +64,17 @@
     const container = document.getElementById("ordini-container");
 
     try {
-      // 1) ORDINI
+      // 1) ordini del cliente
       const qs = new URLSearchParams({ username: user.username });
-      const res = await fetch(`${API_BASE}/orders?${qs.toString()}`, {
-        headers: { "Accept": "application/json" },
-      });
-      console.debug("[Ordini] GET /orders", res.status);
+      const res = await fetch(`${API_BASE}/orders?${qs.toString()}`, { headers: { "Accept": "application/json" }});
       if (!res.ok) throw new Error(`Orders HTTP ${res.status}`);
       const ordini = await res.json();
-      console.debug("[Ordini] ordini ricevuti:", ordini?.length);
 
-      // 2) MENU completo
-      const menuRes = await fetch(`${API_BASE}/meals`, {
-        headers: { "Accept": "application/json" },
-      });
-      console.debug("[Ordini] GET /meals", menuRes.status);
+      // 2) catalogo piatti (per nomi/prezzi)
+      const menuRes = await fetch(`${API_BASE}/meals`, { headers: { "Accept": "application/json" }});
       if (!menuRes.ok) throw new Error(`Meals HTTP ${menuRes.status}`);
       const ristoranti = await menuRes.json();
-      const tuttiIPiatti = Array.isArray(ristoranti)
-        ? ristoranti.flatMap(r => Array.isArray(r?.menu) ? r.menu : [])
-        : [];
+      const tuttiIPiatti = Array.isArray(ristoranti) ? ristoranti.flatMap(r => Array.isArray(r?.menu) ? r.menu : []) : [];
 
       if (!Array.isArray(ordini) || ordini.length === 0) {
         container.innerHTML = "<p>Nessun ordine trovato.</p>";
@@ -108,109 +86,50 @@
         const div = document.createElement("div");
         div.className = "ordine-box";
 
-        const piattiOrdinati = (ordine?.meals ?? []).map(id => {
+        const elenco = (ordine?.meals ?? []).map(id => {
           const p = tuttiIPiatti.find(m => String(mealId(m)) == String(id));
-          return p
-            ? `${mealName(p)} (${fmtMoney(mealPrice(p))})`
-            : `Piatto ID ${id}`;
+          return p ? `${mealName(p)} (${fmtMoney(mealPrice(p))})` : `Piatto ID ${id}`;
         }).join(", ");
 
-        const idOrd = orderId(ordine);
-        const stato = ordine?.status ?? "sconosciuto";
-        const consegna = ordine?.delivery ?? "-";
+        const idOrd   = orderId(ordine);
+        const stato   = ordine?.status ?? "sconosciuto";
 
         div.innerHTML = `
-          <p><strong>ID:</strong> ${idOrd || "<span class='muted'>(non disponibile)</span>"}</p>
-          <p><strong>Creato:</strong> ${ordine?.createdAt ? fmtDate(ordine.createdAt) : "<span class='muted'>n/d</span>"} </p>
-          <p><strong>Consegna:</strong> ${consegna}</p>
-          <p><strong>Stato:</strong> <span class="${statusBadgeClass(stato)} stato">${stato}</span></p>
-          <p><strong>Piatti:</strong> ${piattiOrdinati || "-"}</p>
+          <p><strong>ID:</strong> ${idOrd || "<span class='muted'>(n/d)</span>"}</p>
+          <p><strong>Creato:</strong> ${ordine?.createdAt ? fmtDate(ordine.createdAt) : "<span class='muted'>n/d</span>"}</p>
+          <p><strong>Modalità:</strong> ritiro in negozio</p>
+          <p><strong>Stato:</strong> <span class="stato ${badgeClass(stato)}">${stato}</span></p>
+          <p><strong>Piatti:</strong> ${elenco || "-"}</p>
           <p><strong>Totale:</strong> ${fmtMoney(ordine?.total)}</p>
-          ${String(consegna).toLowerCase()==="domicilio" ? `<p><strong>Indirizzo:</strong> ${ordine?.address ?? "-"}</p>` : ""}
           <div class="azioni"></div>
         `;
 
         const azioniDiv = div.querySelector(".azioni");
 
-        if (!idOrd) {
-          const warn = document.createElement("p");
-          warn.className = "muted";
-          warn.textContent = "Impossibile aggiornare lo stato: ID ordine mancante.";
-          azioniDiv.appendChild(warn);
-          container.appendChild(div);
-          return;
-        }
-
-        // Domicilio → “Consegnato”
-        if (!isClosedStatus(stato) && String(consegna).toLowerCase() === "domicilio") {
-          const btn = document.createElement("button");
-          btn.textContent = "Segnala come consegnato";
-          btn.addEventListener("click", async () => {
-            const ok = confirm("Confermi che l'ordine è stato consegnato?");
-            if (!ok) return;
-            try {
-              const putRes = await fetch(`${API_BASE}/orders/${encodeURIComponent(idOrd)}`, {
-                method: "PUT",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ status: "consegnato" })
-              });
-              if (!putRes.ok) {
-                const detail = await putRes.json().catch(() => ({}));
-                throw new Error(`PUT HTTP ${putRes.status} ${detail?.error||""}`);
-              }
-              const badge = div.querySelector(".stato");
-              badge.textContent = "consegnato";
-              badge.className = statusBadgeClass("consegnato")+" stato";
-              btn.disabled = true;
-              btn.textContent = "Consegnato ✅";
-            } catch (err) {
-              console.error("Errore aggiornamento ordine:", err);
-              alert("Errore nel segnalare la consegna.");
-            }
-          });
-          azioniDiv.appendChild(btn);
-        }
-
-        // Asporto/Ritiro → “Ritirato” (fallback a “Consegnato”)
-        if (!isClosedStatus(stato) && isPickupType(consegna)) {
+        // Se l’ordine non è chiuso, mostra il pulsante "Ho ritirato l'ordine"
+        if (idOrd && !isClosedStatus(stato)) {
           const btnPick = document.createElement("button");
           btnPick.textContent = "Ho ritirato l'ordine";
           btnPick.addEventListener("click", async () => {
             const ok = confirm("Confermi di aver ritirato l'ordine al banco?");
             if (!ok) return;
-
             try {
-              let putRes = await fetch(`${API_BASE}/orders/${encodeURIComponent(idOrd)}`, {
+              const putRes = await fetch(`${API_BASE}/orders/${encodeURIComponent(idOrd)}`, {
                 method: "PUT",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({ status: "ritirato", clienteConfermaRitiro: true })
               });
-
               if (!putRes.ok) {
-                putRes = await fetch(`${API_BASE}/orders/${encodeURIComponent(idOrd)}`, {
-                  method: "PUT",
-                  headers: { "Content-Type": "application/json" },
-                  body: JSON.stringify({ status: "consegnato", clienteConfermaRitiro: true })
-                });
-                if (!putRes.ok) {
-                  const detail = await putRes.json().catch(() => ({}));
-                  throw new Error(`PUT fallback HTTP ${putRes.status} ${detail?.error||""}`);
-                }
-                const badge = div.querySelector(".stato");
-                badge.textContent = "consegnato";
-                badge.className = statusBadgeClass("consegnato")+" stato";
-                btnPick.disabled = true;
-                btnPick.textContent = "Ritiro confermato ✅";
-                return;
+                const detail = await putRes.json().catch(()=>({}));
+                throw new Error(`PUT ${putRes.status} ${detail?.error||""}`);
               }
-
               const badge = div.querySelector(".stato");
               badge.textContent = "ritirato";
-              badge.className = statusBadgeClass("ritirato")+" stato";
+              badge.className = `stato ${badgeClass("ritirato")}`;
               btnPick.disabled = true;
               btnPick.textContent = "Ritiro confermato ✅";
             } catch (err) {
-              console.error("Errore aggiornamento ritiro:", err);
+              console.error("Errore conferma ritiro:", err);
               alert("Errore nel confermare il ritiro.");
             }
           });
