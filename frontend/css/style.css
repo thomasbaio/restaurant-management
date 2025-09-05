@@ -442,3 +442,24 @@ a[href="index.html"] {
 a[href="index.html"]:hover {
   text-decoration: underline;
 }
+/* Logo principale */
+.logo {
+  max-height: 80px;
+  display: block;
+  margin: 0 auto 15px auto;
+}
+
+/* Footer */
+footer {
+  margin-top: 40px;
+  padding: 15px;
+  text-align: center;
+  background-color: #f0f0f0;
+  border-top: 1px solid #ddd;
+}
+
+.tech-logo {
+  height: 40px;
+  margin: 0 10px;
+  vertical-align: middle;
+}
