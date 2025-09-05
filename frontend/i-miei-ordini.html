@@ -36,6 +36,18 @@
   function mealId(p){ return p?.idmeals ?? p?.idMeal ?? p?.id ?? p?._id; }
   function orderId(o){ return o?.id ?? o?._id ?? ""; }
 
+  // ➕ Helper: riconosciamo i tipi di ritiro
+  function isPickupType(delivery) {
+    const d = String(delivery || "").toLowerCase();
+    return d.includes("asporto") || d.includes("ritiro") || d.includes("pickup");
+  }
+
+  // ➕ Helper: ordine già chiuso?
+  function isClosedStatus(status) {
+    const s = String(status || "").toLowerCase();
+    return ["consegnato","annullato","ritirato"].includes(s);
+  }
+
   window.onload = async () => {
     const user = JSON.parse(localStorage.getItem("loggedUser"));
     if (!user || user.role !== "cliente") {
@@ -91,15 +103,19 @@
           <p><strong>Consegna:</strong> ${consegna}</p>
           <p><strong>Stato:</strong> <span class="stato">${stato}</span></p>
           <p><strong>Piatti:</strong> ${piattiOrdinati || "-"}</p>
-          ${consegna === "domicilio" ? `<p><strong>Indirizzo:</strong> ${ordine?.address ?? "-"}</p>` : ""}
+          ${String(consegna).toLowerCase()==="domicilio" ? `<p><strong>Indirizzo:</strong> ${ordine?.address ?? "-"}</p>` : ""}
           <div class="azioni"></div>
         `;
 
-        if (stato === "in consegna" || stato === "consegna") {
-          const azioniDiv = div.querySelector(".azioni");
+        const azioniDiv = div.querySelector(".azioni");
+
+        // ✅ Caso consegna a domicilio: conferma "Consegnato"
+        if (!isClosedStatus(stato) && String(consegna).toLowerCase() === "domicilio") {
           const btn = document.createElement("button");
           btn.textContent = "Segnala come consegnato";
           btn.addEventListener("click", async () => {
+            const ok = confirm("Confermi che l'ordine è stato consegnato?");
+            if (!ok) return;
             try {
               const putRes = await fetch(`${API_BASE}/orders/${encodeURIComponent(idOrd)}`, {
                 method: "PUT",
@@ -116,6 +132,49 @@
             }
           });
           azioniDiv.appendChild(btn);
+        }
+
+        // ➕ Caso ritiro/asporto: conferma "Ritirato" (con fallback a "consegnato")
+        if (!isClosedStatus(stato) && isPickupType(consegna)) {
+          const btnPick = document.createElement("button");
+          btnPick.textContent = "Ho ritirato l'ordine";
+          btnPick.addEventListener("click", async () => {
+            const ok = confirm("Confermi di aver ritirato l'ordine al banco?");
+            if (!ok) return;
+
+            // Primo tentativo: stato 'ritirato'
+            try {
+              let putRes = await fetch(`${API_BASE}/orders/${encodeURIComponent(idOrd)}`, {
+                method: "PUT",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ status: "ritirato", clienteConfermaRitiro: true })
+              });
+
+              // Se il backend non accetta 'ritirato', fallback a 'consegnato'
+              if (!putRes.ok) {
+                // 400/422 molto probabili se lo stato non è ammesso
+                putRes = await fetch(`${API_BASE}/orders/${encodeURIComponent(idOrd)}`, {
+                  method: "PUT",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({ status: "consegnato", clienteConfermaRitiro: true })
+                });
+                if (!putRes.ok) throw new Error(`PUT fallback HTTP ${putRes.status}`);
+                div.querySelector(".stato").textContent = "consegnato";
+                btnPick.disabled = true;
+                btnPick.textContent = "Ritiro confermato ✅";
+                return;
+              }
+
+              // Caso in cui 'ritirato' è supportato
+              div.querySelector(".stato").textContent = "ritirato";
+              btnPick.disabled = true;
+              btnPick.textContent = "Ritiro confermato ✅";
+            } catch (err) {
+              console.error("Errore aggiornamento ritiro:", err);
+              alert("Errore nel confermare il ritiro.");
+            }
+          });
+          azioniDiv.appendChild(btnPick);
         }
 
         container.appendChild(div);
