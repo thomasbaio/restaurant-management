@@ -1,94 +1,186 @@
+// --- Auth guard ---
 const user = JSON.parse(localStorage.getItem("loggedUser"));
 if (!user) {
   alert("Devi essere loggato per ordinare");
   window.location.href = "login.html";
+  // IMPORTANT: interrompi l'esecuzione
+  throw new Error("Utente non loggato");
+}
+
+// --- Base URL (locale vs produzione) ---
+const isLocal = ["localhost", "127.0.0.1"].includes(location.hostname);
+const DEFAULT_API_BASE = isLocal
+  ? "http://localhost:3000"
+  : "https://restaurant-management-wzhj.onrender.com";
+
+// Permette override da console/localStorage senza toccare il codice
+const API_BASE = localStorage.getItem("API_BASE") || DEFAULT_API_BASE;
+
+// Helper: fetch JSON provando più path (es. /meals e /api/meals)
+async function fetchJSONWithFallback(paths) {
+  let lastErr;
+  for (const p of paths) {
+    try {
+      const res = await fetch(`${API_BASE}${p}`, { headers: { Accept: "application/json" } });
+      if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
+      return await res.json();
+    } catch (e) {
+      lastErr = e;
+    }
+  }
+  throw lastErr || new Error("Fetch fallita");
+}
+
+// --- Normalizzazione piatto ---
+function normalizeMeal(raw) {
+  // id
+  let id =
+    raw.idmeals ?? raw.idMeal ?? raw.id ?? raw._id ?? null;
+  if (id != null) id = String(id);
+
+  // nome
+  const name = raw.nome ?? raw.strMeal ?? raw.name ?? "Senza nome";
+
+  // prezzo
+  let price = raw.prezzo ?? raw.price ?? null;
+  if (typeof price === "string") {
+    const num = Number(price.replace(",", "."));
+    price = Number.isFinite(num) ? num : null;
+  }
+
+  // tipologia / categoria
+  const category = raw.tipologia ?? raw.category ?? raw.strCategory ?? "";
+
+  // descrizione
+  const description = raw.descrizione ?? raw.description ?? raw.strInstructions ?? "";
+
+  // immagine
+  const thumb =
+    raw.foto ??
+    raw.image ??
+    raw.strMealThumb ??
+    "";
+
+  return { id, name, price, category, description, thumb };
+}
+
+// Estrai tutti i piatti anche se l’endpoint restituisce ristoranti con menu annidati
+function extractAllMeals(data) {
+  const found = [];
+  function recurse(node) {
+    if (Array.isArray(node)) {
+      node.forEach(recurse);
+    } else if (node && typeof node === "object") {
+      // Se sembra un piatto, normalizza e conserva solo quelli con id+prezzo validi
+      const n = normalizeMeal(node);
+      if (n.id && Number.isFinite(n.price)) {
+        found.push(n);
+      }
+      // continua a scendere
+      Object.values(node).forEach(recurse);
+    }
+  }
+  recurse(data);
+  return found;
 }
 
 window.onload = async function () {
-  try {
-    const mealsRes = await fetch("http://localhost:3000/meals");
-    const rawData = await mealsRes.json();
-    const list = document.getElementById("meals-list");
-    const totalDisplay = document.getElementById("total");
+  const list = document.getElementById("meals-list");
+  const totalDisplay = document.getElementById("total");
 
-    // 🔁 Estrai tutti i piatti anche annidati
-    function extractAllMeals(data) {
-      const found = [];
-      function recurse(node) {
-        if (Array.isArray(node)) {
-          node.forEach(recurse);
-        } else if (node && typeof node === "object") {
-          if ("nome" in node && "prezzo" in node) {
-            found.push(node);
-          }
-          Object.values(node).forEach(recurse);
-        }
-      }
-      recurse(data);
-      return found;
-    }
-
-    const meals = extractAllMeals(rawData);
-
-    meals.forEach(meal => {
-      const id = meal.idmeals || meal.id || null;
-      const name = meal.nome || meal.name || "Senza nome";
-      const price = typeof meal.prezzo === "number" ? meal.prezzo : (typeof meal.price === "number" ? meal.price : null);
-      const description = meal.descrizione || meal.description || "";
-      const category = meal.tipologia || meal.category || "";
-
-      if (id !== null && price !== null) {
-        const container = document.createElement("div");
-        container.classList.add("meal-item");
-
-        container.innerHTML = `
-          <label>
-            <input type="checkbox" name="meal" value="${id}" data-price="${price}">
-            <strong>${name}</strong> - €${price.toFixed(2)}
-            <em>${category}</em><br>
-            <small>${description}</small>
-          </label>
-        `;
-
-        list.appendChild(container);
-      }
-    });
-
-    // 🔄 Ricalcola totale ogni volta che cambia selezione
-    list.addEventListener("change", () => {
-      const selected = document.querySelectorAll('input[name="meal"]:checked');
-      let total = 0;
-      selected.forEach(el => {
-        total += parseFloat(el.dataset.price);
-      });
-      totalDisplay.textContent = `Totale: €${total.toFixed(2)}`;
-    });
-
-  } catch (err) {
-    console.error("Errore nel caricamento dei piatti:", err);
-    alert("Errore nel caricamento del menu.");
-  }
-};
-
-document.getElementById("order-form").addEventListener("submit", async function (e) {
-  e.preventDefault();
-
-  const selectedMeals = Array.from(document.querySelectorAll('input[name="meal"]:checked')).map(m => parseInt(m.value));
-
-  if (selectedMeals.length === 0) {
-    alert("Seleziona almeno un piatto.");
+  if (!list || !totalDisplay) {
+    console.error("Elementi #meals-list o #total mancanti nell'HTML");
     return;
   }
 
-  const order = {
-    username: user.username,
-    role: user.role,
-    meals: selectedMeals,
-    delivery: "asporto", // sempre ritiro al ristorante
-    stato: "ordinato"
-  };
+  try {
+    // Prova /meals e in fallback /api/meals
+    const rawData = await fetchJSONWithFallback(["/meals", "/api/meals"]);
+    const meals = extractAllMeals(rawData);
 
-  localStorage.setItem("pendingOrder", JSON.stringify(order));
-  window.location.href = "payment.html"; // pagina simulata
-});
+    if (meals.length === 0) {
+      list.innerHTML = `<p>Nessun piatto disponibile.</p>`;
+      return;
+    }
+
+    // Render lista
+    list.innerHTML = "";
+    meals.forEach(meal => {
+      const container = document.createElement("div");
+      container.className = "meal-item";
+
+      const imgHtml = meal.thumb
+        ? `<img src="${meal.thumb}" alt="${meal.name}" class="meal-thumb" onerror="this.style.display='none'">`
+        : "";
+
+      container.innerHTML = `
+        <label class="meal-row">
+          <input type="checkbox" name="meal" value="${meal.id}" data-price="${meal.price}">
+          <div class="meal-info">
+            <div class="meal-title">
+              <strong>${meal.name}</strong>
+              <span class="meal-price">€${meal.price.toFixed(2)}</span>
+            </div>
+            ${meal.category ? `<em class="meal-cat">${meal.category}</em>` : ""}
+            ${meal.description ? `<small class="meal-desc">${meal.description}</small>` : ""}
+          </div>
+          ${imgHtml}
+        </label>
+      `;
+
+      list.appendChild(container);
+    });
+
+    // Totale dinamico
+    function recomputeTotal() {
+      const selected = list.querySelectorAll('input[name="meal"]:checked');
+      let total = 0;
+      selected.forEach(el => {
+        const p = Number(el.dataset.price);
+        if (Number.isFinite(p)) total += p;
+      });
+      totalDisplay.textContent = `Totale: €${total.toFixed(2)}`;
+    }
+    list.addEventListener("change", recomputeTotal);
+    recomputeTotal();
+
+  } catch (err) {
+    console.error("Errore nel caricamento dei piatti:", err);
+    alert(
+      `Errore nel caricamento del menu.\n` +
+      `Base URL: ${API_BASE}\n` +
+      `Dettagli: ${err.message}\n\n` +
+      `Suggerimenti:\n- Se sei in locale, avvia il backend (npm start).\n` +
+      `- Per forzare l'URL di produzione esegui in console:\n  localStorage.setItem('API_BASE','https://restaurant-management-wzhj.onrender.com');\n  poi ricarica la pagina.`
+    );
+  }
+};
+
+// --- Invio ordine ---
+const form = document.getElementById("order-form");
+if (form) {
+  form.addEventListener("submit", function (e) {
+    e.preventDefault();
+
+    const selectedMeals = Array.from(
+      document.querySelectorAll('input[name="meal"]:checked')
+    ).map(m => String(m.value)); // mantieni ID come stringa
+
+    if (selectedMeals.length === 0) {
+      alert("Seleziona almeno un piatto.");
+      return;
+    }
+
+    const order = {
+      username: user.username,
+      role: user.role,
+      meals: selectedMeals, // array di stringhe
+      delivery: "asporto",  // ritiro al ristorante
+      stato: "ordinato"
+    };
+
+    localStorage.setItem("pendingOrder", JSON.stringify(order));
+    window.location.href = "payment.html"; // pagina simulata
+  });
+}
 
