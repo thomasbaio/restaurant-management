@@ -29,27 +29,11 @@ window.onload = async () => {
     ? "http://localhost:3000"
     : "https://restaurant-management-wzhj.onrender.com";
 
-  const ordine = JSON.parse(localStorage.getItem("lastConfirmedOrder"));
   const riepilogo = document.getElementById("riepilogo");
   const attesaDiv = document.getElementById("tempo-attesa");
   const listaPiatti = document.getElementById("lista-piatti");
 
-  if (!ordine) {
-    riepilogo.innerHTML = "<p class='err'>Nessun ordine trovato.</p>";
-    return;
-  }
-
-  // ----- Riepilogo
-  const pagamento = ordine.payment || "carta";
-  const consegna = ordine.delivery || "-";
-  const indirizzo = ordine.delivery === "domicilio" ? (ordine.address || "-") : null;
-  riepilogo.innerHTML = `
-    <p><strong>Consegna:</strong> ${consegna}</p>
-    <p><strong>Metodo di pagamento:</strong> ${pagamento}</p>
-    ${indirizzo ? `<p><strong>Indirizzo:</strong> ${indirizzo}</p>` : ""}
-  `;
-
-  // ----- Helpers
+  // --- Helpers ---
   const toStr = (v) => (v == null ? null : String(v));
   const clean = (s) => (typeof s === "string" ? s.trim().toLowerCase() : null);
 
@@ -60,7 +44,7 @@ window.onload = async () => {
     return { id, nome, prezzo };
   }
 
-  // Estrae elementi ordine in formato {id?, nome?, qty}
+  // Estrae elementi ordine in formato {id?, nome?, prezzo?, qty}
   function extractOrderItems(raw) {
     const arr = Array.isArray(raw) ? raw : [];
     return arr.map(x => {
@@ -70,7 +54,7 @@ window.onload = async () => {
       if (x && typeof x === "object") {
         const id = toStr(x.mealId ?? x.idmeals ?? x.idMeal ?? x.id ?? x._id);
         const nome = x.nome ?? x.strMeal ?? x.name ?? x.title ?? null;
-        const prezzo = Number(x.prezzo ?? x.price); // se presente nell’ordine lo userò
+        const prezzo = Number(x.prezzo ?? x.price);
         const qty = Number(x.qty ?? x.quantity ?? 1) || 1;
         return { id, nome, prezzo, qty };
       }
@@ -78,140 +62,164 @@ window.onload = async () => {
     }).filter(it => it.id || it.nome);
   }
 
-  // Raccogli possibili liste dal payload ordine
-  let orderItems = []
-    .concat(extractOrderItems(ordine.meals))
-    .concat(extractOrderItems(ordine.items))
-    .concat(extractOrderItems(ordine.cart))
-    .concat(extractOrderItems(ordine.cartItems));
-
-  console.log("DEBUG ordine grezzo:", ordine);
-  console.log("DEBUG items estratti:", orderItems);
-
-  // 1) Se negli items ci sono già nome e (eventuale) prezzo → render immediato
-  const alreadyWithNames = orderItems.every(it => !!it.nome);
-  if (alreadyWithNames && orderItems.length > 0) {
-    let totale = 0;
-    listaPiatti.innerHTML = orderItems.map(it => {
-      const prezzo = Number(it.prezzo ?? 0) || 0;
-      const subtot = prezzo * (it.qty || 1);
-      totale += subtot;
-      const prezzoTxt = prezzo ? ` — €${subtot.toFixed(2)}` : "";
-      return `<li><strong>${it.nome}</strong> × ${it.qty || 1}${prezzoTxt}</li>`;
-    }).join("");
-    if (totale > 0) {
-      const totLi = document.createElement("li");
-      totLi.style.marginTop = "8px";
-      totLi.innerHTML = `<strong>Totale:</strong> €${totale.toFixed(2)}`;
-      listaPiatti.appendChild(totLi);
+  function collapse(items) {
+    // unisce quantità per stesso id/nome
+    const agg = new Map();
+    for (const it of items) {
+      const key = it.id ? `id:${it.id}` : `name:${clean(it.nome)}`;
+      const cur = agg.get(key) || { ...it, qty: 0 };
+      cur.qty += it.qty || 1;
+      agg.set(key, cur);
     }
-  } else {
-    // 2) Devo interrogare /meals e matchare
-    try {
-      const res = await fetch(`${API_BASE}/meals`, { mode: "cors" });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const data = await res.json();
+    return [...agg.values()];
+  }
 
-      const tuttiIPiatti = Array.isArray(data)
-        ? data.flatMap(r => Array.isArray(r.menu) ? r.menu : [])
-        : [];
+  async function loadMealsCatalog() {
+    const res = await fetch(`${API_BASE}/meals`, { mode: "cors" });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const data = await res.json();
+    const all = Array.isArray(data) ? data.flatMap(r => Array.isArray(r.menu) ? r.menu : []) : [];
+    return all.map(normalizeMealDB);
+  }
 
-      const catalogo = tuttiIPiatti.map(normalizeMealDB);
-      console.log("DEBUG /meals catalogo:", catalogo.slice(0, 5), `(+${Math.max(0, catalogo.length-5)} altri)`);
+  function renderRiepilogo(ord) {
+    const pagamento = ord.payment || "carta";
+    const consegna = ord.delivery || "-";
+    const indirizzo = ord.delivery === "domicilio" ? (ord.address || "-") : null;
+    riepilogo.innerHTML = `
+      <p><strong>Consegna:</strong> ${consegna}</p>
+      <p><strong>Metodo di pagamento:</strong> ${pagamento}</p>
+      ${indirizzo ? `<p><strong>Indirizzo:</strong> ${indirizzo}</p>` : ""}
+    `;
+  }
 
-      // Indici per ID e per NOME (case-insensitive)
-      const byId = new Map(catalogo.filter(m => m.id).map(m => [m.id, m]));
-      const byName = new Map(catalogo.map(m => [clean(m.nome), m]));
-
-      // Collassa quantità per id o nome
-      const agg = new Map(); // chiave = id o nome normalizzato → {meal, qty}
-      for (const it of orderItems) {
-        let meal = null;
-
-        // preferisco match per ID se presente
-        if (it.id && byId.has(it.id)) {
-          meal = byId.get(it.id);
-          agg.set(`id:${it.id}`, {
-            meal,
-            qty: (agg.get(`id:${it.id}`)?.qty || 0) + (it.qty || 1)
-          });
-          continue;
-        }
-
-        // fallback: match per nome se disponibile
-        const keyName = clean(it.nome);
-        if (keyName && byName.has(keyName)) {
-          meal = byName.get(keyName);
-          agg.set(`name:${keyName}`, {
-            meal,
-            qty: (agg.get(`name:${keyName}`)?.qty || 0) + (it.qty || 1)
-          });
-          continue;
-        }
-      }
-
-      const righe = [];
+  async function resolveAndRenderItems(orderItems) {
+    // 1) Se hanno già i nomi → render immediato
+    if (orderItems.length && orderItems.every(it => !!it.nome)) {
       let totale = 0;
-      for (const { meal, qty } of agg.values()) {
-        const subtot = (meal.prezzo || 0) * qty;
+      listaPiatti.innerHTML = orderItems.map(it => {
+        const prezzo = Number(it.prezzo ?? 0) || 0;
+        const subtot = prezzo * (it.qty || 1);
         totale += subtot;
-        righe.push(`<li><strong>${meal.nome}</strong> × ${qty} — €${subtot.toFixed(2)}</li>`);
-      }
-
-      if (righe.length === 0) {
-        // Ultimo fallback: mostra gli ID grezzi per capire cosa sta arrivando
-        listaPiatti.innerHTML = `<li>Nessun piatto trovato. (IDs ordine: ${
-          orderItems.map(x => x.id || x.nome).join(", ")
-        })</li>`;
-      } else {
-        listaPiatti.innerHTML = righe.join("");
+        const prezzoTxt = prezzo ? ` — €${subtot.toFixed(2)}` : "";
+        return `<li><strong>${it.nome}</strong> × ${it.qty || 1}${prezzoTxt}</li>`;
+      }).join("");
+      if (totale > 0) {
         const totLi = document.createElement("li");
         totLi.style.marginTop = "8px";
         totLi.innerHTML = `<strong>Totale:</strong> €${totale.toFixed(2)}`;
         listaPiatti.appendChild(totLi);
       }
-    } catch (err) {
-      console.error("Errore nel caricamento dei piatti:", err);
+      return;
+    }
+
+    // 2) Altrimenti cerco nel catalogo per id/nome
+    const catalogo = await loadMealsCatalog();
+    const byId = new Map(catalogo.filter(m => m.id).map(m => [m.id, m]));
+    const byName = new Map(catalogo.map(m => [clean(m.nome), m]));
+
+    const itemsCollassati = collapse(orderItems);
+    const righe = [];
+    let totale = 0;
+
+    for (const it of itemsCollassati) {
+      let meal = null;
+      if (it.id && byId.has(it.id)) meal = byId.get(it.id);
+      else if (it.nome && byName.has(clean(it.nome))) meal = byName.get(clean(it.nome));
+
+      if (meal) {
+        const subtot = (meal.prezzo || 0) * it.qty;
+        totale += subtot;
+        righe.push(`<li><strong>${meal.nome}</strong> × ${it.qty} — €${subtot.toFixed(2)}</li>`);
+      }
+    }
+
+    if (righe.length === 0) {
+      listaPiatti.innerHTML = `<li>Nessun piatto trovato.</li>`;
+    } else {
+      listaPiatti.innerHTML = righe.join("");
+      const totLi = document.createElement("li");
+      totLi.style.marginTop = "8px";
+      totLi.innerHTML = `<strong>Totale:</strong> €${totale.toFixed(2)}`;
+      listaPiatti.appendChild(totLi);
+    }
+  }
+
+  // --- 1) Provo dal localStorage
+  let ordine = JSON.parse(localStorage.getItem("lastConfirmedOrder")) || {};
+  let items =
+    extractOrderItems(ordine.meals)
+      .concat(extractOrderItems(ordine.items))
+      .concat(extractOrderItems(ordine.cart))
+      .concat(extractOrderItems(ordine.cartItems));
+
+  // --- 2) Se non ho items, recupero l'ULTIMO ordine del cliente dal backend
+  if (!items.length) {
+    try {
+      const user = JSON.parse(localStorage.getItem("loggedUser"));
+      if (user?.username) {
+        const res = await fetch(`${API_BASE}/orders?username=${encodeURIComponent(user.username)}`, { mode: "cors" });
+        if (res.ok) {
+          const lista = await res.json();
+          // prendo il più recente (per id crescente o createdAt)
+          const last = (lista || []).sort((a, b) => {
+            const ia = Number(a.id || 0), ib = Number(b.id || 0);
+            if (ia !== ib) return ib - ia;
+            return new Date(b.createdAt || 0) - new Date(a.createdAt || 0);
+          })[0];
+
+          if (last) {
+            ordine = Object.assign({}, last, ordine); // tengo eventuali campi utili
+            items =
+              extractOrderItems(last.meals)
+                .concat(extractOrderItems(last.items))
+                .concat(extractOrderItems(last.cart))
+                .concat(extractOrderItems(last.cartItems));
+          }
+        }
+      }
+    } catch (e) {
+      console.warn("Impossibile recuperare l'ultimo ordine dal backend:", e);
+    }
+  }
+
+  // --- Render riepilogo e lista
+  renderRiepilogo(ordine);
+
+  if (!items.length) {
+    listaPiatti.innerHTML = "<li>Nessun piatto trovato.</li>";
+  } else {
+    try {
+      await resolveAndRenderItems(items);
+    } catch (e) {
+      console.error(e);
       listaPiatti.innerHTML = "<li class='err'>Errore nel caricamento dei piatti.</li>";
     }
   }
 
-  // ----- Timer asporto
+  // --- Timer asporto
   if (ordine.delivery === "asporto") {
     try {
       const res = await fetch(`${API_BASE}/orders`, { mode: "cors" });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const tuttiGliOrdini = await res.json();
-
-      const ordiniInAttesa = (Array.isArray(tuttiGliOrdini) ? tuttiGliOrdini : []).filter(o =>
+      const tutti = await res.json();
+      const inCoda = (Array.isArray(tutti) ? tutti : []).filter(o =>
         o.delivery === "asporto" && (o.status === "ordinato" || o.status === "preparazione")
       );
-
-      const minutiAttesa = ordiniInAttesa.length * 5;
-      let secondiRimanenti = Math.max(0, minutiAttesa * 60);
-
-      const formattaTempo = (s) => {
-        const m = Math.floor(s / 60);
-        const sec = s % 60;
-        return `${m}m ${sec.toString().padStart(2, "0")}s`;
+      const minutiAttesa = inCoda.length * 5;
+      let secondi = Math.max(0, minutiAttesa * 60);
+      const fmt = (s) => `${Math.floor(s/60)}m ${(s%60).toString().padStart(2,"0")}s`;
+      const tick = () => {
+        attesaDiv.innerHTML = secondi > 0
+          ? `<p><strong>🕒 Tempo stimato per il ritiro:</strong> ${fmt(secondi)}</p>`
+          : `<p class="ok"><strong>✅ Il tuo ordine dovrebbe essere pronto!</strong></p>`;
+        if (secondi <= 0) clearInterval(tmr);
+        secondi--;
       };
-
-      const aggiornaTimer = () => {
-        if (secondiRimanenti > 0) {
-          attesaDiv.innerHTML = `
-            <p><strong>🕒 Tempo stimato per il ritiro:</strong> ${formattaTempo(secondiRimanenti)}</p>
-          `;
-          secondiRimanenti--;
-        } else {
-          clearInterval(timer);
-          attesaDiv.innerHTML = `<p class="ok"><strong>✅ Il tuo ordine dovrebbe essere pronto!</strong></p>`;
-        }
-      };
-
-      aggiornaTimer();
-      const timer = setInterval(aggiornaTimer, 1000);
-    } catch (err) {
-      console.error("Errore nel calcolo tempo attesa:", err);
+      tick();
+      const tmr = setInterval(tick, 1000);
+    } catch (e) {
+      console.error("Errore nel calcolo tempo attesa:", e);
       attesaDiv.innerHTML = "<p class='err'>Errore nel calcolo del tempo di attesa.</p>";
     }
   } else {
