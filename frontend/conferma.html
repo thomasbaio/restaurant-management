@@ -40,7 +40,7 @@ window.onload = async () => {
     return;
   }
 
-  // Riepilogo ordine
+  // ---- Riepilogo ordine
   const pagamento = ordine.payment || "carta";
   const consegna = ordine.delivery || "-";
   const indirizzo = ordine.delivery === "domicilio" ? (ordine.address || "-") : null;
@@ -51,56 +51,91 @@ window.onload = async () => {
     ${indirizzo ? `<p><strong>Indirizzo:</strong> ${indirizzo}</p>` : ""}
   `;
 
-  // Helper: normalizza un piatto in modo robusto
+  // ---- Helpers normalizzazione
   function normalizeMeal(p) {
     const id = p.idmeals ?? p.idMeal ?? p.id ?? p._id;
     const nome = p.nome ?? p.strMeal ?? p.name ?? "Senza nome";
     const prezzoNum = Number(p.prezzo ?? p.price ?? 0);
-    return { id, nome, prezzo: isNaN(prezzoNum) ? 0 : prezzoNum };
+    return { id: id != null ? String(id) : null, nome, prezzo: isNaN(prezzoNum) ? 0 : prezzoNum };
   }
 
-  // Carica piatti per visualizzare i nomi
+  // Estrae {id, qty} da elementi vari dell'ordine (string/number/oggetto)
+  function extractOrderItems(raw) {
+    const arr = Array.isArray(raw) ? raw : [];
+    return arr.map(x => {
+      if (typeof x === "string" || typeof x === "number") {
+        return { id: String(x), qty: 1 };
+      }
+      if (x && typeof x === "object") {
+        const id = x.mealId ?? x.idmeals ?? x.idMeal ?? x.id ?? x._id;
+        const qty = Number(x.qty ?? x.quantity ?? 1);
+        return { id: id != null ? String(id) : null, qty: isNaN(qty) ? 1 : Math.max(1, qty) };
+      }
+      return { id: null, qty: 0 };
+    }).filter(it => it.id);
+  }
+
+  // Supporta diversi campi usati in giro per l'ordine
+  const orderItems =
+    extractOrderItems(ordine.meals)        // [id] o [{idmeals, qty}]
+    .concat(extractOrderItems(ordine.items))
+    .concat(extractOrderItems(ordine.cart))
+    .concat(extractOrderItems(ordine.cartItems));
+
+  // Collassa quantità per stesso ID
+  const qtyById = {};
+  for (const it of orderItems) {
+    qtyById[it.id] = (qtyById[it.id] || 0) + it.qty;
+  }
+  const orderIds = new Set(Object.keys(qtyById));
+
+  // ---- Carica piatti e matcha con gli ID dell'ordine
   try {
     const res = await fetch(`${API_BASE}/meals`, { mode: "cors" });
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const data = await res.json();
 
-    // data può essere un array di ristoranti con menu
     const tuttiIPiatti = Array.isArray(data)
       ? data.flatMap(r => Array.isArray(r.menu) ? r.menu : [])
       : [];
 
-    // Normalizza e filtra per gli id nell'ordine
-    const setIds = new Set((ordine.meals || []).map(String));
-    const piattiOrdinati = tuttiIPiatti
-      .map(normalizeMeal)
-      .filter(p => setIds.has(String(p.id)));
+    const normalized = tuttiIPiatti.map(normalizeMeal).filter(m => m.id);
+
+    const piattiOrdinati = normalized.filter(m => orderIds.has(m.id));
 
     if (piattiOrdinati.length === 0) {
       listaPiatti.innerHTML = "<li>Nessun piatto trovato.</li>";
     } else {
-      listaPiatti.innerHTML = piattiOrdinati
-        .map(p => `<li><strong>${p.nome}</strong> - €${p.prezzo.toFixed(2)}</li>`)
-        .join("");
+      let totale = 0;
+      listaPiatti.innerHTML = piattiOrdinati.map(p => {
+        const q = qtyById[p.id] || 1;
+        const subtot = p.prezzo * q;
+        totale += subtot;
+        return `<li><strong>${p.nome}</strong> × ${q} — €${subtot.toFixed(2)}</li>`;
+      }).join("");
+
+      // Riga totale
+      const totLi = document.createElement("li");
+      totLi.style.marginTop = "8px";
+      totLi.innerHTML = `<strong>Totale:</strong> €${totale.toFixed(2)}`;
+      listaPiatti.appendChild(totLi);
     }
   } catch (err) {
     console.error("Errore nel caricamento dei piatti:", err);
     listaPiatti.innerHTML = "<li class='err'>Errore nel caricamento dei piatti.</li>";
   }
 
-  // Timer di attesa se ritiro al ristorante (asporto)
+  // ---- Timer di attesa per asporto
   if (ordine.delivery === "asporto") {
     try {
       const res = await fetch(`${API_BASE}/orders`, { mode: "cors" });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const tuttiGliOrdini = await res.json();
 
-      // Stati supportati: "ordinato", "preparazione"
       const ordiniInAttesa = (Array.isArray(tuttiGliOrdini) ? tuttiGliOrdini : []).filter(o =>
         o.delivery === "asporto" && (o.status === "ordinato" || o.status === "preparazione")
       );
 
-      // Stima: 5 minuti per ordine in coda
       const minutiAttesa = ordiniInAttesa.length * 5;
       let secondiRimanenti = Math.max(0, minutiAttesa * 60);
 
@@ -108,7 +143,7 @@ window.onload = async () => {
         const m = Math.floor(s / 60);
         const sec = s % 60;
         return `${m}m ${sec.toString().padStart(2, "0")}s`;
-        };
+      };
 
       const aggiornaTimer = () => {
         if (secondiRimanenti > 0) {
@@ -122,14 +157,13 @@ window.onload = async () => {
         }
       };
 
-      aggiornaTimer();                 // avvio immediato
-      const timer = setInterval(aggiornaTimer, 1000); // ogni secondo
+      aggiornaTimer();
+      const timer = setInterval(aggiornaTimer, 1000);
     } catch (err) {
       console.error("Errore nel calcolo tempo attesa:", err);
       attesaDiv.innerHTML = "<p class='err'>Errore nel calcolo del tempo di attesa.</p>";
     }
   } else {
-    // Se non è asporto, nascondo box tempo
     attesaDiv.style.display = "none";
   }
 };
