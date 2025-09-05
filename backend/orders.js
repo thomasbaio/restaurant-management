@@ -161,6 +161,15 @@ function normalizeBody(b) {
   return body;
 }
 
+// >>> NEW: normalizza i vari sinonimi del metodo di pagamento
+function normalizePaymentMethod(m) {
+  const s = String(m || "carta").toLowerCase().replace(/\s+/g, "_").replace(/-/g, "_");
+  if (["carta", "card", "credit_card", "carta_credito", "carta_di_credito"].includes(s)) return "carta";
+  if (["contanti", "cash"].includes(s)) return "contanti";
+  if (["online", "paypal", "stripe"].includes(s)) return "online";
+  return "carta";
+}
+
 function validateForCreate(payload) {
   const errors = [];
   if (!payload.username) errors.push("username mancante");
@@ -187,6 +196,16 @@ router.post("/", async (req, res) => {
     if (!raw.userId) raw.userId = inferUserIdFromUsername(raw.username);
     if (!raw.restaurantId) raw.restaurantId = inferRestaurantIdFromMeals(meals);
 
+    // >>> NEW: normalizzazione pagamento
+    const rawPayment = raw.payment;
+    const methodIn = typeof rawPayment === "object" ? rawPayment.method : rawPayment;
+    const method = normalizePaymentMethod(methodIn);
+    const payment = {
+      method,
+      paid: typeof rawPayment === "object" ? Boolean(rawPayment.paid) : false,
+      transactionId: typeof rawPayment === "object" ? rawPayment.transactionId : undefined
+    };
+
     const payload = {
       id: await nextOrderId(),
       username: raw.username,
@@ -198,7 +217,7 @@ router.post("/", async (req, res) => {
       total: computeTotal(items),
       // stato + pagamento
       status: raw.status,
-      payment: typeof raw.payment === "object" ? raw.payment : { method: String(raw.payment || "carta") },
+      payment,
       // delivery/fulfillment + address
       delivery: raw.delivery || "asporto",
       fulfillment: raw.fulfillment || (raw.delivery === "domicilio" ? "consegna" : "ritiro"),
@@ -268,4 +287,5 @@ router.put("/:id", async (req, res) => {
 });
 
 module.exports = router;
+
 
