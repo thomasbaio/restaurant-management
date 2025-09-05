@@ -4,16 +4,41 @@
   <meta charset="UTF-8">
   <title>Gestione Menu</title>
   <link rel="stylesheet" href="css/style.css">
+  <!-- Stili minimi per header/logo e footer (puoi spostarli in style.css) -->
+  <style>
+    header.site-header { text-align:center; padding:16px 8px; }
+    header.site-header img.logo { max-height:80px; display:block; margin:0 auto 8px; }
+    header.site-header h1 { margin:0; font-size:1.8rem; }
+    .link-bar { display:flex; gap:16px; flex-wrap:wrap; align-items:center; }
+    .link-bar p { margin:0; }
+    footer.tech-footer {
+      margin-top: 40px; padding: 14px 10px; text-align: center;
+      background: #f5f5f5; border-top: 1px solid #ddd;
+    }
+    footer.tech-footer .stack { display:inline-flex; gap:14px; align-items:center; }
+    footer.tech-footer img.tech-logo { height:34px; vertical-align:middle; }
+    /* tabella leggibile */
+    table { width: 100%; border-collapse: collapse; }
+    thead th { background:#fafafa; }
+    td, th { padding:8px; }
+  </style>
 </head>
 <body>
-  <h1>Menu del Ristorante</h1>
+
+  <!-- ✅ Header con logo -->
+  <header class="site-header">
+    <img src="images/logo.png" alt="Logo Ristorante" class="logo">
+    <h1>Menu del Ristorante</h1>
+  </header>
 
   <div id="welcome" style="margin-bottom: 10px; font-weight: bold;"></div>
 
+  <!-- Barra link dinamici (login, profilo, ecc.) -->
   <div id="links" style="margin-bottom: 20px;"></div>
 
-  <div id="links" class="link-bar">
-  <p><a href="ricerca_piatti.html">🔍 Ricerca Piatti</a></p>
+  <!-- Barra link secondaria (ricerche, ordini, statistiche) -->
+  <div id="nav-links" class="link-bar" style="margin-bottom: 20px;">
+    <p><a href="ricerca_piatti.html">🔍 Ricerca Piatti</a></p>
     <p><a href="ricerca_ristoranti.html">📍 Ricerca Ristoranti</a></p>
     <p id="link-order" style="display:none;"><a href="order.html">🛒 Ordina qui</a></p>
     <p id="link-ordini-ristoratore" style="display:none;"><a href="ordini_ristoratore.html">📋 Ordini ricevuti</a></p>
@@ -47,6 +72,16 @@
       </tbody>
     </table>
   </div>
+
+  <!-- ✅ Footer con loghi tecnologia -->
+  <footer class="tech-footer">
+    <p style="margin:0 0 8px;">Powered by</p>
+    <div class="stack">
+      <img src="images/express.png" alt="Express" class="tech-logo">
+      <img src="images/mongodb.png" alt="MongoDB" class="tech-logo">
+      <img src="images/nodejs.png" alt="Node.js" class="tech-logo">
+    </div>
+  </footer>
 
   <script src="js/main.js" defer></script>
   <script>
@@ -85,3 +120,4 @@
   </script>
 </body>
 </html>
+
