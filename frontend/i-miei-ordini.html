@@ -4,6 +4,18 @@
   <meta charset="UTF-8">
   <title>I miei ordini</title>
   <link rel="stylesheet" href="css/style.css">
+  <style>
+    .ordine-box { border:1px solid #ddd; border-radius:10px; padding:12px; margin:10px 0; }
+    .badge { display:inline-block; padding:2px 8px; border-radius:999px; font-size:.85rem; }
+    .badge.ordinato{ background:#eef; }
+    .badge.preparazione{ background:#ffe9b3; }
+    .badge.consegna{ background:#d6f5ff; }
+    .badge.consegnato{ background:#d9f7be; }
+    .badge.ritirato{ background:#c7f9cc; }
+    .badge.annullato{ background:#ffd6d6; }
+    .azioni button{ margin-right:8px; }
+    .muted { color:#666; }
+  </style>
 </head>
 <body>
   <h1>📦 I miei ordini</h1>
@@ -35,6 +47,8 @@
   function mealPrice(p){ const n=Number(p?.prezzo ?? p?.price ?? 0); return Number.isFinite(n)?n:0; }
   function mealId(p){ return p?.idmeals ?? p?.idMeal ?? p?.id ?? p?._id; }
   function orderId(o){ return o?.id ?? o?._id ?? ""; }
+  function fmtMoney(n){ return `€${Number(n||0).toFixed(2)}`; }
+  function fmtDate(iso){ try{ return new Date(iso).toLocaleString(); }catch{ return ""; } }
 
   // ➕ Helper: riconosciamo i tipi di ritiro
   function isPickupType(delivery) {
@@ -46,6 +60,11 @@
   function isClosedStatus(status) {
     const s = String(status || "").toLowerCase();
     return ["consegnato","annullato","ritirato"].includes(s);
+  }
+
+  function statusBadgeClass(s){
+    const k = String(s||"").toLowerCase();
+    return `badge ${k}`;
   }
 
   window.onload = async () => {
@@ -90,7 +109,7 @@
         const piattiOrdinati = (ordine?.meals ?? []).map(id => {
           const p = tuttiIPiatti.find(m => String(mealId(m)) == String(id));
           return p
-            ? `${mealName(p)} (€${mealPrice(p).toFixed(2)})`
+            ? `${mealName(p)} (${fmtMoney(mealPrice(p))})`
             : `Piatto ID ${id}`;
         }).join(", ");
 
@@ -99,15 +118,27 @@
         const consegna = ordine?.delivery ?? "-";
 
         div.innerHTML = `
-          <p><strong>ID:</strong> ${idOrd}</p>
+          <p><strong>ID:</strong> ${idOrd || "<span class='muted'>(non disponibile)</span>"}</p>
+          <p><strong>Creato:</strong> ${ordine?.createdAt ? fmtDate(ordine.createdAt) : "<span class='muted'>n/d</span>"} </p>
           <p><strong>Consegna:</strong> ${consegna}</p>
-          <p><strong>Stato:</strong> <span class="stato">${stato}</span></p>
+          <p><strong>Stato:</strong> <span class="${statusBadgeClass(stato)} stato">${stato}</span></p>
           <p><strong>Piatti:</strong> ${piattiOrdinati || "-"}</p>
+          <p><strong>Totale:</strong> ${fmtMoney(ordine?.total)}</p>
           ${String(consegna).toLowerCase()==="domicilio" ? `<p><strong>Indirizzo:</strong> ${ordine?.address ?? "-"}</p>` : ""}
           <div class="azioni"></div>
         `;
 
         const azioniDiv = div.querySelector(".azioni");
+
+        // Evita pulsanti se non ho un id valido
+        if (!idOrd) {
+          const warn = document.createElement("p");
+          warn.className = "muted";
+          warn.textContent = "Impossibile aggiornare lo stato: ID ordine mancante.";
+          azioniDiv.appendChild(warn);
+          container.appendChild(div);
+          return;
+        }
 
         // ✅ Caso consegna a domicilio: conferma "Consegnato"
         if (!isClosedStatus(stato) && String(consegna).toLowerCase() === "domicilio") {
@@ -122,8 +153,12 @@
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({ status: "consegnato" })
               });
-              if (!putRes.ok) throw new Error(`PUT HTTP ${putRes.status}`);
+              if (!putRes.ok) {
+                const detail = await putRes.json().catch(() => ({}));
+                throw new Error(`PUT HTTP ${putRes.status} ${detail?.error||""}`);
+              }
               div.querySelector(".stato").textContent = "consegnato";
+              div.querySelector(".stato").className = statusBadgeClass("consegnato")+" stato";
               btn.disabled = true;
               btn.textContent = "Consegnato ✅";
             } catch (err) {
@@ -142,31 +177,35 @@
             const ok = confirm("Confermi di aver ritirato l'ordine al banco?");
             if (!ok) return;
 
-            // Primo tentativo: stato 'ritirato'
             try {
+              // Primo tentativo: 'ritirato'
               let putRes = await fetch(`${API_BASE}/orders/${encodeURIComponent(idOrd)}`, {
                 method: "PUT",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({ status: "ritirato", clienteConfermaRitiro: true })
               });
 
-              // Se il backend non accetta 'ritirato', fallback a 'consegnato'
               if (!putRes.ok) {
-                // 400/422 molto probabili se lo stato non è ammesso
+                // Fallback: 'consegnato'
                 putRes = await fetch(`${API_BASE}/orders/${encodeURIComponent(idOrd)}`, {
                   method: "PUT",
                   headers: { "Content-Type": "application/json" },
                   body: JSON.stringify({ status: "consegnato", clienteConfermaRitiro: true })
                 });
-                if (!putRes.ok) throw new Error(`PUT fallback HTTP ${putRes.status}`);
+                if (!putRes.ok) {
+                  const detail = await putRes.json().catch(() => ({}));
+                  throw new Error(`PUT fallback HTTP ${putRes.status} ${detail?.error||""}`);
+                }
                 div.querySelector(".stato").textContent = "consegnato";
+                div.querySelector(".stato").className = statusBadgeClass("consegnato")+" stato";
                 btnPick.disabled = true;
                 btnPick.textContent = "Ritiro confermato ✅";
                 return;
               }
 
-              // Caso in cui 'ritirato' è supportato
+              // Stato 'ritirato' supportato
               div.querySelector(".stato").textContent = "ritirato";
+              div.querySelector(".stato").className = statusBadgeClass("ritirato")+" stato";
               btnPick.disabled = true;
               btnPick.textContent = "Ritiro confermato ✅";
             } catch (err) {
