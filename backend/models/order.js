@@ -3,10 +3,10 @@ const mongoose = require("mongoose");
 
 const OrderItemSchema = new mongoose.Schema(
   {
-    mealId: { type: String, required: true },    // id piatto (string o _id)
-    name:   { type: String },                    // snapshot nome (opzionale ma consigliato)
+    mealId: { type: String, required: true }, // id piatto (string o _id)
+    name:   { type: String },                 // snapshot nome (opzionale ma consigliato)
     qty:    { type: Number, required: true, min: 1, default: 1 },
-    price:  { type: Number },                    // prezzo unitario snapshot (opzionale)
+    price:  { type: Number },                 // prezzo unitario snapshot (opzionale)
   },
   { _id: false }
 );
@@ -30,21 +30,19 @@ const OrderSchema = new mongoose.Schema(
     // Totale ordine (ricalcolato in pre-save)
     total: { type: Number, default: 0, min: 0 },
 
-    // stato ordine
+    // ---- Stato ordine (➕ 'ritirato') ----
     status: {
       type: String,
-      enum: ["ordinato", "preparazione", "consegna", "consegnato", "annullato"],
+      enum: ["ordinato", "preparazione", "consegna", "consegnato", "ritirato", "annullato"],
       default: "ordinato",
       index: true,
     },
 
     // ---- Fulfillment/Delivery (con mapping) ----
-    // "fulfillment" è il tuo campo; "delivery" è quello che il frontend legge.
     // ritiro  <-> asporto
     // consegna <-> domicilio
     fulfillment: { type: String, enum: ["ritiro", "consegna"], default: "ritiro" },
-
-    delivery: { type: String, enum: ["asporto", "domicilio"], default: "asporto" },
+    delivery:    { type: String, enum: ["asporto", "domicilio"], default: "asporto" },
 
     // Indirizzo: tieni entrambi per compatibilità
     address: { type: String }, // compat frontend
@@ -61,6 +59,12 @@ const OrderSchema = new mongoose.Schema(
       paid: { type: Boolean, default: false },
       transactionId: String,
     },
+
+    // ---- Tracciamento consegna/ritiro (➕) ----
+    deliveredAt: Date,                 // quando è stato segnato "consegnato"
+    ritiratoAt: Date,                  // quando è stato segnato "ritirato"
+    ritiroConfermato: { type: Boolean, default: false },       // conferma ritiro lato backend
+    clienteConfermaRitiro: { type: Boolean, default: false },  // flag inviato dal client
   },
   { timestamps: true }
 );
@@ -111,6 +115,14 @@ OrderSchema.pre("save", function(next) {
     const a = this.deliveryAddress;
     const parts = [a?.via, a?.citta, a?.cap].filter(Boolean);
     if (parts.length) this.address = parts.join(", ");
+  }
+
+  // Se lo stato è cambiato, aggiorno i timestamp coerenti
+  if (this.isModified("status")) {
+    const s = String(this.status || "");
+    if (s === "consegnato" && !this.deliveredAt) this.deliveredAt = new Date();
+    if (s === "ritirato"   && !this.ritiratoAt)  this.ritiratoAt  = new Date();
+    if (s === "ritirato") this.ritiroConfermato = true;
   }
 
   next();

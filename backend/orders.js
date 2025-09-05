@@ -9,14 +9,16 @@ const Order = require("./models/order");
 const USERS_FILE = path.join(__dirname, "users.json");
 const MEALS_FILE = path.join(__dirname, "meals1.json");
 
-// === Stati e transizioni
-const VALID_STATES = ["ordinato", "preparazione", "consegna", "consegnato", "annullato"];
+// === Stati e transizioni (➕ 'ritirato')
+const VALID_STATES = ["ordinato", "preparazione", "consegna", "consegnato", "ritirato", "annullato"];
+
 const NEXT_ALLOWED = {
-  ordinato: ["preparazione", "annullato"],
-  preparazione: ["consegna", "annullato"],
-  consegna: ["consegnato"],
-  consegnato: [],
-  annullato: []
+  ordinato:     ["preparazione", "annullato"],
+  preparazione: ["consegna", "ritirato", "annullato"], // pickup può andare diretto a "ritirato"
+  consegna:     ["consegnato", "ritirato"],             // ritiro in negozio consegnato a mano
+  consegnato:   [],
+  ritirato:     [],
+  annullato:    []
 };
 
 // ---------- Helpers ----------
@@ -161,13 +163,29 @@ function normalizeBody(b) {
   return body;
 }
 
-// >>> NEW: normalizza i vari sinonimi del metodo di pagamento
+// >>> normalizza i vari sinonimi del metodo di pagamento
 function normalizePaymentMethod(m) {
   const s = String(m || "carta").toLowerCase().replace(/\s+/g, "_").replace(/-/g, "_");
   if (["carta", "card", "credit_card", "carta_credito", "carta_di_credito"].includes(s)) return "carta";
   if (["contanti", "cash"].includes(s)) return "contanti";
   if (["online", "paypal", "stripe"].includes(s)) return "online";
   return "carta";
+}
+
+// Cerca ordine sia per id incrementale sia per _id Mongo
+async function findOrderByAnyId(idParam) {
+  // Prova numerico
+  const asNumber = Number(idParam);
+  if (Number.isFinite(asNumber)) {
+    const byNumeric = await Order.findOne({ id: asNumber });
+    if (byNumeric) return byNumeric;
+  }
+  // fallback: _id Mongo
+  try {
+    const byMongo = await Order.findById(idParam);
+    if (byMongo) return byMongo;
+  } catch (_) {}
+  return null;
 }
 
 function validateForCreate(payload) {
@@ -196,7 +214,7 @@ router.post("/", async (req, res) => {
     if (!raw.userId) raw.userId = inferUserIdFromUsername(raw.username);
     if (!raw.restaurantId) raw.restaurantId = inferRestaurantIdFromMeals(meals);
 
-    // >>> NEW: normalizzazione pagamento
+    // normalizzazione pagamento
     const rawPayment = raw.payment;
     const methodIn = typeof rawPayment === "object" ? rawPayment.method : rawPayment;
     const method = normalizePaymentMethod(methodIn);
@@ -256,36 +274,49 @@ router.get("/", async (req, res) => {
   }
 });
 
-// PUT /orders/:id — aggiorna stato con transizioni controllate
+// PUT /orders/:id — aggiorna stato con transizioni controllate (➕ supporto 'ritirato')
 router.put("/:id", async (req, res) => {
   try {
-    const id = Number(req.params.id);
+    const idParam = req.params.id;
     const newStatus = String(req.body?.status || "");
+    const clienteConfermaRitiro = req.body?.clienteConfermaRitiro;
 
     if (!VALID_STATES.includes(newStatus)) {
-      return res.status(400).json({ error: "Stato non valido" });
+      return res.status(400).json({ error: `Stato non valido: ${newStatus}` });
     }
 
-    const order = await Order.findOne({ id });
+    const order = await findOrderByAnyId(idParam);
     if (!order) return res.status(404).json({ error: "Ordine non trovato" });
 
     const allowedNext = NEXT_ALLOWED[order.status] || [];
     if (order.status !== newStatus && !allowedNext.includes(newStatus)) {
-      return res.status(400).json({
+      return res.status(422).json({
         error: `Transizione non valida da "${order.status}" a "${newStatus}"`,
         allowedNext
       });
     }
 
+    // Applica stato
     order.status = newStatus;
+
+    // Flag opzionale inviato dal client (frontend "Ho ritirato l'ordine")
+    if (typeof clienteConfermaRitiro !== "undefined") {
+      order.clienteConfermaRitiro = Boolean(clienteConfermaRitiro);
+    }
+
+    // NB: i timestamp deliveredAt/ritiratoAt verranno settati anche dal pre('save') del model,
+    // ma li impostiamo qui come ulteriore sicurezza in caso lo schema venisse modificato.
+    const s = newStatus.toLowerCase();
+    if (s === "consegnato" && !order.deliveredAt) order.deliveredAt = new Date();
+    if (s === "ritirato"   && !order.ritiratoAt)  order.ritiratoAt  = new Date();
+    if (s === "ritirato") order.ritiroConfermato = true;
+
     await order.save();
     return res.json(order);
   } catch (err) {
     console.error("Errore PUT /orders/:id:", err);
-    return res.status(500).json({ error: "Errore aggiornamento ordine" });
+    return res.status(500).json({ error: "Errore aggiornamento ordine", detail: String(err?.message || err) });
   }
 });
 
 module.exports = router;
-
-
