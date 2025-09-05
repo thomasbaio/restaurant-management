@@ -449,17 +449,49 @@ a[href="index.html"]:hover {
   margin: 0 auto 15px auto;
 }
 
-/* Footer */
-footer {
+/* ===== Footer tech (barra in basso) ===== */
+footer.tech-footer {
+  width: 100%;
   margin-top: 40px;
-  padding: 15px;
+  padding: 16px 12px;
   text-align: center;
-  background-color: ##000000;
-  border-top: 1px solid #ddd;
+
+  /* 👇 colore di sfondo */
+  background: #f5f7fb;           /* cambia qui il colore */
+  border-top: 1px solid #e2e6ef;  /* bordo superiore delicato */
+  box-shadow: inset 0 1px 0 #ffffff80;
 }
 
-.tech-logo {
-  height: 40px;
-  margin: 0 10px;
+footer.tech-footer p {
+  margin: 0 0 8px 0;
+  color: #4a5568;                 /* testo grigio leggibile */
+  font-weight: 500;
+  letter-spacing: .2px;
+}
+
+footer.tech-footer .stack {
+  display: inline-flex;
+  gap: 16px;
+  align-items: center;
+}
+
+footer.tech-footer img.tech-logo {
+  height: 34px;
   vertical-align: middle;
+  opacity: .95;
+  transition: transform .15s ease, opacity .15s ease;
+}
+footer.tech-footer img.tech-logo:hover {
+  transform: translateY(-1px);
+  opacity: 1;
+}
+
+/* (opzionale) tieni il footer staccato dal contenuto quando ci sono tabelle lunghe */
+@media (min-width: 768px) {
+  body {
+    background-color: #fff;
+  }
+  main, #menu-container {
+    background: #fff;
+  }
 }
