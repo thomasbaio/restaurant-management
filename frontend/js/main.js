@@ -146,37 +146,41 @@ window.onload = async () => {
     user = JSON.parse(localStorage.getItem("loggedUser"));
   } catch { /* ignore */ }
 
-  const isRistoratore = user && user.role === "ristoratore";
+  const role = user?.role || null;
+  const isCliente = role === "cliente";
+  const isRistoratore = role === "ristoratore";
 
-  // --- UI rules richieste ---
-
-  // 1) Togli "Ricerca Ristoranti" se l'utente è un ristoratore
+  // === Regole UI richieste ===
+  // A) Solo i CLIENTI possono vedere "Ricerca Ristoranti"
   try {
-    if (isRistoratore) {
-      const linkRR = document.querySelector('a[href="ricerca_ristoranti.html"]');
-      if (linkRR) {
-        const wrapper = linkRR.closest("p") || linkRR; // nasconde il <p> se presente
-        wrapper.style.display = "none";
-      }
+    const linkRR = document.querySelector('a[href="ricerca_ristoranti.html"]');
+    if (linkRR) {
+      const wrapper = linkRR.closest("p") || linkRR;
+      wrapper.style.display = isCliente ? "block" : "none";
     }
   } catch { /* ignore */ }
 
-  // 2) Rimuovi del tutto la sezione "Offerte Speciali"
-  (function hideOfferteSpeciali() {
+  // B) Solo i CLIENTI vedono "Offerte Speciali" (titolo H2 + UL)
+  (function toggleOfferteSpeciali() {
     const ul = document.getElementById("offerte-speciali");
     if (ul) {
-      // svuota e nascondi la lista
-      ul.innerHTML = "";
-      ul.style.display = "none";
-      // nascondi anche il titolo H2 immediatamente precedente, se c'è
       const prev = ul.previousElementSibling;
-      if (prev && prev.tagName === "H2") {
-        prev.style.display = "none";
+      if (isCliente) {
+        ul.style.display = ""; // visibile
+        if (prev && prev.tagName === "H2") prev.style.display = "";
+        // mostro placeholder se vuoto
+        if (!ul.innerHTML.trim()) {
+          ul.innerHTML = "<li>Caricamento...</li>";
+        }
+      } else {
+        ul.innerHTML = "";
+        ul.style.display = "none";
+        if (prev && prev.tagName === "H2") prev.style.display = "none";
       }
     }
   })();
 
-  // Nascondi link "aggiungi" se non ristoratore
+  // Nascondi link "aggiungi" se non ristoratore (compatibilità)
   const linkAdd = document.getElementById("link-add");
   if (linkAdd && !isRistoratore) linkAdd.style.display = "none";
 
@@ -226,7 +230,8 @@ window.onload = async () => {
         piattiDaMostrare = filtered.length ? filtered : allMealsNormalized;
       }
     } else {
-      // cliente: mostra tutto
+      // cliente o utente non loggato: mostra tutto
+      // (le offerte sono già limitate ai soli clienti)
       piattiDaMostrare = allMealsNormalized;
     }
 
@@ -239,18 +244,44 @@ window.onload = async () => {
     // render tabella
     renderTable(piattiDaMostrare, isRistoratore);
 
-    // Filtro ingredienti live (solo per cliente; le offerte speciali sono nascoste)
-    if (user && user.role === "cliente") {
-      const filtroInput = document.getElementById("filtro-ingrediente");
-      if (filtroInput) {
-        filtroInput.addEventListener("input", () => {
-          const testo = filtroInput.value.trim().toLowerCase();
-          const filtrati = (window.__tuttiIPiatti || []).filter(p =>
-            (p.ingredients || []).some(i => String(i).toLowerCase().includes(testo))
-          );
-          renderTable(filtrati, false);
-        });
+    // --- Offerte speciali SOLO per cliente ---
+    if (isCliente) {
+      const preferenza = user?.preferenza;
+      const offerteContainer = document.getElementById("offerte-speciali");
+      if (offerteContainer) {
+        if (!preferenza || preferenza === "") {
+          offerteContainer.innerHTML = "<li>Nessuna preferenza selezionata.</li>";
+        } else {
+          const piattiConsigliati = allMealsNormalized
+            .filter(p => (p.tipologia || "").toLowerCase() === String(preferenza).toLowerCase())
+            .map(p => applyImageFallbackFromMap(p, imgMap));
+
+          if (!piattiConsigliati.length) {
+            offerteContainer.innerHTML = `<li>Nessun piatto trovato per la categoria "${preferenza}".</li>`;
+          } else {
+            offerteContainer.innerHTML = piattiConsigliati.map(p => `
+              <li style="margin-bottom: 10px;">
+                <img src="${pickImageURL(p)}"
+                     alt="Foto" width="80" height="60"
+                     style="vertical-align: middle; margin-right: 10px;">
+                <strong>${p.nome}</strong> - €${formatPrice(p.prezzo)} ${p.tipologia ? `(${p.tipologia})` : ""}
+              </li>
+            `).join("");
+          }
+        }
       }
+    }
+
+    // Filtro ingredienti live: lo lascio attivo per tutti (se vuoi solo clienti, dimmelo)
+    const filtroInput = document.getElementById("filtro-ingrediente");
+    if (filtroInput) {
+      filtroInput.addEventListener("input", () => {
+        const testo = filtroInput.value.trim().toLowerCase();
+        const filtrati = (window.__tuttiIPiatti || []).filter(p =>
+          (p.ingredients || []).some(i => String(i).toLowerCase().includes(testo))
+        );
+        renderTable(filtrati, isRistoratore);
+      });
     }
 
   } catch (err) {
