@@ -1,13 +1,40 @@
+/* Base */
 body {
   font-family: Arial, sans-serif;
-  padding: 20px;
-  background-color: #f5f5f5;
-}
-
-h1, h2 {
+  padding: 30px;
+  background-color: #f7f7f7;
   color: #333;
 }
 
+h1 {
+  color: #28a745;
+  font-size: 2em;
+}
+
+h2 {
+  margin-top: 10px;
+  font-weight: normal;
+}
+
+h3 {
+  margin-top: 25px;
+  color: #555;
+}
+
+a {
+  color: #007BFF;
+  text-decoration: none;
+}
+
+a:hover {
+  text-decoration: underline;
+}
+
+strong {
+  font-weight: bold;
+}
+
+/* Tabelle */
 table {
   width: 100%;
   border-collapse: collapse;
@@ -24,28 +51,20 @@ th {
   background-color: #f0f0f0;
 }
 
-a {
-  color: #007BFF;
-  text-decoration: none;
-}
-
-a:hover {
-  text-decoration: underline;
-}
-
-
+/* Pulsanti (stile più recente: verde) */
 button {
-  margin-top: 15px;
-  padding: 8px 16px;
-  background-color: #007BFF;
+  margin-top: 20px;
+  padding: 10px 18px;
+  background-color: #28a745;
   color: white;
   border: none;
-  border-radius: 4px;
+  font-size: 16px;
+  border-radius: 5px;
   cursor: pointer;
 }
 
 button:hover {
-  background-color: #0056b3;
+  background-color: #218838;
 }
 
 /* 🎯 Offerte Speciali */
@@ -73,7 +92,8 @@ button:hover {
   border-radius: 6px;
   object-fit: cover;
 }
-/* ✅ BOX PIATTI SELEZIONABILI */
+
+/* ✅ Box piatti selezionabili */
 .meal-item {
   background-color: #ffffff;
   border: 1px solid #ddd;
@@ -83,7 +103,7 @@ button:hover {
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
 }
 
-/* ✅ TESTO DEI PIATTI */
+/* ✅ Testo dei piatti */
 .meal-item strong {
   font-size: 16px;
   color: #333;
@@ -99,13 +119,7 @@ button:hover {
   font-size: 13px;
 }
 
-/* ✅ TITOLO & RIEPILOGO */
-h1 {
-  font-size: 24px;
-  color: #222;
-  margin-bottom: 20px;
-}
-
+/* ✅ Riepilogo ordine */
 #total {
   font-size: 18px;
   margin-top: 10px;
@@ -113,21 +127,7 @@ h1 {
   color: #007BFF;
 }
 
-/* ✅ BUTTON PIU MODERNO */
-button {
-  margin-top: 20px;
-  padding: 10px 18px;
-  background-color: #28a745;
-  color: white;
-  border: none;
-  font-size: 16px;
-  border-radius: 5px;
-  cursor: pointer;
-}
-
-button:hover {
-  background-color: #218838;
-}
+/* Form pagamento */
 form#payment-form {
   max-width: 400px;
   background-color: #ffffff;
@@ -168,7 +168,8 @@ form#payment-form button {
 form#payment-form button:hover {
   background-color: #0056b3;
 }
-/* ✅ Conferma Ordine */
+
+/* ✅ Conferma ordine */
 #conferma-container {
   max-width: 600px;
   background-color: #ffffff;
@@ -216,28 +217,8 @@ form#payment-form button:hover {
 #conferma-container a:hover {
   text-decoration: underline;
 }
-body {
-  font-family: Arial, sans-serif;
-  padding: 30px;
-  background-color: #f7f7f7;
-  color: #333;
-}
 
-h1 {
-  color: #28a745;
-  font-size: 2em;
-}
-
-h2 {
-  margin-top: 10px;
-  font-weight: normal;
-}
-
-h3 {
-  margin-top: 25px;
-  color: #555;
-}
-
+/* Box riepilogo e tempi */
 #riepilogo {
   background-color: #ffffff;
   padding: 15px 20px;
@@ -261,6 +242,7 @@ h3 {
   margin: 0;
 }
 
+/* Lista piatti */
 ul#lista-piatti {
   list-style-type: disc;
   padding-left: 20px;
@@ -271,19 +253,7 @@ ul#lista-piatti {
   box-shadow: 0 0 5px rgba(0,0,0,0.04);
 }
 
-a {
-  text-decoration: none;
-  color: #007BFF;
-}
-
-a:hover {
-  text-decoration: underline;
-}
-
-strong {
-  font-weight: bold;
-}
-/* 🎨 Miglioramenti per la Home / Menu */
+/* Home / Menu */
 #welcome, #links {
   background-color: #ffffff;
   padding: 10px 15px;
@@ -293,7 +263,7 @@ strong {
   box-shadow: 0 1px 4px rgba(0, 0, 0, 0.05);
 }
 
-/* 🧭 Contenitore filtro ingredienti */
+/* Filtro ingredienti */
 #filtro-container {
   background-color: #ffffff;
   padding: 15px;
@@ -312,7 +282,7 @@ strong {
   margin-top: 8px;
 }
 
-/* 🧾 Tabella dei piatti */
+/* Tabella menù */
 #menu-container {
   margin-top: 30px;
   background-color: #fff;
@@ -340,11 +310,13 @@ strong {
   border: 1px solid #dee2e6;
 }
 
-/* 🔗 Collegamenti secondari */
+/* Link secondari */
 #links a {
   margin-right: 10px;
   font-weight: bold;
 }
+
+/* Ordini (ristoratore) */
 .ordine-box {
   background-color: #fff;
   padding: 15px;
@@ -370,6 +342,8 @@ strong {
 .ordine-box button:hover {
   background-color: #218838;
 }
+
+/* Link bar */
 .link-bar {
   display: flex;
   flex-wrap: wrap;
@@ -391,6 +365,7 @@ strong {
 .link-bar a:hover {
   background-color: #0056b3;
 }
+
 /* 📊 Box statistiche */
 #statistiche-box {
   background-color: #ffffff;
@@ -442,6 +417,7 @@ a[href="index.html"] {
 a[href="index.html"]:hover {
   text-decoration: underline;
 }
+
 /* Logo principale */
 .logo {
   max-height: 80px;
@@ -449,22 +425,20 @@ a[href="index.html"]:hover {
   margin: 0 auto 15px auto;
 }
 
-/* ===== Footer tech (barra in basso) ===== */
+/* Footer tech */
 footer.tech-footer {
   width: 100%;
   margin-top: 40px;
   padding: 16px 12px;
   text-align: center;
-
-  /* 👇 colore di sfondo */
-  background: #f5f7fb;           /* cambia qui il colore */
-  border-top: 1px solid #e2e6ef;  /* bordo superiore delicato */
+  background: #f5f7fb;
+  border-top: 1px solid #e2e6ef;
   box-shadow: inset 0 1px 0 #ffffff80;
 }
 
 footer.tech-footer p {
   margin: 0 0 8px 0;
-  color: #4a5568;                 /* testo grigio leggibile */
+  color: #4a5568;
   font-weight: 500;
   letter-spacing: .2px;
 }
@@ -481,12 +455,13 @@ footer.tech-footer img.tech-logo {
   opacity: .95;
   transition: transform .15s ease, opacity .15s ease;
 }
+
 footer.tech-footer img.tech-logo:hover {
   transform: translateY(-1px);
   opacity: 1;
 }
 
-/* (opzionale) tieni il footer staccato dal contenuto quando ci sono tabelle lunghe */
+/* Layout desktop: fondo bianco */
 @media (min-width: 768px) {
   body {
     background-color: #fff;
@@ -495,6 +470,7 @@ footer.tech-footer img.tech-logo:hover {
     background: #fff;
   }
 }
+
 /* ===== Vista "Menù per Ristorante" (card) ===== */
 .ristorante-section {
   margin: 24px 0;
@@ -565,3 +541,4 @@ footer.tech-footer img.tech-logo:hover {
 }
 
 .btn-add:hover { background-color: #218838; }
+
