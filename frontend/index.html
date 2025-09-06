@@ -2,33 +2,16 @@
 <html lang="it">
 <head>
   <meta charset="UTF-8">
-  <title>Gestione Menu</title>
+  <title>Homepage</title>
+  <h1>Welcome to Click&food</h1>
   <link rel="stylesheet" href="css/style.css">
-  <!-- Stili minimi per header/logo e footer (puoi spostarli in style.css) -->
-  <style>
-    header.site-header { text-align:center; padding:16px 8px; }
-    header.site-header img.logo { max-height:80px; display:block; margin:0 auto 8px; }
-    header.site-header h1 { margin:0; font-size:1.8rem; }
-    .link-bar { display:flex; gap:16px; flex-wrap:wrap; align-items:center; }
-    .link-bar p { margin:0; }
-    footer.tech-footer {
-      margin-top: 40px; padding: 14px 10px; text-align: center;
-      background: #f5f5f5; border-top: 1px solid #ddd;
-    }
-    footer.tech-footer .stack { display:inline-flex; gap:14px; align-items:center; }
-    footer.tech-footer img.tech-logo { height:34px; vertical-align:middle; }
-    /* tabella leggibile */
-    table { width: 100%; border-collapse: collapse; }
-    thead th { background:#fafafa; }
-    td, th { padding:8px; }
-  </style>
 </head>
 <body>
 
-  <!-- ✅ Header con logo -->
+  <!-- header con logo -->
   <header class="site-header">
     <img src="images/logo.png" alt="Logo Ristorante" class="logo">
-    <h1>Menu del Ristorante</h1>
+    <h2>all the best restaurants just a click away!!!!</h2>
   </header>
 
   <div id="welcome" style="margin-bottom: 10px; font-weight: bold;"></div>
@@ -38,50 +21,32 @@
 
   <!-- Barra link secondaria (ricerche, ordini, statistiche) -->
   <div id="nav-links" class="link-bar" style="margin-bottom: 20px;">
-    <p><a href="ricerca_piatti.html">🔍 Ricerca Piatti</a></p>
-    <p><a href="ricerca_ristoranti.html">📍 Ricerca Ristoranti</a></p>
-    <p id="link-order" style="display:none;"><a href="order.html">🛒 Ordina qui</a></p>
-    <p id="link-ordini-ristoratore" style="display:none;"><a href="ordini_ristoratore.html">📋 Ordini ricevuti</a></p>
-    <p id="link-statistiche" style="display:none;"><a href="statistiche_ristoratore.html">📈 Statistiche</a></p>
+    <p><a href="ricerca_piatti.html">Search for dishes</a></p>
+    <p><a href="ricerca_ristoranti.html">Search restaurants</a></p>
+    <p id="link-order" style="display:none;"><a href="order.html"> Order here</a></p>
+    <p id="link-ordini-ristoratore" style="display:none;"><a href="ordini_ristoratore.html"> Orders received</a></p>
+    <p id="link-statistiche" style="display:none;"><a href="statistiche_ristoratore.html">Statistics</a></p>
   </div>
 
-  <h2>🍽️ Offerte Speciali per Te</h2>
+  <h2> Personalized offers only</h2>
   <ul id="offerte-speciali">
-    <li>Caricamento...</li>
+    <li>loading...</li>
   </ul>
 
   <div id="filtro-container" style="margin-bottom: 20px;">
-    <label for="filtro-ingrediente"><strong>🔍 Filtra per ingrediente:</strong></label>
+    <label for="filtro-ingrediente"><strong>Filter by ingredient:</strong></label>
     <input type="text" id="filtro-ingrediente" placeholder="Es. pomodoro, mozzarella...">
   </div>
 
-  <!-- ✅ NUOVO: Menù raggruppati per ristorante -->
+  
   <section style="margin:24px 0;">
-    <h2 style="margin:0 0 10px;">🏷️ Menù per Ristorante (raggruppato)</h2>
-    <!-- Il main.js popolerà questo contenitore con sezioni "🍽️ Nome Ristorante" -->
+    <h2 style="margin:0 0 10px;">Restaurant menu</h2>
+    <!-- il main.js popolerà questo contenitore con sezioni " nome ristorante" -->
     <div id="menu-per-ristorante"></div>
   </section>
 
-  <!-- Tabella tradizionale (rimane, per compatibilità) -->
- <!-- <div id="menu-container">
-    <table border="1">
-      <thead>
-        <tr>
-          <th>Nome</th>
-          <th>Prezzo</th>
-          <th>Categoria</th>
-          <th>Ingredienti</th>
-          <th>Foto</th>
-          <th>Azioni</th>
-        </tr>
-      </thead>
-      <tbody id="menu-body">
-       Piatti generati dinamicamente 
-      </tbody>
-    </table>
-  </div>   -->
 
-  <!-- ✅ Footer con loghi tecnologia -->
+  <!-- footer con loghi tecnologia -->
   <footer class="tech-footer">
     <p style="margin:0 0 8px;">Powered by</p>
     <div class="stack">
@@ -103,7 +68,7 @@
       const linkStatistiche = document.getElementById("link-statistiche");
 
       if (user) {
-        welcome.textContent = `👋 Benvenuto, ${user.username}`;
+        welcome.textContent = `welcome, ${user.username}`;
 
         if (user.role === "cliente") {
           linkOrder.style.display = "block";
@@ -113,15 +78,15 @@
         }
 
         linkContainer.innerHTML = `
-          ${user.role === "ristoratore" ? '<a href="add.html" id="link-add">➕ Aggiungi Piatto</a> | ' : ''}
-          ${user.role === "cliente" ? '<a href="i-miei-ordini.html">📦 I miei ordini</a> | ' : ''}
-          <a href="edituser.html">✏️ Modifica Profilo</a> |
-          <a href="login.html" onclick="localStorage.removeItem('loggedUser')">🚪 Logout</a>
+          ${user.role === "ristoratore" ? '<a href="add.html" id="link-add"> Add Dish</a> | ' : ''}
+          ${user.role === "cliente" ? '<a href="i-miei-ordini.html"> My orders</a> | ' : ''}
+          <a href="edituser.html"> Edit Profile</a> |
+          <a href="login.html" onclick="localStorage.removeItem('loggedUser')"> Logout</a>
         `;
       } else {
         linkContainer.innerHTML = `
-          <a href="login.html">🔑 Accedi</a> |
-          <a href="register.html">📝 Registrati</a>
+          <a href="login.html"> Accedi</a> |
+          <a href="register.html">Registrati</a>
         `;
       }
     });
