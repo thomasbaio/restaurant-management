@@ -1,61 +1,71 @@
 <!DOCTYPE html>
-<html lang="it">
+<html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>Modifica Profilo</title>
+  <title>Edit profile</title>
   <link rel="stylesheet" href="css/style.css">
 </head>
 <body>
-  <h1>Modifica Profilo Utente</h1>
+  <h1>Edit user profile</h1>
 
   <form id="edit-user-form">
-    <label>Username: <input type="text" id="username" required></label><br><br>
-    <label>Email: <input type="email" id="email" required></label><br><br>
-    <label>Password: <input type="password" id="password" required></label><br><br>
+    <label> Username: <input type="text" id="username" required></label><br><br>
+    <label> Email: <input type="email" id="email" required></label><br><br>
+    <label> Password: <input type="password" id="password" required></label><br><br>
 
-    <label>Ruolo:</label><br>
-    <label><input type="radio" name="role" value="cliente"> Cliente</label><br>
-    <label><input type="radio" name="role" value="ristoratore"> Ristoratore</label><br><br>
+    <label> Role:</label><br>
+    <label><input type="radio" name="role" value="cliente"> Client</label><br>
+    <label><input type="radio" name="role" value="ristoratore"> Restaurant</label><br><br>
 
     <div id="ristoratore-extra" style="display: none;">
-      <label>Partita IVA: <input type="text" id="piva"></label><br><br>
-      <label>Telefono: <input type="text" id="telefono"></label><br><br>
-      <label>Luogo: <input type="text" id="luogo"></label><br><br>
-      <label>Via: <input type="text" id="via"></label><br><br>
+      <label> VAT number: <input type="text" id="piva"></label><br><br>
+      <label> Telephone: <input type="text" id="telefono"></label><br><br>
+      <label> Place: <input type="text" id="luogo"></label><br><br>
+      <label> Street address: <input type="text" id="via"></label><br><br>
     </div>
 
     <div id="cliente-extra" style="display: none;">
-      <label>Nome: <input type="text" id="nome"></label><br><br>
-      <label>Cognome: <input type="text" id="cognome"></label><br><br>
-      <label>Metodo di Pagamento:
+      <label> Name: <input type="text" id="nome"></label><br><br>
+      <label> Surname: <input type="text" id="cognome"></label><br><br>
+      <label> Payment Method:
         <select id="pagamento">
-          <option value="">-- Seleziona --</option>
-          <option value="Visa">Visa</option>
-          <option value="Mastercard">Mastercard</option>
-          <option value="Postepay">Postepay</option>
-          <option value="Amex">Amex</option>
+          <option value=""> -- Select -- </option>
+          <option value="Visa"> Visa </option>
+          <option value="Mastercard"> Mastercard </option>
+          <option value="Postepay"> Postepay </option>
+          <option value="Amex"> Amex </option>
         </select>
       </label><br><br>
-      <label>Preferenza prodotto:
-        <select id="preferenza">
-          <option value="">-- Nessuna --</option>
-          <option value="primi">Primi</option>
-          <option value="secondi">Secondi</option>
-          <option value="Dessert">Dessert</option>
-          <option value="Offerte speciali">offerte speciali</option>
-          <option value="bevande">Bevande</option>
-        </select>
-      </label><br><br>
+
+      <label for="preferenza"> Product preference:</label>
+      <select id="preferenza">
+        <option value="">-- no preferences --</option>
+        <option value="Starter"> Starter </option>
+        <option value="Beef"> Beef </option>
+        <option value="Chicken"> Chicken </option>
+        <option value="Vegetarin"> Vegetarin </option>
+        <option value="Vegan"> Vegan </option>
+        <option value="Lamb"> Lamb </option>
+        <option value="Pasta"> Pasta </option>
+        <option value="Seafood"> Seafood </option>
+        <option value="Goat"> Goat </option>
+        <option value="Pork"> Pork </option>
+        <option value="Miscellaneous"> Miscellaneous </option>
+        <option value="Breakfast"> Breakfast </option>
+        <option value="Side"> Side </option>
+        <option value="dessert"> Dessert </option>
+        <option value="offers of the day"> Offers of the day </option>
+      </select><br><br>
     </div>
 
-    <button type="submit">Salva Modifiche</button>
-    <button type="button" id="delete-btn" style="color: red;">Elimina Profilo</button>
+    <button type="submit">Save changes</button>
+    <button type="button" id="delete-btn" style="color: red;">Delete profile</button>
   </form>
 
-  <p><a href="index.html">Torna alla Home</a></p>
+  <p><a href="index.html">Return to the homepage</a></p>
 
 <script>
-  // ---- Config dinamica API ----
+  // ---- config dinamica API ----
   const isLocal = location.hostname === "localhost" || location.hostname === "127.0.0.1";
   const API_BASE = isLocal
     ? "http://localhost:3000"
@@ -69,11 +79,11 @@
   } catch { storedUser = null; }
 
   if (!storedUser) {
-    alert("Devi essere loggato per modificare il profilo");
+    alert("You must be logged in to edit your profile.");
     window.location.href = "login.html";
   }
 
-  // ——— Risoluzione robusta dell'ID utente ———
+  // ——— risoluzione robusta dell'ID utente ———
   async function resolveUserId() {
     // 1) da query string ?id=
     const fromQuery = params.get("id");
@@ -85,7 +95,7 @@
 
     // 3) lookup sul backend: prova endpoint lista utenti
     try {
-      // Preferisci un endpoint /users?username=... se esiste, altrimenti fallback /users
+      // preferisci un endpoint /users?username=... se esiste, altrimenti fallback /users
       let res = await fetch(`${API_BASE}/users?username=${encodeURIComponent(storedUser.username || "")}`);
       if (!res.ok) {
         // fallback: prendi tutti gli utenti e cerca localmente
@@ -102,12 +112,12 @@
         if (match) return match.id ?? match._id ?? null;
       }
     } catch (e) {
-      console.warn("Lookup ID fallito:", e);
+      console.warn("ID lookup failed:", e);
     }
     return null;
   }
 
-  // ——— Prefill e UI ———
+  // ——— prefill e UI ———
   function showRoleBlocks(role) {
     document.getElementById("ristoratore-extra").style.display = role === "ristoratore" ? "block" : "none";
     document.getElementById("cliente-extra").style.display = role === "cliente" ? "block" : "none";
@@ -120,17 +130,17 @@
   (async function init() {
     const resolvedId = await resolveUserId();
     if (!resolvedId) {
-      alert("Impossibile determinare l'ID utente. Prova a rifare il login.");
-      // Evita loop infinito: non rimandare subito al login se siamo su Render offline
+      alert("Unable to determine your user ID. Try logging in again.");
+      // Evita loop infinito.
       window.location.href = "login.html";
       return;
     }
 
-    // Aggiorna localStorage con l'id risolto (manteniamo il resto invariato)
+    // aggiorna localStorage con l'id risolto.
     storedUser = { ...storedUser, id: resolvedId };
     localStorage.setItem("loggedUser", JSON.stringify(storedUser));
 
-    // Prefill
+    // prefill
     safeSet("username", storedUser.username);
     safeSet("email", storedUser.email);
     safeSet("password", storedUser.password);
@@ -140,31 +150,31 @@
     if (roleInput) roleInput.checked = true;
     showRoleBlocks(role);
 
-    // Ristoratore extra
+    // ristoratore extra
     safeSet("piva", storedUser.piva);
     safeSet("telefono", storedUser.telefono);
     safeSet("luogo", storedUser.luogo);
     safeSet("via", storedUser.via);
 
-    // Cliente extra
+    // cliente extra
     safeSet("nome", storedUser.nome);
     safeSet("cognome", storedUser.cognome);
     safeSet("pagamento", storedUser.pagamento);
     safeSet("preferenza", storedUser.preferenza);
   })();
 
-  // Toggle dinamico ruolo
+  // toggle dinamico ruolo
   document.querySelectorAll('input[name="role"]').forEach(radio => {
     radio.addEventListener("change", function () { showRoleBlocks(this.value); });
   });
 
-  // ——— Submit Modifica ———
+  // ——— submit modifica ———
   document.getElementById("edit-user-form").addEventListener("submit", async function (e) {
     e.preventDefault();
 
     const current = JSON.parse(localStorage.getItem("loggedUser") || "null");
     if (!current || current.id == null) {
-      alert("Sessione scaduta. Effettua di nuovo il login.");
+      alert("Session expired. Please log in again.");
       window.location.href = "login.html";
       return;
     }
@@ -201,15 +211,15 @@
         try { saved = await res.json(); } catch {}
         const finalUser = saved && typeof saved === "object" ? saved : { ...updatedUser, id: current.id };
         localStorage.setItem("loggedUser", JSON.stringify(finalUser));
-        alert("Profilo aggiornato con successo!");
+        alert("Profile updated successfully!");
         window.location.href = "index.html";
       } else {
         const msg = await res.text();
-        alert("Errore durante la modifica del profilo: " + (msg || res.status));
+        alert("Error while editing profile: " + (msg || res.status));
       }
     } catch (err) {
-      console.error("Errore:", err);
-      alert("Errore di rete. Verifica la connessione o l'URL del server.");
+      console.error("Error:", err);
+      alert("Network error. check your connection or server URL.");
     }
   });
 
@@ -217,25 +227,25 @@
   document.getElementById("delete-btn").addEventListener("click", async function () {
     const current = JSON.parse(localStorage.getItem("loggedUser") || "null");
     if (!current || current.id == null) {
-      alert("Sessione scaduta. Effettua di nuovo il login.");
+      alert("Your session has expired. please log in again.");
       window.location.href = "login.html";
       return;
     }
-    if (!confirm("Sei sicuro di voler cancellare il tuo account?")) return;
+    if (!confirm("are you sure you want to delete your account?")) return;
 
     try {
       const res = await fetch(`${API_BASE}/users/${current.id}`, { method: "DELETE" });
       if (res.ok) {
-        alert("Account eliminato");
+        alert("Account deleted.");
         localStorage.removeItem("loggedUser");
         window.location.href = "index.html";
       } else {
         const msg = await res.text();
-        alert("Errore nella cancellazione dell’account: " + (msg || res.status));
+        alert("Error deleting account: " + (msg || res.status));
       }
     } catch (err) {
-      console.error("Errore:", err);
-      alert("Errore di rete. Verifica la connessione o l'URL del server.");
+      console.error("Error:", err);
+      alert("Network error. check your connection or server URL.");
     }
   });
 </script>

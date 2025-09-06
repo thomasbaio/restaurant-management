@@ -1,84 +1,84 @@
 <!DOCTYPE html>
-<html lang="it">
+<html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>User Registration</title>
+  <title> User Registration </title>
   <link rel="stylesheet" href="css/style.css">
 </head>
 <body>
-  <h1>Registration to click&Food the best you can do!!!!!!!!</h1>
+  <h1> Register to Click&Food the best choice you can make! </h1>
 
   <form id="register-form">
-    <label for="username">Username:</label>
+    <label for="username"> Username: </label>
     <input type="text" id="username" required><br><br>
 
-    <label for="email">Email:</label>
+    <label for="email"> Email: </label>
     <input type="email" id="email" required><br><br>
 
-    <label for="password">Password:</label>
+    <label for="password"> Password: </label>
     <input type="password" id="password" required><br><br>
 
-    <label for="role">Role:</label>
+    <label for="role"> Role: </label>
     <select id="role" required>
-      <option value="cliente">Client</option>
-      <option value="ristoratore">Resturant</option>
+      <option value="cliente"> Customer </option>
+      <option value="ristoratore"> Restaurant </option>
     </select><br><br>
-<div id="cliente-extra" style="display:none;">
-  <label for="nome">Name:</label>
-  <input type="text" id="nome"><br><br>
 
-  <label for="cognome"> Surname:</label>
-  <input type="text" id="cognome"><br><br>
+    <div id="cliente-extra" style="display:none;">
+      <label for="nome"> First Name: </label>
+      <input type="text" id="nome"><br><br>
 
-  <label for="pagamento" :>Payment method </label>
-  <select id="pagamento">
-    <option value="">-- Select --</option>
-    <option value="Visa">Visa</option>
-    <option value="Mastercard">Mastercard</option>
-    <option value="Postepay">Postepay</option>
-    <option value="Amex">American Express</option>
-  </select><br><br>
+      <label for="cognome"> Last Name: </label>
+      <input type="text" id="cognome"><br><br>
 
-  <label for="preferenza">Product preference:</label>
-  <select id="preferenza">
-    <option value="">-- no preferences --</option>
-    <option value="Starter">Starter</option>
-    <option value="Beef">Beef</option>
-    <option value="Chicken">Chicken</option>
-    <option value="Vegetarin">Vegetarin</option>
-    <option value="Vegan">Vegan</option>
-    <option value="Lamb">Lamb</option>
-    <option value="Pasta">Pasta</option>
-    <option value="Seafood">Seafood</option>
-    <option value="Goat">Goat</option>
-    <option value="Pork">Pork</option>
-    <option value="Vegan">Vegan</option>
-    <option value="Miscellaneous">Miscellaneous</option>
-    <option value="Breakfast">Breakfast</option>
-    <option value="Side">Side</option>
-    <option value="dessert">Dessert</option>
-    <option value="offers of the day">Offers of the day</option>
-  </select><br><br>
-</div>
+      <label for="pagamento"> Payment method: </label>
+      <select id="pagamento">
+        <option value=""> -- Select -- </option>
+        <option value="Visa"> Visa </option>
+        <option value="Mastercard"> Mastercard </option>
+        <option value="Postepay"> Postepay </option>
+        <option value="Amex"> American express </option>
+      </select><br><br>
+
+      <label for="preferenza"> Product preference: </label>
+      <select id="preferenza">
+        <option value=""> -- No preference -- </option>
+        <option value="Starter"> Starter </option>
+        <option value="Beef"> Beef </option>
+        <option value="Chicken"> Chicken </option>
+        <option value="Vegetarian"> Vegetarian </option>
+        <option value="Vegan"> Vegan </option>
+        <option value="Lamb"> Lamb </option>
+        <option value="Pasta"> Pasta </option>
+        <option value="Seafood"> Seafood </option>
+        <option value="Goat"> Goat </option>
+        <option value="Pork"> Pork </option>
+        <option value="Miscellaneous"> Miscellaneous </option>
+        <option value="Breakfast"> Breakfast </option>
+        <option value="Side"> Side </option>
+        <option value="Dessert"> Dessert </option>
+        <option value="Offers of the day"> Offers of the day </option>
+      </select><br><br>
+    </div>
+
     <div id="ristoratore-extra" style="display:none;">
-      <label for="piva">VAT number:</label>
+      <label for="piva"> VAT number: </label>
       <input type="text" id="piva"><br><br>
 
-      <label for="telefono">telephone:</label>
+      <label for="telefono"> Phone number: </label>
       <input type="text" id="telefono"><br><br>
 
-      <label for="luogo">Place:</label>
+      <label for="luogo"> City: </label>
       <input type="text" id="luogo"><br><br>
 
-      <label for="via">street address:</label>
+      <label for="via"> Street address: </label>
       <input type="text" id="via"><br><br>
     </div>
 
-    <button type="submit">register</button>
-    <button type="button" onclick="window.location.href='login.html'">Vai al Login</button>
+    <button type="submit"> Register </button>
+    <button type="button" onclick="window.location.href='login.html'"> Go to login </button>
   </form>
 
   <script src="js/register.js"></script>
-
 </body>
 </html>

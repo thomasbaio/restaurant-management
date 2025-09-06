@@ -1,4 +1,3 @@
-// login.js — auto switch tra localhost e Render
 const API_BASE =
   (location.hostname === 'localhost' || location.hostname === '127.0.0.1')
     ? 'http://localhost:3000'
@@ -21,22 +20,23 @@ document.getElementById("login-form").addEventListener("submit", async function 
 
     const text = await res.text();
     if (!res.ok) {
-      throw new Error(`HTTP ${res.status} - ${text || 'Errore durante il login'}`);
+      throw new Error(`HTTP ${res.status} - ${text || 'Login error'}`);
     }
 
     let data;
     try { data = JSON.parse(text); } catch { data = {}; }
 
-    // Salvo utente per il frontend (username, role, restaurantId, ecc.)
+    // Sslvo utente per il frontend (username, role, restaurantId, ecc.)
     localStorage.setItem("loggedUser", JSON.stringify(data));
 
-    alert("Login effettuato con successo!");
+    alert("Login successful!");
     window.location.href = "index.html";
   } catch (err) {
-    console.error("Errore nella richiesta:", err);
+    console.error("Request error:", err);
     const msg = /Failed to fetch|NetworkError|CORS/i.test(String(err))
-      ? "Impossibile contattare il server (controlla che l'URL non sia localhost e che CORS sia attivo)."
+      ? "Unable to contact the server (check that the URL isn't localhost and that CORS is enabled)."
       : err.message;
     alert(msg);
   }
 });
+

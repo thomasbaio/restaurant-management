@@ -4,18 +4,18 @@ const router = express.Router();
 
 const DATA_FILE = "./restaurants.json";
 
-// 🧠 Lettura dati ristoranti
+// lettura dati ristoranti
 function readData() {
   if (!fs.existsSync(DATA_FILE)) return [];
   return JSON.parse(fs.readFileSync(DATA_FILE));
 }
 
-// 💾 Scrittura dati ristoranti
+// scrittura dati ristoranti
 function writeData(data) {
   fs.writeFileSync(DATA_FILE, JSON.stringify(data, null, 2));
 }
 
-// 📥 Crea nuovo ristorante
+// crea nuovo ristorante
 router.post("/", (req, res) => {
   const data = readData();
   const newRisto = req.body;
@@ -29,23 +29,23 @@ router.post("/", (req, res) => {
   res.status(201).json(newRisto);
 });
 
-// 📤 Ottieni ristorante per ID
+// ottieni ristorante per ID
 router.get("/:id", (req, res) => {
   const id = parseInt(req.params.id);
   const data = readData();
   const found = data.find(r => r.restaurantId === id);
 
-  if (!found) return res.status(404).send("Ristorante non trovato");
+  if (!found) return res.status(404).send("Restaurant not found");
   res.json(found);
 });
 
-// ✏️ Modifica ristorante
+// modifica ristorante
 router.put("/:id", (req, res) => {
   const id = parseInt(req.params.id);
   const data = readData();
 
   const index = data.findIndex(r => r.restaurantId === id);
-  if (index === -1) return res.status(404).send("Ristorante non trovato");
+  if (index === -1) return res.status(404).send("Restaurant not found");
 
   data[index] = { ...data[index], ...req.body, restaurantId: id };
   writeData(data);
@@ -53,13 +53,13 @@ router.put("/:id", (req, res) => {
   res.json(data[index]);
 });
 
-// ❌ Elimina ristorante (facoltativo)
+// elimina ristorante (facoltativo)
 router.delete("/:id", (req, res) => {
   const id = parseInt(req.params.id);
   let data = readData();
 
   const index = data.findIndex(r => r.restaurantId === id);
-  if (index === -1) return res.status(404).send("Ristorante non trovato");
+  if (index === -1) return res.status(404).send("Restaurant not found");
 
   data.splice(index, 1);
   writeData(data);
@@ -68,4 +68,3 @@ router.delete("/:id", (req, res) => {
 });
 
 module.exports = router;
-

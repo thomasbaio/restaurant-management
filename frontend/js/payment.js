@@ -1,13 +1,13 @@
-// ====== CONFIG API BASE ======
+// ====== Configurazione api base ======
 const isLocalhost = ["localhost", "127.0.0.1"].includes(location.hostname);
 const API_BASE = isLocalhost
   ? "http://localhost:3000"
   : "https://restaurant-management-wzhj.onrender.com"; // tua app su Render
 
-// ====== UTIL ======
+// ====== utili ======
 function parseExpiryToDate(expStr) {
-  // Supporta <input type="month"> (YYYY-MM) o stringhe tipo 2025-09
-  // Mette il giorno al 1° del mese per il confronto
+  // supporta <input type="month"> (YYYY-MM) o stringhe tipo 2025-09
+  // mette il giorno al 1° del mese per il confronto
   const [y, m] = (expStr || "").split("-").map(Number);
   if (!y || !m) return null;
   return new Date(y, m - 1, 1, 23, 59, 59);
@@ -26,7 +26,7 @@ function calcTotal(items) {
   return items.reduce((s, it) => s + (Number(it.price) || 0) * (Number(it.qty) || 1), 0);
 }
 
-// ====== HANDLER ======
+
 document.getElementById("payment-form").addEventListener("submit", async function (e) {
   e.preventDefault();
 
@@ -35,48 +35,48 @@ document.getElementById("payment-form").addEventListener("submit", async functio
   const expiry = document.getElementById("expiry").value;
   const cvv = document.getElementById("cvv").value.trim();
 
-  // --- Validazioni carta ---
+  // --- validazioni carta ---
   if (!/^\d{16}$/.test(number)) {
-    alert("Numero carta non valido (16 cifre).");
+    alert("Invalid card number (16 digits).");
     return;
   }
   if (!holder) {
-    alert("Inserisci l'intestatario della carta.");
+    alert("Please enter the cardholder name.");
     return;
   }
   const expDate = parseExpiryToDate(expiry);
   if (!expDate) {
-    alert("Data di scadenza non valida.");
+    alert("Invalid expiration date.");
     return;
   }
   const now = new Date();
   // la carta è valida se scade nel mese corrente o dopo
   if (expDate < new Date(now.getFullYear(), now.getMonth(), 1)) {
-    alert("La carta è scaduta.");
+    alert("The card has expired.");
     return;
   }
   if (!/^\d{3}$/.test(cvv)) {
-    alert("CVV non valido (3 cifre).");
+    alert("Invalid CVV (3 digits).");
     return;
   }
 
-  // --- Ordine in sospeso ---
+  // --- ordine in sospeso ---
   const ordine = JSON.parse(localStorage.getItem("pendingOrder"));
   if (!ordine) {
-    alert("Nessun ordine in sospeso da pagare.");
+    alert("No pending order to pay.");
     return;
   }
 
-  // --- Utente loggato (serve username per /orders) ---
+  // --- utente loggato (serve username per /orders) ---
   const user = JSON.parse(localStorage.getItem("loggedUser")) || {};
   const username = user?.username || ordine?.username;
   if (!username) {
-    alert("Impossibile determinare l'utente dell'ordine (username mancante).");
+    alert("Unable to determine the order's user (missing username).");
     return;
   }
 
-  // --- Normalizzazione payload atteso dal backend ---
-  // Supporta sia pendingOrder.meals (array di id) sia pendingOrder.items (oggetti con id/price/qty)
+  // --- normalizzazione payload atteso dal backend ---
+  // supporta sia pendingOrder.meals (array di id) sia pendingOrder.items (oggetti con id/price/qty)
   let meals = [];
   let total = 0;
 
@@ -93,7 +93,7 @@ document.getElementById("payment-form").addEventListener("submit", async functio
   }
 
   if (!meals || meals.length === 0) {
-    alert("L'ordine non contiene piatti (meals è vuoto).");
+    alert("The order has no dishes (meals is empty).");
     return;
   }
 
@@ -113,7 +113,7 @@ document.getElementById("payment-form").addEventListener("submit", async functio
       body: JSON.stringify(payload)
     });
 
-    // Se il server risponde con errore, mostro status + body per debug
+    // se il server risponde con errore, mostro status + body per debug
     if (!res.ok) {
       let text = await res.text();
       try {
@@ -121,7 +121,7 @@ document.getElementById("payment-form").addEventListener("submit", async functio
         text = JSON.stringify(asJson);
       } catch { /* lascio text così com'è */ }
       console.error("POST /orders failed", res.status, text);
-      alert(`Errore creazione ordine (HTTP ${res.status}). Dettagli in console.`);
+      alert(`Order creation error (HTTP ${res.status}). See console for details.`);
       throw new Error(text || `HTTP ${res.status}`);
     }
 
@@ -130,10 +130,10 @@ document.getElementById("payment-form").addEventListener("submit", async functio
     localStorage.setItem("lastConfirmedOrder", JSON.stringify(ordineConfermato));
     localStorage.removeItem("pendingOrder");
 
-    alert("✅ Pagamento effettuato con successo!");
+    alert(" Payment successful!");
     window.location.href = "conferma.html";
   } catch (err) {
-    console.error("Errore durante l'invio dell'ordine:", err);
-    alert("❌ Errore nel completare il pagamento. Controlla la console per i dettagli.");
+    console.error("Error during order submission:", err);
+    alert(" Error completing payment. Check the console for details.");
   }
 });

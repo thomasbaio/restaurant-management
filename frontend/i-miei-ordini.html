@@ -1,31 +1,20 @@
 <!DOCTYPE html>
-<html lang="it">
+<html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>I miei ordini</title>
+  <title> My orders </title>
   <link rel="stylesheet" href="css/style.css">
-  <style>
-    .ordine-box { border:1px solid #ddd; border-radius:10px; padding:12px; margin:10px 0; }
-    .badge { display:inline-block; padding:2px 8px; border-radius:999px; font-size:.85rem; }
-    .badge.ordinato{ background:#eef; }
-    .badge.preparazione{ background:#ffe9b3; }
-    .badge.ritirato{ background:#c7f9cc; }
-    .badge.annullato{ background:#ffd6d6; }
-    .azioni button{ margin-right:8px; }
-    .muted { color:#666; }
-    .success { background:#e8ffe8; border:1px solid #b6e3b6; padding:8px 10px; border-radius:8px; }
-  </style>
 </head>
 <body>
-  <h1>📦 I miei ordini</h1>
+  <h1> My orders </h1>
 
   <div id="noti"></div>
   <div id="ordini-container">
-    <p>Caricamento in corso...</p>
+    <p> Loading... </p>
   </div>
 
-  <p><a href="index.html">⬅️ Torna alla home</a></p>
-  <p><a href="storico_clienti.html">vecchi ordini</a></p>
+  <p><a href="index.html"> Return to the homepage </a></p>
+  <p><a href="storico_clienti.html"> Order history </a></p>
 
   <script src="js/main.js" defer></script>
 
@@ -34,22 +23,24 @@
     (function () {
       if (!window.API_BASE) {
         const isLocal = ["localhost","127.0.0.1"].includes(location.hostname);
-        window.API_BASE = isLocal ? "http://localhost:3000" : (location.origin || "https://restaurant-management-wzhj.onrender.com");
+        window.API_BASE = isLocal
+          ? "http://localhost:3000"
+          : (location.origin || "https://restaurant-management-wzhj.onrender.com");
       }
     })();
   </script>
 
   <script>
-  // ---- Helpers ----
-  const mealName  = p => p?.nome ?? p?.strMeal ?? p?.name ?? "Piatto";
+  // ---- helpers ----
+  const mealName  = p => p?.nome ?? p?.strMeal ?? p?.name ?? "Dish";
   const mealPrice = p => Number(p?.prezzo ?? p?.price ?? 0) || 0;
   const mealId    = p => p?.idmeals ?? p?.idMeal ?? p?.id ?? p?._id;
   const orderId   = o => o?.id ?? o?._id ?? "";
   const fmtMoney  = n => `€${Number(n||0).toFixed(2)}`;
   const fmtDate   = iso => { try { return new Date(iso).toLocaleString(); } catch { return ""; } };
 
-  // stati chiusi (solo ritiro)
-  const isClosedStatus = s => ["ritirato","annullato"].includes(String(s||"").toLowerCase());
+  // stati chiusi
+  const isClosedStatus = s => ["withdrawn","canceled"].includes(String(s||"").toLowerCase());
   const badgeClass = s => `badge ${String(s||"").toLowerCase()}`;
 
   document.addEventListener("DOMContentLoaded", initOrdini);
@@ -57,7 +48,7 @@
   async function initOrdini(){
     const user = JSON.parse(localStorage.getItem("loggedUser"));
     if (!user || user.role !== "cliente") {
-      alert("Accesso riservato ai clienti");
+      alert("Access reserved for customers");
       location.href = "login.html";
       return;
     }
@@ -87,8 +78,8 @@
 
       if (attivi.length === 0) {
         container.innerHTML = `
-          <p>Nessun ordine attivo.</p>
-          <p class="muted">Trovi gli ordini ritirati nello <a href="storico_clienti.html">storico clienti</a>.</p>`;
+          <p>No active orders.</p>
+          <p class="muted">You can find picked-up/cancelled orders in the <a href="storico_clienti.html">customer history</a>.</p>`;
         return;
       }
 
@@ -103,25 +94,25 @@
         let elenco = "-";
         if (Array.isArray(ordine.items) && ordine.items.length) {
           elenco = ordine.items
-            .map(it => `${it.name ?? "Piatto"} x${it.qty || 1} (${fmtMoney(it.price || 0)})`)
+            .map(it => `${it.name ?? "Dish"} x${it.qty || 1} (${fmtMoney(it.price || 0)})`)
             .join(", ");
         } else {
           elenco = (ordine?.meals ?? []).map(id => {
             const p = tuttiIPiatti.find(m => String(mealId(m)) == String(id));
-            return p ? `${mealName(p)} (${fmtMoney(mealPrice(p))})` : `Piatto ID ${id}`;
+            return p ? `${mealName(p)} (${fmtMoney(mealPrice(p))})` : `Dish ID ${id}`;
           }).join(", ");
         }
 
         const idOrd = orderId(ordine);
-        const stato = (ordine?.status ?? ordine?.state ?? "sconosciuto");
+        const stato = (ordine?.status ?? ordine?.state ?? "Unknown");
 
         div.innerHTML = `
-          <p><strong>ID:</strong> ${idOrd || "<span class='muted'>(n/d)</span>"}</p>
-          <p><strong>Creato:</strong> ${ordine?.createdAt ? fmtDate(ordine.createdAt) : "<span class='muted'>n/d</span>"}</p>
-          <p><strong>Modalità:</strong> ritiro in negozio</p>
-          <p><strong>Stato:</strong> <span class="stato ${badgeClass(stato)}">${stato}</span></p>
-          <p><strong>Piatti:</strong> ${elenco || "-"}</p>
-          <p><strong>Totale:</strong> ${fmtMoney(ordine?.total)}</p>
+          <p><strong>ID:</strong> ${idOrd || "<span class='muted'>(n/a)</span>"}</p>
+          <p><strong>Created:</strong> ${ordine?.createdAt ? fmtDate(ordine.createdAt) : "<span class='muted'>n/a</span>"}</p>
+          <p><strong>Mode:</strong> Pick up in store</p>
+          <p><strong>Status:</strong> <span class="stato ${badgeClass(stato)}">${stato}</span></p>
+          <p><strong>Dishes:</strong> ${elenco || "-"}</p>
+          <p><strong>Total:</strong> ${fmtMoney(ordine?.total)}</p>
           <div class="azioni"></div>
         `;
 
@@ -130,16 +121,16 @@
         // bottone "Ho ritirato l'ordine"
         if (idOrd && !isClosedStatus(stato)) {
           const btnPick = document.createElement("button");
-          btnPick.textContent = "Ho ritirato l'ordine";
+          btnPick.textContent = "I picked up the order";
           btnPick.addEventListener("click", async () => {
-            const ok = confirm("Confermi di aver ritirato l'ordine al banco?");
+            const ok = confirm("Are you sure you picked up your order at the counter?");
             if (!ok) return;
             try {
               // alias endpoint compatibile con backend
               const putRes = await fetch(`${API_BASE}/orders/${encodeURIComponent(idOrd)}/state`, {
                 method: "PUT",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ newState: "ritirato", clienteConfermaRitiro: true })
+                body: JSON.stringify({ newState: "Withdrawn", clienteConfermaRitiro: true })
               });
               if (!putRes.ok) {
                 const detail = await putRes.json().catch(()=>({}));
@@ -149,18 +140,18 @@
               // UI: rimuovo la card e notifico
               div.remove();
               noti.innerHTML = `
-                <p class="success">✅ Ritiro confermato. L'ordine è stato spostato nello
-                <a href="storico_clienti.html"><strong>storico clienti</strong></a>.</p>`;
+                <p class="success">Pickup confirmed. the order has been moved to the
+                <a href="storico_clienti.html"><strong>customer history</strong></a>.</p>`;
 
               // Se non rimangono ordini attivi, mostra il messaggio vuoto
               if (!container.querySelector(".ordine-box")) {
                 container.innerHTML = `
-                  <p>Nessun ordine attivo.</p>
-                  <p class="muted">Trovi gli ordini ritirati nello <a href="storico_clienti.html">storico clienti</a>.</p>`;
+                  <p>No active orders.</p>
+                  <p class="muted">You can find picked-up orders in the <a href="storico_clienti.html">customer history</a>.</p>`;
               }
             } catch (err) {
-              console.error("Errore conferma ritiro:", err);
-              alert("Errore nel confermare il ritiro.");
+              console.error("Pickup confirmation error:", err);
+              alert("Error confirming pickup.");
             }
           });
           azioniDiv.appendChild(btnPick);
@@ -169,15 +160,14 @@
         container.appendChild(div);
       });
     } catch (err) {
-      console.error("Errore caricamento ordini:", err);
+      console.error("Error loading orders:", err);
       container.innerHTML = `
-        <p style="color:#b00">Errore nel caricamento degli ordini.</p>
-        <details><summary>Dettagli</summary><pre>${String(err)}</pre></details>
-        <p>Verifica che <code>${API_BASE}/orders</code> e <code>${API_BASE}/meals</code> siano raggiungibili.</p>
+        <p style="color:#b00">Error loading orders.</p>
+        <details><summary>Details</summary><pre>${String(err)}</pre></details>
+        <p>Check that <code>${API_BASE}/orders</code> and <code>${API_BASE}/meals</code> are reachable.</p>
       `;
     }
   }
   </script>
 </body>
 </html>
-

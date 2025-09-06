@@ -1,49 +1,61 @@
 <!DOCTYPE html>
-<html lang="it">
+<html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>Aggiungi Piatto</title>
+  <title>Add Dish</title>
   <link rel="stylesheet" href="css/style.css">
 </head>
 <body>
-  <h1>Aggiungi Piatto</h1>
+  <h1>Add Dish</h1>
 
   <form id="meal-form">
-    <label for="name">Nome:</label>
+    <label for="name">Name:</label>
     <input type="text" id="name" required><br><br>
 
-    <label for="price">Prezzo:</label>
+    <label for="price">Price:</label>
     <input type="number" step="0.01" id="price" required><br><br>
 
-    <label for="description">Descrizione:</label>
+    <label for="description">Description:</label>
     <textarea id="description"></textarea><br><br>
 
-    <label for="category">Categoria:</label>
-    <select id="category">
-      <option value="antipasto">Antipasto</option>
-      <option value="primo">Primo</option>
-      <option value="secondo">Secondo</option>
-      <option value="dessert">Dessert</option>
+    <label for="preferenza">Category:</label>
+    <select id="preferenza">
+      <option value="">-- no preference --</option>
+      <option value="Starter">Starter</option>
+      <option value="Beef">Beef</option>
+      <option value="Chicken">Chicken</option>
+      <option value="Vegetarian">Vegetarian</option>
+      <option value="Vegan">Vegan</option>
+      <option value="Lamb">Lamb</option>
+      <option value="Pasta">Pasta</option>
+      <option value="Seafood">Seafood</option>
+      <option value="Goat">Goat</option>
+      <option value="Pork">Pork</option>
+      <option value="Miscellaneous">Miscellaneous</option>
+      <option value="Breakfast">Breakfast</option>
+      <option value="Side">Side</option>
+      <option value="Dessert">Dessert</option>
+      <option value="Offers of the day">Offers of the day</option>
     </select><br><br>
 
-    <label for="image">URL immagine:</label>
+    <label for="image">Image URL:</label>
     <input type="url" id="image" placeholder="https://..."><br><br>
 
-    <label>Ingredienti:</label>
+    <label>Ingredients:</label>
     <div style="margin-bottom: 10px;">
-      <input type="text" id="ingredient-input" placeholder="Es. pomodoro">
-      <button type="button" id="add-ingredient-btn">Aggiungi</button>
+      <input type="text" id="ingredient-input" placeholder="e.g. tomato">
+      <button type="button" id="add-ingredient-btn">Add</button>
     </div>
     <ul id="ingredient-list" style="list-style-type: none; padding-left: 0;"></ul>
 
-    <h2>Oppure aggiungi da piatti comuni</h2>
+    <h2>Or add from common dishes</h2>
     <div id="common-meals-container">
-      <p>Caricamento...</p>
+      <p>Loading...</p>
     </div>
 
-    <button type="submit">Salva</button>
+    <button type="submit">Save</button>
   </form>
 
- <script src="js/add.js?v=5" defer></script>
+  <script src="js/add.js?v=5" defer></script>
 </body>
 </html>

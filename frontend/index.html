@@ -1,17 +1,17 @@
 <!DOCTYPE html>
-<html lang="it">
+<html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>Homepage</title>
-  <h1>Welcome to Click&food</h1>
+  <title> Homepage </title>
+  <h1> Welcome to Click&Food </h1>
   <link rel="stylesheet" href="css/style.css">
 </head>
 <body>
 
   <!-- header con logo -->
   <header class="site-header">
-    <img src="images/logo.png" alt="Logo Ristorante" class="logo">
-    <h2>all the best restaurants just a click away!!!!</h2>
+    <img src="images/logo.png" alt="Restaurant Logo" class="logo">
+    <h2> All the best restaurants just a click away!!!! </h2>
   </header>
 
   <div id="welcome" style="margin-bottom: 10px; font-weight: bold;"></div>
@@ -21,28 +21,28 @@
 
   <!-- Barra link secondaria (ricerche, ordini, statistiche) -->
   <div id="nav-links" class="link-bar" style="margin-bottom: 20px;">
-    <p><a href="ricerca_piatti.html">Search for dishes</a></p>
-    <p><a href="ricerca_ristoranti.html">Search restaurants</a></p>
-    <p id="link-order" style="display:none;"><a href="order.html"> Order here</a></p>
-    <p id="link-ordini-ristoratore" style="display:none;"><a href="ordini_ristoratore.html"> Orders received</a></p>
-    <p id="link-statistiche" style="display:none;"><a href="statistiche_ristoratore.html">Statistics</a></p>
+    <p><a href="ricerca_piatti.html"> Search for dishes </a></p>
+    <p><a href="ricerca_ristoranti.html"> Search restaurants </a></p>
+    <p id="link-order" style="display:none;"><a href="order.html"> Order here </a></p>
+    <p id="link-ordini-ristoratore" style="display:none;"><a href="ordini_ristoratore.html"> Orders received </a></p>
+    <p id="link-statistiche" style="display:none;"><a href="statistiche_ristoratore.html"> Statistics </a></p>
   </div>
 
-  <h2> Personalized offers only</h2>
-  <ul id="offerte-speciali">
-    <li>loading...</li>
+  <h2> Personalized offers only </h2>
+  <ul id="special-offers">
+    <li> loading...</li>
   </ul>
 
-  <div id="filtro-container" style="margin-bottom: 20px;">
-    <label for="filtro-ingrediente"><strong>Filter by ingredient:</strong></label>
-    <input type="text" id="filtro-ingrediente" placeholder="Es. pomodoro, mozzarella...">
+  <div id="filter-container" style="margin-bottom: 20px;">
+    <label for="filter-ingredient"><strong> Filter by ingredient: </strong></label>
+    <input type="text" id="filter-ingredient" placeholder="e.g. tomato, mozzarella...">
   </div>
 
   
   <section style="margin:24px 0;">
-    <h2 style="margin:0 0 10px;">Restaurant menu</h2>
+    <h2 style="margin:0 0 10px;"> Restaurant menu' </h2>
     <!-- il main.js popolerà questo contenitore con sezioni " nome ristorante" -->
-    <div id="menu-per-ristorante"></div>
+    <div id="menu-by-restaurant"></div>
   </section>
 
 
@@ -64,17 +64,17 @@
       const welcome = document.getElementById("welcome");
 
       const linkOrder = document.getElementById("link-order");
-      const linkOrdiniRistoratore = document.getElementById("link-ordini-ristoratore");
-      const linkStatistiche = document.getElementById("link-statistiche");
+      const linkRestaurantOrders = document.getElementById("link-ordini-ristoratore");
+      const linkStatistics = document.getElementById("link-statistiche");
 
       if (user) {
-        welcome.textContent = `welcome, ${user.username}`;
+        welcome.textContent = `Welcome, ${user.username}`;
 
         if (user.role === "cliente") {
           linkOrder.style.display = "block";
         } else if (user.role === "ristoratore") {
-          linkOrdiniRistoratore.style.display = "block";
-          linkStatistiche.style.display = "block";
+          linkRestaurantOrders.style.display = "block";
+          linkStatistics.style.display = "block";
         }
 
         linkContainer.innerHTML = `
@@ -85,8 +85,8 @@
         `;
       } else {
         linkContainer.innerHTML = `
-          <a href="login.html"> Accedi</a> |
-          <a href="register.html">Registrati</a>
+          <a href="login.html"> Log in </a> |
+          <a href="register.html"> Register</a>
         `;
       }
     });

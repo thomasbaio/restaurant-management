@@ -2,18 +2,24 @@ const params = new URLSearchParams(window.location.search);
 const id = parseInt(params.get("id"));
 
 if (!id || isNaN(id)) {
-  alert("ID piatto non valido.");
+  alert("Invalid dish ID.");
   window.location.href = "index.html";
 }
+
+// Base URL: localhost in dev, Render in produzione
+const API_BASE =
+  (location.hostname === "localhost" || location.hostname === "127.0.0.1")
+    ? "http://localhost:3000"
+    : "https://restaurant-management-wzhj.onrender.com";
 
 window.onload = async () => {
   try {
     // 📌 Recupera tutti i ristoranti e i loro piatti
-    const res = await fetch("http://localhost:3000/meals");
-    if (!res.ok) throw new Error("Errore nella risposta del server");
+    const res = await fetch(`${API_BASE}/meals`);
+    if (!res.ok) throw new Error("Server response error");
     const restaurants = await res.json();
 
-    // 📌 Cerca il piatto da modificare
+    // cerca il piatto da modificare
     let foundMeal = null;
     for (const rest of restaurants) {
       const meal = rest.menu?.find(m => m.idmeals === id);
@@ -24,56 +30,72 @@ window.onload = async () => {
     }
 
     if (!foundMeal) {
-      alert("Piatto non trovato.");
+      alert("Dish not found.");
       window.location.href = "index.html";
       return;
     }
 
-    // 📌 Popola il form
+    // popola il form
     document.getElementById("name").value = foundMeal.nome ?? "";
     document.getElementById("price").value = foundMeal.prezzo ?? "";
     document.getElementById("description").value = foundMeal.descrizione ?? "";
-    document.getElementById("ingredients").value = Array.isArray(foundMeal.ingredienti)
-      ? foundMeal.ingredienti.join(", ")
-      : "";
-    document.getElementById("category").value = foundMeal.tipologia ?? "";
 
-    // 📌 Gestione submit
+    // supporta sia 'ingredienti' che 'ingredients'
+    const ingList = Array.isArray(foundMeal.ingredienti)
+      ? foundMeal.ingredienti
+      : (Array.isArray(foundMeal.ingredients) ? foundMeal.ingredients : []);
+    document.getElementById("ingredients").value = ingList.join(", ");
+
+    // allineato al tuo HTML: select con id="preferenza"
+    const catSel = document.getElementById("preferenza") || document.getElementById("category");
+    if (catSel) catSel.value = foundMeal.tipologia ?? "";
+
+    // gestione submit
     document.getElementById("edit-form").addEventListener("submit", async (e) => {
       e.preventDefault();
+
+      // normalizza lista ingredienti
+      const ingFieldRaw = document.getElementById("ingredients").value;
+      const normalizedIngs = (ingFieldRaw || "")
+        .split(",")
+        .map(i => i.trim())
+        .filter(i => i.length > 0);
+
+      // legge categoria da 'preferenza' (fallback 'category' se esiste)
+      const catInput = document.getElementById("preferenza") || document.getElementById("category");
 
       const updatedMeal = {
         nome: document.getElementById("name").value.trim(),
         prezzo: parseFloat(document.getElementById("price").value) || 0,
         descrizione: document.getElementById("description").value.trim(),
-        ingredienti: document.getElementById("ingredients").value
-          .split(",")
-          .map(i => i.trim())
-          .filter(i => i.length > 0),
-        tipologia: document.getElementById("category").value.trim()
+        tipologia: (catInput?.value || "").trim(),
+
+        // per compatibilità con dati esistenti:
+        ingredienti: normalizedIngs,
+        ingredients: normalizedIngs
       };
 
       try {
-        const updateRes = await fetch(`http://localhost:3000/meals/${id}`, {
+        const updateRes = await fetch(`${API_BASE}/meals/${id}`, {
           method: "PUT",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(updatedMeal)
         });
 
         if (updateRes.ok) {
-          alert("✅ Piatto aggiornato!");
+          alert("Dish updated!");
           window.location.href = "index.html";
         } else {
           const errText = await updateRes.text();
-          alert("Errore durante il salvataggio: " + errText);
+          alert("Error while saving: " + (errText || "Unknown error"));
         }
       } catch (err) {
-        console.error("Errore durante il salvataggio:", err);
-        alert("Errore di rete.");
+        console.error("Error while saving:", err);
+        alert("Network error.");
       }
     });
   } catch (err) {
-    console.error("Errore:", err);
-    alert("Errore nel caricamento.");
+    console.error("Error:", err);
+    alert("Error while loading.");
   }
 };

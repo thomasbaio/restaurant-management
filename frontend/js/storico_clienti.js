@@ -1,4 +1,4 @@
-// Base URL per API: locale vs Render
+// Base URL per API
 const isLocal = location.hostname === "localhost" || location.hostname === "127.0.0.1";
 const API_BASE = isLocal ? "http://localhost:3000" : "https://restaurant-management-wzhj.onrender.com";
 
@@ -39,7 +39,7 @@ function buildMealsMap(rawMeals) {
     const id = p.idmeals ?? p.idMeal ?? p.id ?? p._id;
     if (!id) continue;
     const key = String(id);
-    const nome = p.nome ?? p.strMeal ?? p.name ?? `Piatto #${key}`;
+    const nome = p.nome ?? p.strMeal ?? p.name ?? `Dish #${key}`;
     let prezzo = p.prezzo ?? p.price;
     prezzo = (typeof prezzo === "string") ? Number(prezzo) : prezzo;
     map.set(key, { nome, prezzo: Number.isFinite(prezzo) ? Number(prezzo) : null });
@@ -47,25 +47,25 @@ function buildMealsMap(rawMeals) {
   return map;
 }
 
-// ---- rendering item list e totale
+
 function renderItemsAndTotal(order, mealsMap) {
-  // Preferisci snapshot items (name/price/qty)
+  // preferisci snapshot items (name/price/qty)
   if (Array.isArray(order.items) && order.items.length) {
     let tot = 0;
     const parts = order.items.map(it => {
       const q = Number(it.qty || 1);
       const pr = Number(it.price || 0);
       tot += q * pr;
-      return `${it.name ?? "Piatto"} x${q} (${money(pr)})`;
+      return `${it.name ?? "Dish"} x${q} (${money(pr)})`;
     });
     return { text: parts.join(", "), total: tot };
   }
-  // Fallback: ricava da meals id -> nome/prezzo
+  // fallback: ricava da meals id -> nome/prezzo
   const ids = Array.isArray(order.meals) ? order.meals : [];
   let tot = 0;
   const parts = ids.map(id => {
     const info = mealsMap.get(String(id));
-    if (!info) return `Piatto ID ${id}`;
+    if (!info) return `Dish ID ${id}`;
     if (Number.isFinite(info.prezzo)) tot += info.prezzo;
     return `${info.nome}${Number.isFinite(info.prezzo) ? " (" + money(info.prezzo) + ")" : ""}`;
   });
@@ -75,7 +75,7 @@ function renderItemsAndTotal(order, mealsMap) {
 window.onload = async () => {
   const user = JSON.parse(localStorage.getItem("loggedUser"));
   if (!user || user.role !== "cliente") {
-    alert("Accesso riservato ai clienti");
+    alert("Access reserved for customers");
     window.location.href = "login.html";
     return;
   }
@@ -83,8 +83,8 @@ window.onload = async () => {
   const attiviList = document.getElementById("attivi-list");
   const passatiList = document.getElementById("passati-list");
 
-  attiviList.innerHTML = "<li>Caricamento ordini in corso...</li>";
-  passatiList.innerHTML = "<li>Caricamento ordini in corso...</li>";
+  attiviList.innerHTML = "<li>Loading orders...</li>";
+  passatiList.innerHTML = "<li>Loading orders...</li>";
 
   try {
     const [orders, mealsRaw] = await Promise.all([
@@ -96,8 +96,8 @@ window.onload = async () => {
     const safeOrders = Array.isArray(orders) ? orders : [];
 
     if (safeOrders.length === 0) {
-      attiviList.innerHTML = "<li>Nessun ordine presente.</li>";
-      passatiList.innerHTML = "<li>Nessun ordine concluso.</li>";
+      attiviList.innerHTML = "<li>No orders.</li>";
+      passatiList.innerHTML = "<li>No completed orders.</li>";
       return;
     }
 
@@ -107,7 +107,7 @@ window.onload = async () => {
 
     const render = (ordini, container) => {
       if (!ordini.length) {
-        container.innerHTML = "<li>-- Nessun ordine --</li>";
+        container.innerHTML = "<li>-- No orders --</li>";
         return;
       }
       // ordina per data desc se possibile
@@ -117,19 +117,19 @@ window.onload = async () => {
         const stato = normStatus(o);
         const { text, total } = renderItemsAndTotal(o, mealsMap);
         const delivery = (o.delivery ?? o.tipoConsegna) === "domicilio"
-          ? (o.address ?? o.indirizzo ?? "Consegna a domicilio")
-          : "Ritiro al ristorante";
-        const created = o.createdAt ? when(o.createdAt) : "n/d";
+          ? (o.address ?? o.indirizzo ?? "Home delivery")
+          : "Pickup at restaurant";
+        const created = o.createdAt ? when(o.createdAt) : "n/a";
         const closed  = (o.closedAt || o.deliveredAt || o.ritiratoAt) ? when(o.closedAt || o.deliveredAt || o.ritiratoAt) : "—";
 
         return `
           <li>
             <strong>ID:</strong> ${normId(o)}<br>
-            🕒 Creato: ${created}${FINAL.has(stato) ? ` · Chiuso: ${closed}` : ""}<br>
-            🧾 Stato: ${stato}<br>
-            🍽️ Piatti: ${text || "—"}<br>
-            💶 Totale: ${money(o.total || total)}<br>
-            📍 ${delivery}
+             Created: ${created}${FINAL.has(stato) ? ` · Closed: ${closed}` : ""}<br>
+             Status: ${stato}<br>
+             Dishes: ${text || "—"}<br>
+             Total: ${money(o.total || total)}<br>
+              ${delivery}
           </li>
         `;
       }).join("");
@@ -141,9 +141,9 @@ window.onload = async () => {
   } catch (err) {
     console.error("Errore nel caricamento:", err);
     const hint = isLocal
-      ? "Verifica che il backend locale sia attivo su http://localhost:3000."
-      : "Verifica che il backend su Render sia online.";
-    attiviList.innerHTML = `<li style="color:#b00">Errore durante il caricamento: ${err?.message ?? err}. ${hint}</li>`;
-    passatiList.innerHTML = `<li style="color:#b00">Errore durante il caricamento: ${err?.message ?? err}. ${hint}</li>`;
+      ? "Make sure the local backend is running at http://localhost:3000."
+      : "Make sure the backend on Render is online.";
+    attiviList.innerHTML = `<li style="color:#b00">Error while loading: ${err?.message ?? err}. ${hint}</li>`;
+    passatiList.innerHTML = `<li style="color:#b00">Error while loading: ${err?.message ?? err}. ${hint}</li>`;
   }
 };

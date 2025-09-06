@@ -1,10 +1,8 @@
-// js/ricerca_piatti.js
-
-// Base URL per API: locale vs produzione
+// base URL per API: locale vs produzione
 const isLocal = location.hostname === "localhost" || location.hostname === "127.0.0.1";
 const API_BASE = isLocal ? "http://localhost:3000" : location.origin;
 
-// Normalizza i campi dei piatti da sorgenti diverse
+// normalizza i campi dei piatti da sorgenti diverse
 function normalizeMeal(m) {
   const nome = m.nome ?? m.strMeal ?? m.name ?? "";
   const tipologia = m.tipologia ?? m.strCategory ?? m.category ?? "";
@@ -18,7 +16,7 @@ function normalizeMeal(m) {
   return { nome, tipologia, prezzo, foto, ingredienti, _raw: m };
 }
 
-// Utility per testo incluso (case-insensitive)
+// utility per testo incluso (case-insensitive)
 function includesCI(hay, needle) {
   if (!needle) return true;
   if (!hay) return false;
@@ -28,7 +26,7 @@ function includesCI(hay, needle) {
 // Espongo la funzione globalmente per l'onclick inline
 window.cercaPiatti = async function cercaPiatti() {
   const ul = document.getElementById("risultati-piatti");
-  ul.innerHTML = "<li>⏳ Ricerca in corso...</li>";
+  ul.innerHTML = "<li> Searching...</li>";
 
   const qNome = document.getElementById("nome").value.trim();
   const qTipo = document.getElementById("tipologia").value.trim();
@@ -41,12 +39,12 @@ window.cercaPiatti = async function cercaPiatti() {
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const data = await res.json();
 
-    // Flatten dei piatti
+    // flatten dei piatti
     const allMeals = (Array.isArray(data) ? data : [])
       .flatMap(r => Array.isArray(r.menu) ? r.menu : [])
       .map(normalizeMeal);
 
-    // Filtri
+    // filtri
     const filtered = allMeals.filter(p => {
       if (!includesCI(p.nome, qNome)) return false;
       if (!includesCI(p.tipologia, qTipo)) return false;
@@ -54,9 +52,8 @@ window.cercaPiatti = async function cercaPiatti() {
       return true;
     });
 
-    // Render
     if (!filtered.length) {
-      ul.innerHTML = "<li>Nessun piatto trovato.</li>";
+      ul.innerHTML = "<li>No dishes found.</li>";
       return;
     }
 
@@ -69,10 +66,10 @@ window.cercaPiatti = async function cercaPiatti() {
         <div style="display:flex; gap:10px; align-items:flex-start;">
           ${p.foto ? `<img src="${p.foto}" alt="${p.nome}" style="width:80px;height:80px;object-fit:cover;border-radius:6px;">` : ""}
           <div>
-            <strong>${p.nome || "Senza nome"}</strong><br>
+            <strong>${p.nome || "No name"}</strong><br>
             ${p.tipologia ? `<em>${p.tipologia}</em><br>` : ""}
-            ${Number.isFinite(p.prezzo) ? `Prezzo: €${p.prezzo.toFixed(2)}<br>` : ""}
-            ${p.ingredienti?.length ? `Ingredienti: ${p.ingredienti.join(", ")}` : ""}
+            ${Number.isFinite(p.prezzo) ? `Price: €${p.prezzo.toFixed(2)}<br>` : ""}
+            ${p.ingredienti?.length ? `Ingredients: ${p.ingredienti.join(", ")}` : ""}
           </div>
         </div>
       `;
@@ -80,7 +77,7 @@ window.cercaPiatti = async function cercaPiatti() {
     });
 
   } catch (err) {
-    console.error("Errore ricerca piatti:", err);
-    ul.innerHTML = `<li style="color:#b00;">Errore durante la ricerca. Dettagli in console.</li>`;
+    console.error("Dish search error:", err);
+    ul.innerHTML = `<li style="color:#b00;">Error during search. see console for details.</li>`;
   }
 };

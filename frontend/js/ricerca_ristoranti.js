@@ -3,9 +3,9 @@ async function cercaRistoranti() {
   const luogo = document.getElementById("luogo").value.toLowerCase();
   const lista = document.getElementById("risultati-ristoranti");
 
-  lista.innerHTML = "⏳ Caricamento...";
+  lista.innerHTML = " Loading...";
 
-  // 🔗 Base URL dinamico: locale oppure Render
+  // base URL dinamico: locale oppure Render
   const isLocal = location.hostname === "localhost" || location.hostname === "127.0.0.1";
   const API_BASE = isLocal ? "http://localhost:3000" : "https://restaurant-management-wzhj.onrender.com";
 
@@ -21,20 +21,20 @@ async function cercaRistoranti() {
     });
 
     if (filtrati.length === 0) {
-      lista.innerHTML = "<li>Nessun ristorante trovato.</li>";
+      lista.innerHTML = "<li>No restaurants found.</li>";
     } else {
       lista.innerHTML = filtrati.map(r => `
         <li>
-          <strong>${r.nome || "Senza nome"}</strong><br>
-          📍 ${r.location || "N/D"}<br>
-          ☎️ ${r.telefono || "N/D"}<br>
-          🧾 P.IVA: ${r.partitaIVA || "N/D"}
+          <strong>${r.nome || "No name"}</strong><br>
+             ${r.location || "N/A"}<br>
+             ${r.telefono || "N/A"}<br>
+              VAT No.: ${r.partitaIVA || "N/A"}
         </li>
       `).join("");
     }
 
   } catch (err) {
-    console.error("Errore nella ricerca:", err);
-    lista.innerHTML = "<li>⚠️ Errore durante la ricerca dei ristoranti.</li>";
+    console.error("Search error:", err);
+    lista.innerHTML = "<li> Error while searching for restaurants.</li>";
   }
 }

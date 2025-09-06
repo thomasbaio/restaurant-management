@@ -1,22 +1,22 @@
-// --- Auth guard ---
+// --- auth guard ---
 const user = JSON.parse(localStorage.getItem("loggedUser"));
 if (!user) {
-  alert("Devi essere loggato per ordinare");
+  alert("You must be logged in to place an order");
   window.location.href = "login.html";
   // IMPORTANT: interrompi l'esecuzione
-  throw new Error("Utente non loggato");
+  throw new Error("User not logged in");
 }
 
-// --- Base URL (locale vs produzione) ---
+// --- base URL (locale vs produzione) ---
 const isLocal = ["localhost", "127.0.0.1"].includes(location.hostname);
 const DEFAULT_API_BASE = isLocal
   ? "http://localhost:3000"
   : "https://restaurant-management-wzhj.onrender.com";
 
-// Permette override da console/localStorage senza toccare il codice
+// permette override da console/localStorage senza toccare il codice
 const API_BASE = localStorage.getItem("API_BASE") || DEFAULT_API_BASE;
 
-// Helper: fetch JSON provando più path (es. /meals e /api/meals)
+// helper: fetch JSON provando più path (es. /meals e /api/meals)
 async function fetchJSONWithFallback(paths) {
   let lastErr;
   for (const p of paths) {
@@ -28,10 +28,10 @@ async function fetchJSONWithFallback(paths) {
       lastErr = e;
     }
   }
-  throw lastErr || new Error("Fetch fallita");
+  throw lastErr || new Error("Fetch failed");
 }
 
-// --- Normalizzazione piatto ---
+// --- normalizzazione piatto ---
 function normalizeMeal(raw) {
   // id
   let id =
@@ -39,7 +39,7 @@ function normalizeMeal(raw) {
   if (id != null) id = String(id);
 
   // nome
-  const name = raw.nome ?? raw.strMeal ?? raw.name ?? "Senza nome";
+  const name = raw.nome ?? raw.strMeal ?? raw.name ?? "No name";
 
   // prezzo
   let price = raw.prezzo ?? raw.price ?? null;
@@ -64,14 +64,14 @@ function normalizeMeal(raw) {
   return { id, name, price, category, description, thumb };
 }
 
-// Estrai tutti i piatti anche se l’endpoint restituisce ristoranti con menu annidati
+// estrai tutti i piatti anche se l’endpoint restituisce ristoranti con menu annidati
 function extractAllMeals(data) {
   const found = [];
   function recurse(node) {
     if (Array.isArray(node)) {
       node.forEach(recurse);
     } else if (node && typeof node === "object") {
-      // Se sembra un piatto, normalizza e conserva solo quelli con id+prezzo validi
+      // se sembra un piatto, normalizza e conserva solo quelli con id+prezzo validi
       const n = normalizeMeal(node);
       if (n.id && Number.isFinite(n.price)) {
         found.push(n);
@@ -89,21 +89,21 @@ window.onload = async function () {
   const totalDisplay = document.getElementById("total");
 
   if (!list || !totalDisplay) {
-    console.error("Elementi #meals-list o #total mancanti nell'HTML");
+    console.error("Missing #meals-list or #total elements in HTML");
     return;
   }
 
   try {
-    // Prova /meals e in fallback /api/meals
+    // prova /meals e in fallback /api/meals
     const rawData = await fetchJSONWithFallback(["/meals", "/api/meals"]);
     const meals = extractAllMeals(rawData);
 
     if (meals.length === 0) {
-      list.innerHTML = `<p>Nessun piatto disponibile.</p>`;
+      list.innerHTML = `<p>No dishes available.</p>`;
       return;
     }
 
-    // Render lista
+    // render lista
     list.innerHTML = "";
     meals.forEach(meal => {
       const container = document.createElement("div");
@@ -131,7 +131,7 @@ window.onload = async function () {
       list.appendChild(container);
     });
 
-    // Totale dinamico
+    // totale dinamico
     function recomputeTotal() {
       const selected = list.querySelectorAll('input[name="meal"]:checked');
       let total = 0;
@@ -139,24 +139,24 @@ window.onload = async function () {
         const p = Number(el.dataset.price);
         if (Number.isFinite(p)) total += p;
       });
-      totalDisplay.textContent = `Totale: €${total.toFixed(2)}`;
+      totalDisplay.textContent = `Total: €${total.toFixed(2)}`;
     }
     list.addEventListener("change", recomputeTotal);
     recomputeTotal();
 
   } catch (err) {
-    console.error("Errore nel caricamento dei piatti:", err);
+    console.error("Error loading menu:", err);
     alert(
-      `Errore nel caricamento del menu.\n` +
+      `Error loading the menu.\n` +
       `Base URL: ${API_BASE}\n` +
-      `Dettagli: ${err.message}\n\n` +
-      `Suggerimenti:\n- Se sei in locale, avvia il backend (npm start).\n` +
-      `- Per forzare l'URL di produzione esegui in console:\n  localStorage.setItem('API_BASE','https://restaurant-management-wzhj.onrender.com');\n  poi ricarica la pagina.`
+      `Details: ${err.message}\n\n` +
+      `Tips:\n- If you're local, start the backend (npm start).\n` +
+      `- To force the production URL run in console:\n  localStorage.setItem('API_BASE','https://restaurant-management-wzhj.onrender.com');\n  then reload the page.`
     );
   }
 };
 
-// --- Invio ordine ---
+// --- invio ordine ---
 const form = document.getElementById("order-form");
 if (form) {
   form.addEventListener("submit", function (e) {
@@ -167,7 +167,7 @@ if (form) {
     ).map(m => String(m.value)); // mantieni ID come stringa
 
     if (selectedMeals.length === 0) {
-      alert("Seleziona almeno un piatto.");
+      alert("Select at least one dish.");
       return;
     }
 
@@ -175,7 +175,7 @@ if (form) {
       username: user.username,
       role: user.role,
       meals: selectedMeals, // array di stringhe
-      delivery: "asporto",  // ritiro al ristorante
+      delivery: "domicilio",  // consegna a domicilio (asporto non disponibile)
       stato: "ordinato"
     };
 
@@ -183,4 +183,3 @@ if (form) {
     window.location.href = "payment.html"; // pagina simulata
   });
 }
-

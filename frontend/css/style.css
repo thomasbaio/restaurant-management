@@ -1,4 +1,4 @@
-/* Base */
+/* base */
 body {
   font-family: Arial, sans-serif;
   padding: 30px;
@@ -9,11 +9,13 @@ body {
 h1 {
   color: #28a745;
   font-size: 2em;
+  text-align: center;
 }
 
 h2 {
   margin-top: 10px;
   font-weight: normal;
+  text-align: center;
 }
 
 h3 {
@@ -34,7 +36,7 @@ strong {
   font-weight: bold;
 }
 
-/* Tabelle */
+/* tabelle */
 table {
   width: 100%;
   border-collapse: collapse;
@@ -51,7 +53,7 @@ th {
   background-color: #f0f0f0;
 }
 
-/* Pulsanti (stile più recente: verde) */
+/* pulsanti */
 button {
   margin-top: 20px;
   padding: 10px 18px;
@@ -67,7 +69,7 @@ button:hover {
   background-color: #218838;
 }
 
-/* 🎯 Offerte Speciali */
+
 #offerte-speciali {
   list-style: none;
   padding-left: 0;
@@ -93,7 +95,7 @@ button:hover {
   object-fit: cover;
 }
 
-/* ✅ Box piatti selezionabili */
+/* box piatti selezionabili */
 .meal-item {
   background-color: #ffffff;
   border: 1px solid #ddd;
@@ -103,7 +105,7 @@ button:hover {
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
 }
 
-/* ✅ Testo dei piatti */
+/* testo dei piatti */
 .meal-item strong {
   font-size: 16px;
   color: #333;
@@ -119,7 +121,7 @@ button:hover {
   font-size: 13px;
 }
 
-/* ✅ Riepilogo ordine */
+/* riepilogo ordine */
 #total {
   font-size: 18px;
   margin-top: 10px;
@@ -127,7 +129,7 @@ button:hover {
   color: #007BFF;
 }
 
-/* Form pagamento */
+
 form#payment-form {
   max-width: 400px;
   background-color: #ffffff;
@@ -169,7 +171,7 @@ form#payment-form button:hover {
   background-color: #0056b3;
 }
 
-/* ✅ Conferma ordine */
+
 #conferma-container {
   max-width: 600px;
   background-color: #ffffff;
@@ -218,7 +220,7 @@ form#payment-form button:hover {
   text-decoration: underline;
 }
 
-/* Box riepilogo e tempi */
+/* box riepilogo e tempi */
 #riepilogo {
   background-color: #ffffff;
   padding: 15px 20px;
@@ -242,7 +244,7 @@ form#payment-form button:hover {
   margin: 0;
 }
 
-/* Lista piatti */
+/* lista piatti */
 ul#lista-piatti {
   list-style-type: disc;
   padding-left: 20px;
@@ -253,7 +255,7 @@ ul#lista-piatti {
   box-shadow: 0 0 5px rgba(0,0,0,0.04);
 }
 
-/* Home / Menu */
+/* home */
 #welcome, #links {
   background-color: #ffffff;
   padding: 10px 15px;
@@ -263,7 +265,7 @@ ul#lista-piatti {
   box-shadow: 0 1px 4px rgba(0, 0, 0, 0.05);
 }
 
-/* Filtro ingredienti */
+/* filtro ingredienti */
 #filtro-container {
   background-color: #ffffff;
   padding: 15px;
@@ -282,7 +284,7 @@ ul#lista-piatti {
   margin-top: 8px;
 }
 
-/* Tabella menù */
+/* tabella menu' */
 #menu-container {
   margin-top: 30px;
   background-color: #fff;
@@ -310,13 +312,13 @@ ul#lista-piatti {
   border: 1px solid #dee2e6;
 }
 
-/* Link secondari */
+/* link secondari */
 #links a {
   margin-right: 10px;
   font-weight: bold;
 }
 
-/* Ordini (ristoratore) */
+/* ordini */
 .ordine-box {
   background-color: #fff;
   padding: 15px;
@@ -343,7 +345,7 @@ ul#lista-piatti {
   background-color: #218838;
 }
 
-/* Link bar */
+
 .link-bar {
   display: flex;
   flex-wrap: wrap;
@@ -366,7 +368,7 @@ ul#lista-piatti {
   background-color: #0056b3;
 }
 
-/* 📊 Box statistiche */
+
 #statistiche-box {
   background-color: #ffffff;
   padding: 25px;
@@ -387,7 +389,7 @@ ul#lista-piatti {
   color: #007BFF;
 }
 
-/* 🥇 Piatti popolari */
+
 #piatti-popolari {
   list-style: none;
   padding: 0;
@@ -405,7 +407,7 @@ ul#lista-piatti {
   font-weight: bold;
 }
 
-/* Link indietro */
+/* link indietro */
 a[href="index.html"] {
   display: inline-block;
   margin-top: 30px;
@@ -418,14 +420,14 @@ a[href="index.html"]:hover {
   text-decoration: underline;
 }
 
-/* Logo principale */
+/* logo principale */
 .logo {
   max-height: 80px;
   display: block;
   margin: 0 auto 15px auto;
 }
 
-/* Footer tech */
+
 footer.tech-footer {
   width: 100%;
   margin-top: 40px;
@@ -461,7 +463,7 @@ footer.tech-footer img.tech-logo:hover {
   opacity: 1;
 }
 
-/* Layout desktop: fondo bianco */
+/* layout desktop: fondo bianco */
 @media (min-width: 768px) {
   body {
     background-color: #fff;
@@ -471,7 +473,7 @@ footer.tech-footer img.tech-logo:hover {
   }
 }
 
-/* ===== Vista "Menù per Ristorante" (card) ===== */
+/* ===== vista "menu' per ristorante"  ===== */
 .ristorante-section {
   margin: 24px 0;
   padding: 16px;
@@ -542,3 +544,60 @@ footer.tech-footer img.tech-logo:hover {
 
 .btn-add:hover { background-color: #218838; }
 
+/* Card ordine */
+.ordine-box {
+  border: 1px solid #ddd;
+  border-radius: 10px;
+  padding: 12px;
+  margin: 10px 0;
+  background: #fff;
+}
+
+/* Badge stato */
+.badge {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: .85rem;
+  color: #222;
+}
+
+/* Varianti stato (solo ritiro, no delivery) */
+.badge.ordinato { background: #eef; }
+.badge.preparazione { background: #ffe9b3; }
+.badge.ritirato { background: #c7f9cc; }
+.badge.annullato { background: #ffd6d6; }
+
+/* (opzionale) altre varianti se il backend usa questi stati */
+.badge.consegna { background: #e7f1ff; }
+.badge.consegnato { background: #d7ffe0; }
+
+/* Azioni */
+.azioni button { margin-right: 8px; }
+
+/* Testi di servizio */
+.muted { color: #666; }
+.success {
+  background: #e8ffe8;
+  border: 1px solid #b6e3b6;
+  padding: 8px 10px;
+  border-radius: 8px;
+}
+
+/* Box generico di conferma ordine */
+.box {
+  padding: 12px;
+  border: 1px solid #ddd;
+  border-radius: 10px;
+  margin: 10px 0;
+  background-color: #fff;
+}
+
+/* Messaggi di stato */
+.ok {
+  color: green;
+}
+
+.err {
+  color: #b00020;
+}

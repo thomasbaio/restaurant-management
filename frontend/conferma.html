@@ -1,26 +1,20 @@
 <!DOCTYPE html>
-<html lang="it">
+<html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>Conferma Ordine</title>
+  <title>Confirm Order</title>
   <link rel="stylesheet" href="css/style.css">
-  <style>
-    .box { padding: 12px; border: 1px solid #ddd; border-radius: 10px; margin: 10px 0; }
-    .ok { color: green; }
-    .err { color: #b00020; }
-  </style>
 </head>
 <body>
-  <h1>✅ Ordine Confermato</h1>
-  <h2>Grazie per il tuo ordine!</h2>
+  <h1>Order Confirmed</h1>
+  <h2>Thank you for choosing us!</h2>
 
   <div id="riepilogo" class="box"></div>
-  <div id="tempo-attesa" class="box"></div>
 
-  <h3>🛒 Piatti ordinati:</h3>
+  <h3>Ordered dishes:</h3>
   <ul id="lista-piatti" class="box"></ul>
 
-  <p><a href="index.html">🔙 Torna alla Home</a></p>
+  <p><a href="index.html">Return to the homepage</a></p>
 
 <script>
 window.onload = async () => {
@@ -29,8 +23,7 @@ window.onload = async () => {
     ? "http://localhost:3000"
     : "https://restaurant-management-wzhj.onrender.com";
 
-  const riepilogo = document.getElementById("riepilogo");
-  const attesaDiv = document.getElementById("tempo-attesa");
+  const riepilogo   = document.getElementById("riepilogo");
   const listaPiatti = document.getElementById("lista-piatti");
 
   // --- Helpers ---
@@ -39,7 +32,7 @@ window.onload = async () => {
 
   function normalizeMealDB(p) {
     const id = toStr(p.idmeals ?? p.idMeal ?? p.id ?? p._id);
-    const nome = p.nome ?? p.strMeal ?? p.name ?? "Senza nome";
+    const nome = p.nome ?? p.strMeal ?? p.name ?? "No name";
     const prezzo = Number(p.prezzo ?? p.price ?? 0) || 0;
     return { id, nome, prezzo };
   }
@@ -83,18 +76,18 @@ window.onload = async () => {
   }
 
   function renderRiepilogo(ord) {
-    const pagamento = ord.payment || "carta";
-    const consegna = ord.delivery || "-";
+    const pagamento = ord.payment || "card";
+    const consegna  = ord.delivery || "-";
     const indirizzo = ord.delivery === "domicilio" ? (ord.address || "-") : null;
     riepilogo.innerHTML = `
-      <p><strong>Consegna:</strong> ${consegna}</p>
-      <p><strong>Metodo di pagamento:</strong> ${pagamento}</p>
-      ${indirizzo ? `<p><strong>Indirizzo:</strong> ${indirizzo}</p>` : ""}
+      <p><strong>Delivery:</strong> ${consegna}</p>
+      <p><strong>Payment method:</strong> ${pagamento}</p>
+      ${indirizzo ? `<p><strong>Address:</strong> ${indirizzo}</p>` : ""}
     `;
   }
 
   async function resolveAndRenderItems(orderItems) {
-    // 1) Se hanno già i nomi → render immediato
+    // 1) Se hanno già i nomi
     if (orderItems.length && orderItems.every(it => !!it.nome)) {
       let totale = 0;
       listaPiatti.innerHTML = orderItems.map(it => {
@@ -107,7 +100,7 @@ window.onload = async () => {
       if (totale > 0) {
         const totLi = document.createElement("li");
         totLi.style.marginTop = "8px";
-        totLi.innerHTML = `<strong>Totale:</strong> €${totale.toFixed(2)}`;
+        totLi.innerHTML = `<strong>Total:</strong> €${totale.toFixed(2)}`;
         listaPiatti.appendChild(totLi);
       }
       return;
@@ -115,7 +108,7 @@ window.onload = async () => {
 
     // 2) Altrimenti cerco nel catalogo per id/nome
     const catalogo = await loadMealsCatalog();
-    const byId = new Map(catalogo.filter(m => m.id).map(m => [m.id, m]));
+    const byId   = new Map(catalogo.filter(m => m.id).map(m => [m.id, m]));
     const byName = new Map(catalogo.map(m => [clean(m.nome), m]));
 
     const itemsCollassati = collapse(orderItems);
@@ -135,12 +128,12 @@ window.onload = async () => {
     }
 
     if (righe.length === 0) {
-      listaPiatti.innerHTML = `<li>Nessun piatto trovato.</li>`;
+      listaPiatti.innerHTML = `<li>No dishes found.</li>`;
     } else {
       listaPiatti.innerHTML = righe.join("");
       const totLi = document.createElement("li");
       totLi.style.marginTop = "8px";
-      totLi.innerHTML = `<strong>Totale:</strong> €${totale.toFixed(2)}`;
+      totLi.innerHTML = `<strong>Total:</strong> €${totale.toFixed(2)}`;
       listaPiatti.appendChild(totLi);
     }
   }
@@ -179,7 +172,7 @@ window.onload = async () => {
         }
       }
     } catch (e) {
-      console.warn("Impossibile recuperare l'ultimo ordine dal backend:", e);
+      console.warn("Unable to retrieve last order from backend:", e);
     }
   }
 
@@ -187,45 +180,16 @@ window.onload = async () => {
   renderRiepilogo(ordine);
 
   if (!items.length) {
-    listaPiatti.innerHTML = "<li>Nessun piatto trovato.</li>";
+    listaPiatti.innerHTML = "<li>No dishes found.</li>";
   } else {
     try {
       await resolveAndRenderItems(items);
     } catch (e) {
       console.error(e);
-      listaPiatti.innerHTML = "<li class='err'>Errore nel caricamento dei piatti.</li>";
+      listaPiatti.innerHTML = "<li class='err'>Error loading dishes.</li>";
     }
   }
 
-  // --- Timer asporto
-  if (ordine.delivery === "asporto") {
-    try {
-      const res = await fetch(`${API_BASE}/orders`, { mode: "cors" });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const tutti = await res.json();
-      const inCoda = (Array.isArray(tutti) ? tutti : []).filter(o =>
-        o.delivery === "asporto" && (o.status === "ordinato" || o.status === "preparazione")
-      );
-      const minutiAttesa = inCoda.length * 5;
-      let secondi = Math.max(0, minutiAttesa * 60);
-      const fmt = (s) => `${Math.floor(s/60)}m ${(s%60).toString().padStart(2,"0")}s`;
-      const tick = () => {
-        attesaDiv.innerHTML = secondi > 0
-          ? `<p><strong>🕒 Tempo stimato per il ritiro:</strong> ${fmt(secondi)}</p>`
-          : `<p class="ok"><strong>✅ Il tuo ordine dovrebbe essere pronto!</strong></p>`;
-        if (secondi <= 0) clearInterval(tmr);
-        secondi--;
-      };
-      tick();
-      const tmr = setInterval(tick, 1000);
-    } catch (e) {
-      console.error("Errore nel calcolo tempo attesa:", e);
-      attesaDiv.innerHTML = "<p class='err'>Errore nel calcolo del tempo di attesa.</p>";
-    }
-  } else {
-    attesaDiv.style.display = "none";
-  }
-};
 </script>
 
 </body>

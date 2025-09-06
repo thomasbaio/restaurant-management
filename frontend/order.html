@@ -1,40 +1,40 @@
 <!DOCTYPE html>
-<html lang="it">
+<html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>Ordina Piatti</title>
+  <title> Order dishes </title>
   <link rel="stylesheet" href="css/style.css">
 </head>
 <body>
-  <p><a href="index.html">Torna alla Home</a></p>
-  <h1>Ordina Piatti</h1>
+  <p><a href="index.html"> Return to the homepage </a></p>
+  <h1> Order dishes </h1>
 
   <form id="order-form">
     <div id="meals-list">
       <!-- Piatti caricati da JS -->
     </div>
 
-    <h3>Modalità di ritiro:</h3>
-    <label><input type="radio" name="delivery" value="asporto" checked> Ritiro al ristorante</label><br>
+    <h3> Delivery method: </h3>
+    <!-- Asporto rimosso: solo consegna a domicilio -->
+    <label><input type="radio" name="delivery" value="domicilio" checked> Pick up at the restaurant</label><br>
 
-    <div id="address-section" style="display:none;">
-      <label for="address">Indirizzo di consegna:</label><br>
-      <input type="text" id="address" name="address">
+    <div id="address-section" style="display:block;">
+      <label for="address"> Delivery address: </label><br>
+      <input type="text" id="address" name="address" required>
     </div>
 
-    <h3>Metodo di pagamento:</h3>
-    <label><input type="radio" name="payment" value="carta_credito" checked> Carta di credito</label><br>
-    <label><input type="radio" name="payment" value="prepagata"> Carta prepagata</label><br>
+    <h3> Payment method: </h3>
+    <label><input type="radio" name="payment" value="carta_credito" checked> Credit card </label><br>
+    <label><input type="radio" name="payment" value="prepagata"> Prepaid card </label><br>
 
-    <h3>Carrello</h3>
+    <h3> Cart </h3>
     <div id="cart-list"></div>
 
-    <p id="total"><strong>Totale: €0.00</strong></p>
+    <p id="total"><strong> Total: €0.00 </strong></p>
 
-    <button type="submit">Invia Ordine</button>
+    <button type="submit"> Send order </button>
   </form>
 
   <script src="js/order.js"></script>
 </body>
 </html>
-

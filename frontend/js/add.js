@@ -1,6 +1,5 @@
-// add.js — aggiunta piatto + piatti comuni (robusto)
 
-// Base URL: localhost in dev, Render in produzione
+// base URL: localhost in dev, Render in produzione
 const API_BASE =
   (location.hostname === 'localhost' || location.hostname === '127.0.0.1')
     ? 'http://localhost:3000'
@@ -9,14 +8,14 @@ const API_BASE =
 console.log('add.js loaded:', document.currentScript?.src);
 console.log('API_BASE ->', API_BASE);
 
-// Helper: parse JSON in modo sicuro (se il server risponde HTML non andiamo in "Unexpected token <")
+// helper: parse JSON in modo sicuro 
 async function safeJson(res) {
   const ct = res.headers.get('content-type') || '';
   const text = await res.text();
   if (!ct.includes('application/json')) {
-    // Mostra un estratto utile per il debug
+    // mostra un estratto utile per il debug
     const snippet = text.slice(0, 200).replace(/\s+/g, ' ');
-    throw new Error(`Risposta non-JSON (${res.status}) → ${snippet}`);
+    throw new Error(`Non-JSON response (${res.status}) → ${snippet}`);
   }
   try {
     return JSON.parse(text);
@@ -25,7 +24,7 @@ async function safeJson(res) {
   }
 }
 
-// =================== Gestione ingredienti manuali ===================
+// =================== gestione ingredienti manuali ===================
 const ingredientInput = document.getElementById("ingredient-input");
 const ingredientList  = document.getElementById("ingredient-list");
 const addBtn          = document.getElementById("add-ingredient-btn");
@@ -45,7 +44,7 @@ function updateIngredientList() {
   ingredientList.innerHTML = ingredients.map((ing, i) => `
     <li style="margin-bottom: 5px;">
       ${ing}
-      <button type="button" onclick="removeIngredient(${i})" style="margin-left: 10px;">❌</button>
+      <button type="button" onclick="removeIngredient(${i})" style="margin-left: 10px;" aria-label="Remove ingredient">❌</button>
     </li>
   `).join("");
 }
@@ -55,7 +54,7 @@ window.removeIngredient = function(index) {
   updateIngredientList();
 };
 
-// =================== Submit: PIATTO PERSONALIZZATO ===================
+// =================== submit: piatto personalizzato ===================
 document.getElementById("meal-form").addEventListener("submit", async function (e) {
   e.preventDefault();
 
@@ -63,22 +62,22 @@ document.getElementById("meal-form").addEventListener("submit", async function (
   const user = userStr ? JSON.parse(userStr) : null;
 
   if (!user || user.role !== "ristoratore") {
-    alert("Accesso non autorizzato: serve un account ristoratore.");
+    alert("Unauthorized: a restaurateur account is required.");
     return;
   }
   if (!user.restaurantId) {
-    alert("Nessun restaurantId associato all'utente. Riesegui il login ristoratore.");
+    alert("No restaurantId associated with this user. Please log in again as a restaurateur.");
     return;
   }
 
   const nome        = document.getElementById("name").value.trim();
   const prezzo      = parseFloat(document.getElementById("price").value);
   const descrizione = document.getElementById("description").value.trim();
-  const tipologia   = document.getElementById("category").value;
+  const tipologia   = document.getElementById("preferenza").value; // <- allineato con l'HTML
   const immagine    = document.getElementById("image").value.trim();
 
   if (!nome || Number.isNaN(prezzo)) {
-    alert("Inserisci un nome e un prezzo validi.");
+    alert("Please enter a valid name and price.");
     return;
   }
 
@@ -102,18 +101,18 @@ document.getElementById("meal-form").addEventListener("submit", async function (
 
     if (!res.ok) {
       const errText = await res.text();
-      throw new Error(`HTTP ${res.status} - ${errText || 'Errore nel salvataggio'}`);
+      throw new Error(`HTTP ${res.status} - ${errText || 'Save error'}`);
     }
 
-    alert("Piatto aggiunto!");
+    alert("Dish added!");
     window.location.href = "index.html";
   } catch (err) {
-    console.error("Errore di rete/salvataggio:", err);
+    console.error("Network/save error:", err);
     alert(String(err.message || err));
   }
 });
 
-// =================== Piatti comuni (cards + "Aggiungi al mio menu") ===================
+// =================== piatti comuni (cards + "Aggiungi al mio menu") ===================
 window.addEventListener('DOMContentLoaded', async () => {
   const container = document.getElementById("common-meals-container");
   if (!container) return;
@@ -122,7 +121,7 @@ window.addEventListener('DOMContentLoaded', async () => {
   const user = userStr ? JSON.parse(userStr) : null;
 
   if (!user || user.role !== "ristoratore" || !user.restaurantId) {
-    container.innerHTML = "<p>Solo i ristoratori possono vedere i piatti comuni.</p>";
+    container.innerHTML = "<p>Only restaurateurs can view common dishes.</p>";
     return;
   }
 
@@ -130,21 +129,21 @@ window.addEventListener('DOMContentLoaded', async () => {
     const res = await fetch(`${API_BASE}/meals/common-meals`);
     if (!res.ok) {
       const t = await res.text();
-      throw new Error(`HTTP ${res.status} - ${t || 'Errore nel caricamento'}`);
+      throw new Error(`HTTP ${res.status} - ${t || 'Load error'}`);
     }
 
-    const commonMeals = await safeJson(res); // evita "Unexpected token <" su error pages
+    const commonMeals = await safeJson(res); // evita "unexpected token <" su error pages
     container.innerHTML = "";
 
     commonMeals.forEach(raw => {
-      // Normalizzazione campi (TheMealDB oppure schema locale)
-      const nome        = raw.strMeal         || raw.nome        || raw.name || "Senza nome";
+      // normalizzazione campi 
+      const nome        = raw.strMeal         || raw.nome        || raw.name || "No name";
       const categoria   = raw.strCategory     || raw.tipologia   || raw.category || "-";
       const istruzioni  = raw.strInstructions || raw.descrizione || "-";
       const img         = raw.strMealThumb    || raw.immagine    || "";
       let ings = [];
 
-      // Se formato TheMealDB: strIngredient1..20
+      // se formato TheMealDB: strIngredient1..20
       if (typeof raw.strIngredient1 !== "undefined") {
         for (let i = 1; i <= 20; i++) {
           const ing = raw["strIngredient" + i];
@@ -165,8 +164,8 @@ window.addEventListener('DOMContentLoaded', async () => {
         <strong>${nome}</strong> <small>(${categoria})</small><br>
         ${img ? `<img src="${img}" alt="${nome}" width="150" style="margin:6px 0;border-radius:6px;">` : ""}
         <div style="font-size: 12px; color:#444;"><em>${istruzioni}</em></div>
-        <div style="font-size: 12px; margin-top:4px;"><small>Ingredienti: ${ings.join(", ") || "-"}</small></div>
-        <button type="button" class="add-btn" style="margin-top:8px;">Aggiungi al mio menu</button>
+        <div style="font-size: 12px; margin-top:4px;"><small>Ingredients: ${ings.join(", ") || "-"}</small></div>
+        <button type="button" class="add-btn" style="margin-top:8px;">Add to my menu</button>
       `;
 
       card.querySelector(".add-btn").addEventListener("click", async () => {
@@ -190,13 +189,13 @@ window.addEventListener('DOMContentLoaded', async () => {
 
           if (!addRes.ok) {
             const addTxt = await addRes.text();
-            throw new Error(`HTTP ${addRes.status} - ${addTxt || 'Errore nel salvataggio'}`);
+            throw new Error(`HTTP ${addRes.status} - ${addTxt || 'Save error'}`);
           }
 
-          alert("Piatto aggiunto al menu!");
+          alert("Dish added to your menu!");
           window.location.href = "index.html";
         } catch (err) {
-          console.error("Errore aggiunta piatto comune:", err);
+          console.error("Common dish add error:", err);
           alert(String(err.message || err));
         }
       });
@@ -205,7 +204,7 @@ window.addEventListener('DOMContentLoaded', async () => {
     });
 
   } catch (err) {
-    console.error("Errore nel caricamento dei piatti comuni:", err);
-    container.innerHTML = `<p style="color:#b00;">${String(err.message || 'Errore nel caricamento dei piatti comuni.')}</p>`;
+    console.error("Error loading common dishes:", err);
+    container.innerHTML = `<p style="color:#b00;">${String(err.message || 'Error loading common dishes.')}</p>`;
   }
 });
