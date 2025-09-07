@@ -678,3 +678,15 @@ ul.dishes {
   margin: 6px 0 0 0;
   padding-left: 20px;
 }
+/* Barra di link orizzontale */
+.link-bar {
+  display: flex;
+  gap: 16px;         /* spazio tra i link */
+  flex-wrap: wrap;   /* così se la finestra è stretta vanno a capo */
+  align-items: center;
+  margin: 10px 0;
+}
+
+.link-bar p {
+  margin: 0;        /* rimuove margine verticale dei <p> */
+}
