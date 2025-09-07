@@ -1,58 +1,78 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <title> Homepage </title>
-  <h1> Welcome to Click&Food </h1>
-  <link rel="stylesheet" href="css/style.css">
+  <meta charset="UTF-8" />
+  <title>Homepage</title>
+  <link rel="stylesheet" href="css/style.css" />
 </head>
 <body>
-
   <!-- header con logo -->
   <header class="site-header">
-    <img src="images/logo.png" alt="Restaurant Logo" class="logo">
-    <h2> All the best restaurants just a click away!!!! </h2>
+    <img src="images/logo.png" alt="Restaurant Logo" class="logo" />
+    <h1>Welcome to Click&Food</h1>
+    <h2>All the best restaurants just a click away!!!!</h2>
   </header>
 
-  <div id="welcome" style="margin-bottom: 10px; font-weight: bold;"></div>
+  <!-- Notifiche / banner “solo sfoglia” -->
+  <div id="noti" style="margin: 10px 0;"></div>
 
-  <!-- Barra link dinamici (login, profilo, ecc.) -->
+  <!-- Benvenuto + link dinamici -->
+  <div id="welcome" style="margin-bottom: 10px; font-weight: bold;"></div>
   <div id="links" style="margin-bottom: 20px;"></div>
 
-  <!-- Barra link secondaria (ricerche, ordini, statistiche) -->
+  <!-- Navigazione secondaria -->
   <div id="nav-links" class="link-bar" style="margin-bottom: 20px;">
-    <p><a href="ricerca_piatti.html"> Search for dishes </a></p>
-    <p><a href="ricerca_ristoranti.html"> Search restaurants </a></p>
-    <p id="link-order" style="display:none;"><a href="order.html"> Order here </a></p>
-    <p id="link-ordini-ristoratore" style="display:none;"><a href="ordini_ristoratore.html"> Orders received </a></p>
-    <p id="link-statistiche" style="display:none;"><a href="statistiche_ristoratore.html"> Statistics </a></p>
+    <p><a href="ricerca_piatti.html">Search for dishes</a></p>
+    <p><a href="ricerca_ristoranti.html">Search restaurants</a></p>
+    <p id="link-order" style="display:none;"><a href="order.html">Order here</a></p>
+    <p id="link-ordini-ristoratore" style="display:none;"><a href="ordini_ristoratore.html">Orders received</a></p>
+    <p id="link-statistiche" style="display:none;"><a href="statistiche_ristoratore.html">Statistics</a></p>
   </div>
 
-  <h2> Personalized offers only </h2>
+  <!-- Filtro categoria (usato da main.js) -->
+  <div class="box" style="margin-bottom: 16px;">
+    <label for="category-filter"><strong>Category:</strong></label>
+    <select id="category-filter" style="margin-left: 8px;"></select>
+    <span style="margin-left: 12px;">Selected: <strong id="selected-category">All categories</strong></span>
+  </div>
+
+  <!-- Filtro ingredienti -->
+  <div id="filter-container" style="margin-bottom: 20px;">
+    <label for="filter-ingredient"><strong>Filter by ingredient:</strong></label>
+    <input type="text" id="filter-ingredient" placeholder="e.g. tomato, mozzarella..." />
+  </div>
+
+  <!-- Offerte speciali (solo clienti; main.js la nasconde se non cliente) -->
+  <h2>Personalized offers only</h2>
   <ul id="special-offers">
-    <li> loading...</li>
+    <li>Loading...</li>
   </ul>
 
-  <div id="filter-container" style="margin-bottom: 20px;">
-    <label for="filter-ingredient"><strong> Filter by ingredient: </strong></label>
-    <input type="text" id="filter-ingredient" placeholder="e.g. tomato, mozzarella...">
-  </div>
-
-  
+  <!-- Vista a sezioni per ristorante (cards) -->
   <section style="margin:24px 0;">
-    <h2 style="margin:0 0 10px;"> Restaurant menu' </h2>
-    <!-- il main.js popolerà questo contenitore con sezioni " nome ristorante" -->
+    <h2 style="margin:0 0 10px;">Restaurant menu</h2>
     <div id="menu-by-restaurant"></div>
   </section>
 
+  <!-- (Opzionale) tabella classica se vuoi anche la vista tabellare -->
+  <!--
+  <table class="menu-table">
+    <thead>
+      <tr>
+        <th>Name</th><th>Price</th><th>Category</th><th>Ingredients</th><th>Image</th><th></th>
+      </tr>
+    </thead>
+    <tbody id="menu-body"></tbody>
+  </table>
+  -->
 
   <!-- footer con loghi tecnologia -->
   <footer class="tech-footer">
     <p style="margin:0 0 8px;">Powered by</p>
     <div class="stack">
-      <img src="images/express.png" alt="Express" class="tech-logo">
-      <img src="images/mongodb.png" alt="MongoDB" class="tech-logo">
-      <img src="images/nodejs.png" alt="Node.js" class="tech-logo">
+      <img src="images/express.png" alt="Express" class="tech-logo" />
+      <img src="images/mongodb.png" alt="MongoDB" class="tech-logo" />
+      <img src="images/nodejs.png" alt="Node.js" class="tech-logo" />
     </div>
   </footer>
 
@@ -78,15 +98,15 @@
         }
 
         linkContainer.innerHTML = `
-          ${user.role === "ristoratore" ? '<a href="add.html" id="link-add"> Add Dish</a> | ' : ''}
-          ${user.role === "cliente" ? '<a href="i-miei-ordini.html"> My orders</a> | ' : ''}
-          <a href="edituser.html"> Edit Profile</a> |
-          <a href="login.html" onclick="localStorage.removeItem('loggedUser')"> Logout</a>
+          ${user.role === "ristoratore" ? '<a href="add.html" id="link-add">Add Dish</a> | ' : ''}
+          ${user.role === "cliente" ? '<a href="i-miei-ordini.html">My orders</a> | ' : ''}
+          <a href="edituser.html">Edit Profile</a> |
+          <a href="login.html" onclick="localStorage.removeItem('loggedUser')">Logout</a>
         `;
       } else {
         linkContainer.innerHTML = `
-          <a href="login.html"> Log in </a> |
-          <a href="register.html"> Register</a>
+          <a href="login.html">Log in</a> |
+          <a href="register.html">Register</a>
         `;
       }
     });
