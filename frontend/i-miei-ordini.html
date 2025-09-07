@@ -149,7 +149,7 @@
             const ok = confirm("Are you sure you picked up your order at the counter?");
             if (!ok) return;
             try {
-              // ✅ manda stato atteso dal backend (italiano)
+              // manda stato atteso dal backend (italiano)
               const putRes = await fetch(`${API_BASE}/orders/${encodeURIComponent(idOrd)}/state`, {
                 method: "PUT",
                 headers: { "Content-Type": "application/json" },
@@ -160,7 +160,7 @@
                 throw new Error(`PUT ${putRes.status} ${detail?.error || ""}`);
               }
 
-              // UI: rimuovo la card e notifico
+              // ui: rimuovo la card e notifico
               div.remove();
               noti.innerHTML = `
                 <p class="success">Pickup confirmed. The order has been moved to the

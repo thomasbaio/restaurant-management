@@ -1,4 +1,3 @@
-// --- auth guard ---
 const user = JSON.parse(localStorage.getItem("loggedUser"));
 if (!user) {
   alert("You must be logged in to place an order");
@@ -64,24 +63,92 @@ function normalizeMeal(raw) {
   return { id, name, price, category, description, thumb };
 }
 
-// estrai tutti i piatti anche se l’endpoint restituisce ristoranti con menu annidati
-function extractAllMeals(data) {
-  const found = [];
-  function recurse(node) {
-    if (Array.isArray(node)) {
-      node.forEach(recurse);
-    } else if (node && typeof node === "object") {
-      // se sembra un piatto, normalizza e conserva solo quelli con id+prezzo validi
-      const n = normalizeMeal(node);
-      if (n.id && Number.isFinite(n.price)) {
-        found.push(n);
+/**
+ * estrae i piatti raggruppandoli per ristorante.
+ * supporta sia:
+ *  - struttura: [{ restaurantId, nome, menu: [...] }, ...]
+ *  - struttura piatta: [ { ..., restaurantId, ... }, ... ]
+ *  - strutture annidate miste (fallback).
+ *
+ * ritorna: Array<{ restaurantId, restaurantName, items: NormalizedMeal[] }>
+ */
+function extractMealsByRestaurant(data) {
+  const groups = new Map(); // key: restaurantId (string) -> { restaurantId, restaurantName, items: [] }
+
+  const ensureGroup = (rid, rname) => {
+    const key = String(rid || "unknown");
+    if (!groups.has(key)) {
+      groups.set(key, {
+        restaurantId: key,
+        restaurantName: (rname && String(rname)) || (key === "unknown" ? "Other restaurants" : `Restaurant ${key}`),
+        items: []
+      });
+    } else if (rname) {
+      // se arriva un nome migliore, aggiorna
+      const g = groups.get(key);
+      if (!g.restaurantName || g.restaurantName.startsWith("Restaurant ")) {
+        g.restaurantName = String(rname);
       }
-      // continua a scendere
-      Object.values(node).forEach(recurse);
+    }
+    return groups.get(key);
+  };
+
+  // caso A: array top-level
+  if (Array.isArray(data)) {
+    data.forEach(node => {
+      if (node && typeof node === "object" && Array.isArray(node.menu)) {
+        // Oggetto ristorante classico
+        const rid = node.restaurantId ?? node.idRestaurant ?? node.id ?? node._id ?? "unknown";
+        const rname = node.nome ?? node.name ?? node.restaurantName ?? "";
+        const group = ensureGroup(rid, rname);
+
+        node.menu.forEach(p => {
+          const n = normalizeMeal(p);
+          if (n.id && Number.isFinite(n.price)) group.items.push(n);
+        });
+      } else {
+        // Può essere un piatto piatto con restaurantId
+        const maybeMeal = normalizeMeal(node || {});
+        if (maybeMeal.id && Number.isFinite(maybeMeal.price)) {
+          const rid = node?.restaurantId ?? "unknown";
+          const rname = node?.restaurantName ?? "";
+          const group = ensureGroup(rid, rname);
+          group.items.push(maybeMeal);
+        }
+      }
+    });
+  } else if (data && typeof data === "object") {
+    // caso B: oggetto singolo (fallback) – ricorsione leggera
+    const stack = [data];
+    while (stack.length) {
+      const cur = stack.pop();
+      if (!cur || typeof cur !== "object") continue;
+
+      if (Array.isArray(cur.menu)) {
+        const rid = cur.restaurantId ?? cur.idRestaurant ?? cur.id ?? cur._id ?? "unknown";
+        const rname = cur.nome ?? cur.name ?? cur.restaurantName ?? "";
+        const group = ensureGroup(rid, rname);
+        cur.menu.forEach(p => {
+          const n = normalizeMeal(p);
+          if (n.id && Number.isFinite(n.price)) group.items.push(n);
+        });
+      } else {
+        // spingi figli
+        Object.values(cur).forEach(v => {
+          if (v && typeof v === "object") stack.push(v);
+          if (Array.isArray(v)) v.forEach(x => x && typeof x === "object" && stack.push(x));
+        });
+      }
     }
   }
-  recurse(data);
-  return found;
+
+  // filtra gruppi senza items
+  const arr = Array.from(groups.values()).filter(g => g.items.length > 0);
+
+  // ordina alfabeticamente per nome ristorante
+  arr.sort((a, b) => a.restaurantName.localeCompare(b.restaurantName));
+
+  return arr;
 }
 
 window.onload = async function () {
@@ -96,42 +163,53 @@ window.onload = async function () {
   try {
     // prova /meals e in fallback /api/meals
     const rawData = await fetchJSONWithFallback(["/meals", "/api/meals"]);
-    const meals = extractAllMeals(rawData);
 
-    if (meals.length === 0) {
+    //  gruppi per ristorante ---
+    const groups = extractMealsByRestaurant(rawData);
+
+    if (groups.length === 0) {
       list.innerHTML = `<p>No dishes available.</p>`;
       return;
     }
 
-    // render lista
+    // render lista per gruppi
     list.innerHTML = "";
-    meals.forEach(meal => {
-      const container = document.createElement("div");
-      container.className = "meal-item";
+    groups.forEach(group => {
+      const section = document.createElement("fieldset");
+      section.className = "restaurant-section";
+      const legend = document.createElement("legend");
+      legend.textContent = group.restaurantName;
+      section.appendChild(legend);
 
-      const imgHtml = meal.thumb
-        ? `<img src="${meal.thumb}" alt="${meal.name}" class="meal-thumb" onerror="this.style.display='none'">`
-        : "";
+      group.items.forEach(meal => {
+        const container = document.createElement("div");
+        container.className = "meal-item";
 
-      container.innerHTML = `
-        <label class="meal-row">
-          <input type="checkbox" name="meal" value="${meal.id}" data-price="${meal.price}">
-          <div class="meal-info">
-            <div class="meal-title">
-              <strong>${meal.name}</strong>
-              <span class="meal-price">€${meal.price.toFixed(2)}</span>
+        const imgHtml = meal.thumb
+          ? `<img src="${meal.thumb}" alt="${meal.name}" class="meal-thumb" onerror="this.style.display='none'">`
+          : "";
+
+        container.innerHTML = `
+          <label class="meal-row">
+            <input type="checkbox" name="meal" value="${meal.id}" data-price="${meal.price}" data-restaurant="${group.restaurantId}">
+            <div class="meal-info">
+              <div class="meal-title">
+                <strong>${meal.name}</strong>
+                <span class="meal-price">€${meal.price.toFixed(2)}</span>
+              </div>
+              ${meal.category ? `<em class="meal-cat">${meal.category}</em>` : ""}
+              ${meal.description ? `<small class="meal-desc">${meal.description}</small>` : ""}
             </div>
-            ${meal.category ? `<em class="meal-cat">${meal.category}</em>` : ""}
-            ${meal.description ? `<small class="meal-desc">${meal.description}</small>` : ""}
-          </div>
-          ${imgHtml}
-        </label>
-      `;
+            ${imgHtml}
+          </label>
+        `;
+        section.appendChild(container);
+      });
 
-      list.appendChild(container);
+      list.appendChild(section);
     });
 
-    // totale dinamico
+    // totale dinamico (invariato)
     function recomputeTotal() {
       const selected = list.querySelectorAll('input[name="meal"]:checked');
       let total = 0;
@@ -156,7 +234,7 @@ window.onload = async function () {
   }
 };
 
-// --- invio ordine ---
+// --- invio ordine (invariato) ---
 const form = document.getElementById("order-form");
 if (form) {
   form.addEventListener("submit", function (e) {
