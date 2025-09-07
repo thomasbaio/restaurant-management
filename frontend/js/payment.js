@@ -13,11 +13,10 @@ function parseExpiryToDate(expStr) {
   return new Date(y, m - 1, 1, 23, 59, 59);
 }
 
-function toNumberArray(arr) {
+function toStringArray(arr) {
   return (Array.isArray(arr) ? arr : [])
-    .map(x => (typeof x === "string" ? x.trim() : x))
-    .map(x => Number(x))
-    .filter(n => Number.isFinite(n));
+    .map(x => (x == null ? "" : String(x).trim()))
+    .filter(s => s.length > 0);
 }
 
 function calcTotal(items) {
@@ -25,7 +24,6 @@ function calcTotal(items) {
   if (!Array.isArray(items) || items.length === 0) return 0;
   return items.reduce((s, it) => s + (Number(it.price) || 0) * (Number(it.qty) || 1), 0);
 }
-
 
 document.getElementById("payment-form").addEventListener("submit", async function (e) {
   e.preventDefault();
@@ -75,18 +73,29 @@ document.getElementById("payment-form").addEventListener("submit", async functio
     return;
   }
 
+  // --- ricava restaurantId dal pendingOrder (impostato in order.js) ---
+  const restaurantId =
+    ordine.restaurantId ||
+    (Array.isArray(ordine.items) && ordine.items[0]?.restaurantId) ||
+    null;
+
+  if (!restaurantId) {
+    alert("Unable to determine restaurantId for this order.");
+    return;
+  }
+
   // --- normalizzazione payload atteso dal backend ---
   // supporta sia pendingOrder.meals (array di id) sia pendingOrder.items (oggetti con id/price/qty)
   let meals = [];
   let total = 0;
 
   if (Array.isArray(ordine.meals)) {
-    meals = toNumberArray(ordine.meals);
+    meals = toStringArray(ordine.meals); // id come stringhe
   }
 
   if ((!meals || meals.length === 0) && Array.isArray(ordine.items)) {
     // se abbiamo items con {idmeals|id, price, qty}
-    meals = toNumberArray(ordine.items.map(it => it.idmeals ?? it.id));
+    meals = toStringArray(ordine.items.map(it => it.idmeals ?? it.id ?? it._id));
     total = Number(ordine.total) || calcTotal(ordine.items);
   } else {
     total = Number(ordine.total) || 0;
@@ -99,9 +108,10 @@ document.getElementById("payment-form").addEventListener("submit", async functio
 
   const payload = {
     username,
-    meals,
+    restaurantId,          //  necessario per il backend
+    meals,                 //  array di stringhe
     total,
-    payment: "carta_credito",
+    payment: "carta_credito", // accettato e normalizzato lato server
     status: "ordinato",
     createdAt: new Date().toISOString()
   };
