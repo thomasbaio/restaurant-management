@@ -158,7 +158,7 @@ if (typeof window.addToCart !== "function") {
   };
 }
 
-/* =========================== UI helpers =========================== */
+/* =========================== ui helpers =========================== */
 
 function getQueryParam(name) {
   const params = new URLSearchParams(location.search);
@@ -173,7 +173,14 @@ function setSelectedCategoryLabel(cat) {
   el.textContent = label;
 }
 
-/* =========================== RENDERERS =========================== */
+// preferenza profilo (usata per Offerte speciali)
+function getUserPreferredCategory(u) {
+  return (u?.preferenza ?? u?.preferredCategory ?? u?.favoriteCategory ?? "")
+    .toString()
+    .trim();
+}
+
+/* =========================== renderers =========================== */
 
 // tabella classica (se presente)
 function renderTable(meals, isRestaurateur) {
@@ -398,7 +405,7 @@ function renderMenusGroupedSection(meals, rawAllData, activeCategory) {
   enrichNames().then(draw).catch(() => {});
 }
 
-/* ============================== BOOT ============================== */
+/* ============================== boot ============================== */
 
 window.onload = async () => {
   let user = null;
@@ -546,14 +553,19 @@ window.onload = async () => {
     if (isCustomer) {
       const offersContainer = document.getElementById("special-offers");
       if (offersContainer) {
-        const cat = (activeCategory || "").trim();
-        if (!cat || cat === "*") {
-          offersContainer.innerHTML = "<li>Select a category to see special offers.</li>";
+        const pref = getUserPreferredCategory(user);
+
+        if (!pref) {
+          offersContainer.innerHTML = `
+            <li>No preference set. <a href="edituser.html">Set your preferred category</a> to receive personalized offers.</li>
+          `;
         } else {
+          // Le offerte usano SOLO la preferenza salvata nel profilo
           const suggestedMeals = (window.__allMealsAll || [])
-            .filter(p => (p.tipologia || "").toLowerCase() === cat.toLowerCase());
+            .filter(p => (p.tipologia || "").toLowerCase() === pref.toLowerCase());
+
           if (!suggestedMeals.length) {
-            offersContainer.innerHTML = `<li>No dishes found for category "${cat}".</li>`;
+            offersContainer.innerHTML = `<li>No dishes found for your preference "<strong>${pref}</strong>".</li>`;
           } else {
             offersContainer.innerHTML = suggestedMeals.map(p => `
               <li style="margin-bottom:10px;">
@@ -566,7 +578,7 @@ window.onload = async () => {
       }
     }
 
-    // ———— EVENTI: cambio categoria dal select ————
+    // ———— eventi: cambio categoria dal select ————
     if (catSelect) {
       catSelect.addEventListener("change", () => {
         const newCat = catSelect.value || "*";
@@ -582,28 +594,7 @@ window.onload = async () => {
         // aggiorna vista per ristorante
         renderMenusGroupedSection(mealsNow, allData, newCat);
 
-        // aggiorna offerte (solo cliente)
-        if (isCustomer) {
-          const offersContainer = document.getElementById("special-offers");
-          if (offersContainer) {
-            if (!newCat || newCat === "*") {
-              offersContainer.innerHTML = "<li>Select a category to see special offers.</li>";
-            } else {
-              const suggestedMeals = (window.__allMealsAll || [])
-                .filter(p => (p.tipologia || "").toLowerCase() === newCat.toLowerCase());
-              if (!suggestedMeals.length) {
-                offersContainer.innerHTML = `<li>No dishes found for category "${newCat}".</li>`;
-              } else {
-                offersContainer.innerHTML = suggestedMeals.map(p => `
-                  <li style="margin-bottom:10px;">
-                    <img src="${pickImageURL(p)}" alt="Photo" width="80" height="60" style="vertical-align:middle;margin-right:10px;">
-                    <strong>${p.nome}</strong> - €${formatPrice(p.prezzo)} ${p.tipologia ? `(${p.tipologia})` : ""}
-                  </li>
-                `).join("");
-              }
-            }
-          }
-        }
+        // non aggiorniamo le offerte qui: restano ancorate alla preferenza profilo
       });
     }
 
