@@ -601,3 +601,23 @@ footer.tech-footer img.tech-logo:hover {
 .err {
   color: #b00020;
 }
+/* blocchi informativi */
+.box {
+  padding: 12px;
+  border: 1px solid #ddd;
+  border-radius: 10px;
+  margin: 12px 0;
+}
+
+/* messaggi di stato */
+.ok {
+  color: #1b5e20;   /* verde */
+}
+
+.err {
+  color: #b00020;   /* rosso */
+}
+
+.muted {
+  color: #666;      /* grigio attenuato */
+}
