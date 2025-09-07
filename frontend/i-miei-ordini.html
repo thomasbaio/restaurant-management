@@ -29,8 +29,6 @@
         : (location.origin || "https://restaurant-management-wzhj.onrender.com");
     }
   })();
-</script>
-
 <script>
 // ---------------- helpers ----------------
 const mealName  = p => p?.nome ?? p?.strMeal ?? p?.name ?? "Dish";
@@ -62,24 +60,45 @@ const labelStatus = s => {
 
 const badgeClass = s => `badge ${String(s||"").toLowerCase()}`;
 
-// mappa idPiatto -> {name, price}
-function buildMealsMap(rawRestaurants) {
+// --- Catalogo: costruisci mappa ID -> {name, price}
+function buildMealsMap(raw) {
   const map = new Map();
-  (Array.isArray(rawRestaurants) ? rawRestaurants : []).forEach(r => {
-    (r?.menu || []).forEach(p => map.set(String(mealId(p)), { name: mealName(p), price: mealPrice(p) }));
+  const arr = Array.isArray(raw) ? raw : [];
+  // supporta sia [{menu:[...]}] sia lista piatta di piatti
+  arr.forEach(node => {
+    if (Array.isArray(node?.menu)) {
+      node.menu.forEach(p => {
+        map.set(String(mealId(p)), { name: mealName(p), price: mealPrice(p) });
+      });
+    } else {
+      // lista piatta
+      const p = node;
+      if (p && (mealId(p) != null)) {
+        map.set(String(mealId(p)), { name: mealName(p), price: mealPrice(p) });
+      }
+    }
   });
   return map;
 }
 
-// ------- NEW: helpers robusti per items/id/qty + render elenco -------
-const getQty = it => Number(it?.qty ?? it?.quantity ?? it?.q ?? 1) || 1;
-const getItemId = it => it?.mealId ?? it?.idmeal ?? it?.idmeals ?? it?.idMeal ?? it?.id ?? it?._id;
+// ------- helpers robusti per items/id/qty -------
+const getQty = it =>
+  Number(it?.qty ?? it?.quantity ?? it?.quantita ?? it?.q ?? 1) || 1;
+
+const getItemId = it =>
+  it?.mealId ?? it?.idmeal ?? it?.idmeals ?? it?.idMeal ?? it?.id ?? it?._id;
+
+// TRUE se stringa indica “senza nome”
+const isNoName = s => {
+  const t = String(s||"").trim().toLowerCase();
+  return !t || t === "senza nome" || t === "unnamed" || t === "dish";
+};
 
 /**
  * Ritorna { listHtml, total } usando:
- *  - ordine.items [{name, price, qty, (mealId/...)}] se presente
+ *  - ordine.items [{name/nome, prezzo/price, qty, (mealId/...)}] se presente
  *  - altrimenti ordine.meals (array di ID o oggetti con id/qty)
- *  - recupera name/price dal catalogo se mancano nello snapshot
+ *  - recupera name/price dal catalogo se mancano o sono "senza nome"
  */
 function renderItemsAndTotal(ordine, mealsMap) {
   let total = 0;
@@ -88,20 +107,27 @@ function renderItemsAndTotal(ordine, mealsMap) {
   if (Array.isArray(ordine.items) && ordine.items.length) {
     rows = ordine.items.map(it => {
       const id      = getItemId(it);
-      const catalog = id ? mealsMap.get(String(id)) : null;
-      const name    = it.name || catalog?.name || (id ? `Dish #${id}` : "Dish");
-      const qty     = getQty(it);
-      const price   = Number(it.price ?? catalog?.price ?? 0) || 0;
+      const cat     = id ? mealsMap.get(String(id)) : null;
+
+      // nome: preferisci it.name / it.nome; se mancante o "senza nome", prendi dal catalogo
+      let name = it.name ?? it.nome ?? "";
+      if (isNoName(name)) name = cat?.name || (id ? `Dish #${id}` : "Dish");
+
+      const qty   = getQty(it);
+      const price = Number(it.prezzo ?? it.price ?? cat?.price ?? 0) || 0;
+
       total += price * qty;
       return `<li>${name} &times;${qty} (${fmtMoney(price)})</li>`;
     });
   } else if (Array.isArray(ordine.meals) && ordine.meals.length) {
     rows = ordine.meals.map(m => {
-      const id    = (typeof m === "object") ? getItemId(m) : m;
-      const qty   = (typeof m === "object") ? getQty(m) : 1;
-      const cat   = id != null ? mealsMap.get(String(id)) : null;
+      const id  = (typeof m === "object") ? getItemId(m) : m;
+      const qty = (typeof m === "object") ? getQty(m) : 1;
+      const cat = id != null ? mealsMap.get(String(id)) : null;
+
       const name  = cat?.name || `Dish #${id ?? "?"}`;
       const price = Number(cat?.price ?? 0) || 0;
+
       total += price * qty;
       return `<li>${name} &times;${qty} (${fmtMoney(price)})</li>`;
     });
@@ -118,7 +144,6 @@ function getETA(ord) {
   const now = Date.now();
   const state = String(ord?.status ?? ord?.state ?? "").toLowerCase();
 
-  // timestamp pronto fornito
   const readyAtISO = ord.readyAt || ord.etaReadyAt || ord.estimatedReadyAt;
   if (readyAtISO) {
     const ra = new Date(readyAtISO).getTime();
@@ -126,7 +151,6 @@ function getETA(ord) {
     return { readyAt: new Date(ra), remainingMs: rem, label: rem === 0 ? "Ready for pickup" : minutesLabel(rem) };
   }
 
-  // minuti forniti
   const mins = Number(ord.prepMinutes || ord.etaMinutes);
   if (!Number.isNaN(mins) && mins > 0) {
     const ra = (new Date(ord.createdAt || Date.now())).getTime() + mins*60000;
@@ -134,7 +158,6 @@ function getETA(ord) {
     return { readyAt: new Date(ra), remainingMs: rem, label: rem === 0 ? "Ready for pickup" : minutesLabel(rem) };
   }
 
-  // defaults: ordinato ~20', preparazione ~10', consegna = pronto
   if (state === "consegna") return { readyAt: new Date(), remainingMs: 0, label: "Ready for pickup" };
   const base = (state === "preparazione") ? 10 : 20;
   const ra = (new Date(ord.createdAt || Date.now())).getTime() + base*60000;
@@ -159,7 +182,7 @@ function startCountdown(span, ordine) {
   };
   tick();
   const id = setInterval(() => {
-    if (!span.isConnected) return clearInterval(id); // card rimossa
+    if (!span.isConnected) return clearInterval(id);
     tick();
   }, 15000);
 }
@@ -179,7 +202,9 @@ async function initOrdini(){
 
   try {
     // 1) ordini del cliente
-    const res = await fetch(`${API_BASE}/orders?` + new URLSearchParams({ username: user.username }), { headers: { "Accept": "application/json" } });
+    const res = await fetch(`${API_BASE}/orders?` + new URLSearchParams({ username: user.username }), {
+      headers: { "Accept": "application/json" }
+    });
     if (!res.ok) throw new Error(`Orders HTTP ${res.status}`);
     const ordini = await res.json();
 
@@ -205,9 +230,7 @@ async function initOrdini(){
       const div = document.createElement("div");
       div.className = "ordine-box";
 
-      // --- NEW: elenco piatti + totale con funzione unica ---
       const { listHtml, total } = renderItemsAndTotal(ordine, mealsMap);
-
       const idOrd = orderId(ordine);
       const statoRaw = (ordine?.status ?? ordine?.state ?? "Unknown");
       const statoLbl = labelStatus(statoRaw);
@@ -225,7 +248,6 @@ async function initOrdini(){
         <div class="actions"></div>
       `;
 
-      // countdown
       startCountdown(div.querySelector(".eta"), ordine);
 
       // bottone "Ho ritirato l'ordine"
@@ -272,6 +294,7 @@ async function initOrdini(){
   }
 }
 </script>
+
 
 </body>
 </html>
