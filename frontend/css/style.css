@@ -621,3 +621,60 @@ footer.tech-footer img.tech-logo:hover {
 .muted {
   color: #666;      /* grigio attenuato */
 }
+/* ---- Stili per la pagina "My orders" ---- */
+.ordine-box {
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  padding: 14px;
+  margin: 14px 0;
+  background: #fff;
+}
+
+.muted {
+  color: #666;
+}
+
+.eta {
+  font-weight: 600;
+}
+.eta.soon {
+  color: #1b5e20;
+}
+.eta.wait {
+  color: #b45309;
+}
+.eta.done {
+  color: #0b61a4;
+}
+
+.rig {
+  margin: 4px 0;
+}
+
+.stato.badge {
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: #eee;
+  font-size: 0.9rem;
+}
+
+.actions {
+  margin-top: 10px;
+}
+
+.actions button {
+  background: #22c55e;
+  color: #fff;
+  border: 0;
+  padding: 10px 14px;
+  border-radius: 8px;
+  cursor: pointer;
+}
+.actions button:hover {
+  filter: brightness(0.95);
+}
+
+ul.dishes {
+  margin: 6px 0 0 0;
+  padding-left: 20px;
+}
