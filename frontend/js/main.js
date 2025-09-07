@@ -488,7 +488,7 @@ function renderMenusGroupedSection(meals, rawAllData) {
 
       const header = document.createElement("h2");
       header.className = "ristorante-title";
-      header.textContent = `🍽️ ${g.name}`;
+      header.textContent = ` ${g.name}`;
       section.appendChild(header);
 
       const grid = document.createElement("div");

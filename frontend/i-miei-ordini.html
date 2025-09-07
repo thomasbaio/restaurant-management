@@ -2,19 +2,19 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title> My orders </title>
+  <title>My orders</title>
   <link rel="stylesheet" href="css/style.css">
 </head>
 <body>
-  <h1> My orders </h1>
+  <h1>My orders</h1>
 
   <div id="noti"></div>
   <div id="ordini-container">
-    <p> Loading... </p>
+    <p>Loading...</p>
   </div>
 
-  <p><a href="index.html"> Return to the homepage </a></p>
-  <p><a href="storico_clienti.html"> Order history </a></p>
+  <p><a href="index.html">Return to the homepage</a></p>
+  <p><a href="storico_clienti.html">Order history</a></p>
 
   <script src="js/main.js" defer></script>
 
@@ -39,8 +39,31 @@
   const fmtMoney  = n => `€${Number(n||0).toFixed(2)}`;
   const fmtDate   = iso => { try { return new Date(iso).toLocaleString(); } catch { return ""; } };
 
-  // stati chiusi
-  const isClosedStatus = s => ["withdrawn","canceled"].includes(String(s||"").toLowerCase());
+  // stati chiusi (italiano + inglese)
+  const CLOSED_STATES = [
+    "ritirato","consegnato","annullato",
+    "withdrawn","delivered","canceled","cancelled"
+  ];
+  const isClosedStatus = s => CLOSED_STATES.includes(String(s||"").toLowerCase());
+
+  // etichetta in inglese per lo stato ricevuto dal server
+  const labelStatus = s => {
+    const t = String(s||"").toLowerCase();
+    const map = {
+      ordinato: "Ordered",
+      preparazione: "Preparing",
+      consegna: "Ready for pickup",
+      consegnato: "Delivered",
+      ritirato: "Picked up",
+      annullato: "Canceled",
+      withdrawn: "Picked up",
+      delivered: "Delivered",
+      canceled: "Canceled",
+      cancelled: "Canceled"
+    };
+    return map[t] || (s || "Unknown");
+  };
+
   const badgeClass = s => `badge ${String(s||"").toLowerCase()}`;
 
   document.addEventListener("DOMContentLoaded", initOrdini);
@@ -72,7 +95,7 @@
         ? ristoranti.flatMap(r => Array.isArray(r?.menu) ? r.menu : [])
         : [];
 
-      // solo ordini NON chiusi in questa pagina
+      // solo ordini NON chiusi
       const attivi = (Array.isArray(ordini) ? ordini : [])
         .filter(o => !isClosedStatus(o?.status ?? o?.state));
 
@@ -84,7 +107,6 @@
       }
 
       container.innerHTML = "";
-      // mostro i più recenti in alto
       [...attivi].sort((a,b) => new Date(b.createdAt||0) - new Date(a.createdAt||0))
       .forEach(ordine => {
         const div = document.createElement("div");
@@ -104,13 +126,14 @@
         }
 
         const idOrd = orderId(ordine);
-        const stato = (ordine?.status ?? ordine?.state ?? "Unknown");
+        const statoRaw = (ordine?.status ?? ordine?.state ?? "Unknown");
+        const statoLbl = labelStatus(statoRaw);
 
         div.innerHTML = `
           <p><strong>ID:</strong> ${idOrd || "<span class='muted'>(n/a)</span>"}</p>
           <p><strong>Created:</strong> ${ordine?.createdAt ? fmtDate(ordine.createdAt) : "<span class='muted'>n/a</span>"}</p>
           <p><strong>Mode:</strong> Pick up in store</p>
-          <p><strong>Status:</strong> <span class="stato ${badgeClass(stato)}">${stato}</span></p>
+          <p><strong>Status:</strong> <span class="stato ${badgeClass(statoRaw)}">${statoLbl}</span></p>
           <p><strong>Dishes:</strong> ${elenco || "-"}</p>
           <p><strong>Total:</strong> ${fmtMoney(ordine?.total)}</p>
           <div class="azioni"></div>
@@ -119,31 +142,31 @@
         const azioniDiv = div.querySelector(".azioni");
 
         // bottone "Ho ritirato l'ordine"
-        if (idOrd && !isClosedStatus(stato)) {
+        if (idOrd && !isClosedStatus(statoRaw)) {
           const btnPick = document.createElement("button");
           btnPick.textContent = "I picked up the order";
           btnPick.addEventListener("click", async () => {
             const ok = confirm("Are you sure you picked up your order at the counter?");
             if (!ok) return;
             try {
-              // alias endpoint compatibile con backend
+              // ✅ manda stato atteso dal backend (italiano)
               const putRes = await fetch(`${API_BASE}/orders/${encodeURIComponent(idOrd)}/state`, {
                 method: "PUT",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ newState: "Withdrawn", clienteConfermaRitiro: true })
+                body: JSON.stringify({ newState: "ritirato", clienteConfermaRitiro: true })
               });
               if (!putRes.ok) {
                 const detail = await putRes.json().catch(()=>({}));
-                throw new Error(`PUT ${putRes.status} ${detail?.error||""}`);
+                throw new Error(`PUT ${putRes.status} ${detail?.error || ""}`);
               }
 
               // UI: rimuovo la card e notifico
               div.remove();
               noti.innerHTML = `
-                <p class="success">Pickup confirmed. the order has been moved to the
+                <p class="success">Pickup confirmed. The order has been moved to the
                 <a href="storico_clienti.html"><strong>customer history</strong></a>.</p>`;
 
-              // Se non rimangono ordini attivi, mostra il messaggio vuoto
+              // se non rimangono ordini attivi, mostra messaggio vuoto
               if (!container.querySelector(".ordine-box")) {
                 container.innerHTML = `
                   <p>No active orders.</p>
