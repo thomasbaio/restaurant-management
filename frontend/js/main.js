@@ -167,6 +167,19 @@ window.onload = async () => {
   const isCustomer = role === "cliente";
   const isRestaurateur = role === "ristoratore";
 
+  // === [NUOVO] Banner per non loggati / non clienti ===
+  (function showBrowseOnlyBanner() {
+    const noti = document.getElementById("noti");
+    if (noti && (!user || user.role !== "cliente")) {
+      noti.innerHTML = `
+        <div class="box muted">
+          Sei libero di sfogliare i menu. <strong>Accedi come cliente</strong> per aggiungere piatti al carrello.
+          <a href="login.html">Vai al login</a>
+        </div>
+      `;
+    }
+  })();
+
   // === regole UI richieste ===
   // a) Solo i clienti possono vedere "ricerca ristoranti"
   try {
