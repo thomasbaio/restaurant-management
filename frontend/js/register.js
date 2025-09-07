@@ -1,68 +1,133 @@
 // scegli base URL: localhost in dev, Render in produzione
 const API_BASE =
-  window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
-    ? 'http://localhost:3000'
-    : 'https://restaurant-management-wzhj.onrender.com';
+  window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1"
+    ? "http://localhost:3000"
+    : "https://restaurant-management-wzhj.onrender.com";
 
-console.log('API_BASE ->', API_BASE);
+console.log("API_BASE ->", API_BASE);
 
-// toggle blocchi extra in base al ruolo
-document.getElementById('role').addEventListener('change', function () {
-  const extraRist = document.getElementById('ristoratore-extra');
-  const extraCliente = document.getElementById('cliente-extra');
-  extraRist.style.display = this.value === 'ristoratore' ? 'block' : 'none';
-  extraCliente.style.display = this.value === 'cliente' ? 'block' : 'none';
-});
+// --- cache elementi
+const form = document.getElementById("register-form");
+const roleEl = document.getElementById("role");
 
-document.getElementById('register-form').addEventListener('submit', async function (e) {
+const extraCliente = document.getElementById("cliente-extra");
+const extraRist    = document.getElementById("ristoratore-extra");
+
+// campi base
+const usernameEl = document.getElementById("username");
+const emailEl    = document.getElementById("email");
+const passEl     = document.getElementById("password");
+
+// cliente
+const preferenzaEl = document.getElementById("preferenza");
+
+// ristoratore
+const pivaEl  = document.getElementById("piva");
+const telEl   = document.getElementById("telefono");
+const luogoEl = document.getElementById("luogo");
+const viaEl   = document.getElementById("via");
+const rnameEl = document.getElementById("restaurantName");
+
+// --- UI: mostra/nasconde e required dinamici
+function refreshRoleUI() {
+  const role = roleEl.value;
+  const isCliente = role === "cliente";
+  const isRisto   = role === "ristoratore";
+
+  extraCliente.style.display = isCliente ? "block" : "none";
+  extraRist.style.display    = isRisto   ? "block" : "none";
+
+  // required dinamici
+  // preferenza è opzionale lato business
+  preferenzaEl.required = false;
+
+  rnameEl.required = isRisto;
+  pivaEl.required  = isRisto;
+  telEl.required   = isRisto;
+  luogoEl.required = isRisto;
+  viaEl.required   = isRisto;
+}
+
+roleEl.addEventListener("change", refreshRoleUI);
+// inizializza allo stato corretto
+refreshRoleUI();
+
+// --- validazione base
+function validateForm() {
+  const username = usernameEl.value.trim();
+  const email = emailEl.value.trim();
+  const pwd = passEl.value;
+
+  if (!username) return "Username is required.";
+  if (!email) return "Email is required.";
+  if (!pwd || pwd.length < 6) return "Password must be at least 6 characters.";
+
+  if (roleEl.value === "ristoratore") {
+    // opzionale: richiedi almeno restaurantName e telefono
+    if (!rnameEl.value.trim()) return "Restaurant name is required for restaurants.";
+    if (!telEl.value.trim()) return "Phone number is required for restaurants.";
+  }
+  return null;
+}
+
+// --- submit
+form.addEventListener("submit", async (e) => {
   e.preventDefault();
 
-  const role = document.getElementById('role').value;
+  const err = validateForm();
+  if (err) {
+    alert(err);
+    return;
+  }
 
-  // payload base
+  const role = roleEl.value;
   const payload = {
-    username: document.getElementById('username').value.trim(),
-    email: document.getElementById('email').value.trim(),
-    password: document.getElementById('password').value,
+    username: usernameEl.value.trim(),
+    email: emailEl.value.trim(),
+    password: passEl.value,
     role
   };
 
-  // mappa i nomi campo del form a quelli attesi dal backend
-  if (role === 'ristoratore') {
-    payload.partitaIva = document.getElementById('piva')?.value?.trim() || '';
-    payload.telefono   = document.getElementById('telefono')?.value?.trim() || '';
-    payload.luogo      = document.getElementById('luogo')?.value?.trim() || '';
-    payload.indirizzo  = document.getElementById('via')?.value?.trim() || '';
-    payload.restaurantName = document.getElementById('restaurantName')?.value?.trim() || '';
-    // se hai già un restaurantId preassegnato, puoi anche inviarlo:
-    // payload.restaurantId = 'r_o';
+  if (role === "cliente") {
+    const pref = (preferenzaEl.value || "").trim();
+    if (pref) payload.preferenza = pref; // << inviamo la preferenza
   } else {
-    // campi cliente – opzionali lato backend attuale (non usati dalla rotta /register MongoDB)
-    // li teniamo fuori dal payload finché la rotta non li supporta.
-    // const nome = document.getElementById('nome')?.value?.trim() || '';
-    // const cognome = document.getElementById('cognome')?.value?.trim() || '';
-    // const pagamento = document.getElementById('pagamento')?.value || '';
-    // const preferenza = document.getElementById('preferenza')?.value || '';
+    payload.partitaIva    = pivaEl.value.trim();
+    payload.telefono      = telEl.value.trim();
+    payload.luogo         = luogoEl.value.trim();
+    payload.indirizzo     = viaEl.value.trim();
+    payload.restaurantName = rnameEl.value.trim();
+    // Se vuoi imporre un restaurantId fisso, decommenta:
+    // payload.restaurantId = "r_o";
   }
+
+  // disabilita submit durante la richiesta
+  const submitBtn = form.querySelector('button[type="submit"]');
+  const prevTxt = submitBtn.textContent;
+  submitBtn.disabled = true;
+  submitBtn.textContent = "Registering...";
 
   try {
     const res = await fetch(`${API_BASE}/users/register`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload)
     });
 
     if (!res.ok) {
-      const txt = await res.text();
-      throw new Error(`HTTP ${res.status} - ${txt || 'Registration failed'}`);
+      const txt = await res.text().catch(() => "");
+      throw new Error(`HTTP ${res.status} – ${txt || "Registration failed"}`);
     }
 
     const data = await res.json();
-    console.log('Registration OK:', data);
-    alert('Registration completed!');
-    window.location.href = 'login.html';
-  } catch (err) {
-    console.error('Request error:', err);
-    alert('Registration error. Check the console for details.');
+    console.log("Registration OK:", data);
+    alert("Registration completed! Now you can log in.");
+    window.location.href = "login.html";
+  } catch (e2) {
+    console.error("Request error:", e2);
+    alert(`Registration error.\n${e2.message || e2}`);
+  } finally {
+    submitBtn.disabled = false;
+    submitBtn.textContent = prevTxt;
   }
 });

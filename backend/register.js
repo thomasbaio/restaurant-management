@@ -3,7 +3,7 @@ const bcrypt = require('bcrypt');
 const router = express.Router();
 const User = require('./models/user'); // modello Mongoose User
 
-// post /users/register
+// POST /users/register
 router.post('/register', async (req, res) => {
   try {
     const {
@@ -16,7 +16,12 @@ router.post('/register', async (req, res) => {
       indirizzo,
       luogo,
       restaurantName,
-      restaurantId: restaurantIdFromBody
+      restaurantId: restaurantIdFromBody,
+
+      //  preferenza utente (accettiamo più alias)
+      preferenza,
+      preferredCategory,
+      favoriteCategory,
     } = req.body;
 
     // 1) validazione minima
@@ -49,18 +54,27 @@ router.post('/register', async (req, res) => {
       };
     }
 
+    //  4-bis) normalizza preferenza SOLO per clienti
+    //    (se vuoi consentirla anche ai ristoratori, rimuovi il controllo sul role)
+    const userPreferenceRaw = (preferenza ?? preferredCategory ?? favoriteCategory ?? '').toString().trim();
+    const userPreference = (role === 'cliente' && userPreferenceRaw) ? userPreferenceRaw : undefined;
+
     // 5) crea utente
     const newUser = new User({
       username,
       email,
       password: passwordHash,
       role,
+      // campi ristoratore solo se role === 'ristoratore'
       telefono: role === 'ristoratore' ? telefono : undefined,
       partitaIva: role === 'ristoratore' ? partitaIva : undefined,
       indirizzo: role === 'ristoratore' ? indirizzo : undefined,
       luogo: role === 'ristoratore' ? luogo : undefined,
       restaurantId,
-      restaurant
+      restaurant,
+
+      //  salva preferenza (campo opzionale)
+      preferenza: userPreference
     });
 
     await newUser.save();
@@ -73,7 +87,9 @@ router.post('/register', async (req, res) => {
         username: newUser.username,
         email: newUser.email,
         role: newUser.role,
-        restaurantId: newUser.restaurantId || null
+        restaurantId: newUser.restaurantId || null,
+        // rimanda la preferenza se presente
+        preferenza: newUser.preferenza || null
       }
     });
   } catch (err) {
