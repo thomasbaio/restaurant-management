@@ -1,26 +1,27 @@
-/* base */
+/* base */ body { font-family: Arial, /* ===== base ===== */
 body {
   font-family: Arial, sans-serif;
   padding: 30px;
   background-color: #f7f7f7;
   color: #333;
 }
-
 h1 { color: #28a745; font-size: 2em; text-align: center; }
 h2 { margin-top: 10px; font-weight: normal; text-align: center; }
 h3 { margin-top: 25px; color: #555; }
-
 a { color: #007BFF; text-decoration: none; }
 a:hover { text-decoration: underline; }
-
 strong { font-weight: bold; }
 
-/* tabelle */
-table { width: 100%; border-collapse: collapse; background-color: white; }
+/* ===== tabelle ===== */
+table {
+  width: 100%;
+  border-collapse: collapse;
+  background-color: white;
+}
 th, td { padding: 10px; border: 1px solid #ddd; text-align: left; }
 th { background-color: #f0f0f0; }
 
-/* pulsanti */
+/* ===== pulsanti ===== */
 button {
   margin-top: 20px;
   padding: 10px 18px;
@@ -33,13 +34,9 @@ button {
 }
 button:hover { background-color: #218838; }
 
-/* --- Offerte speciali (IT+EN) --- */
-#offerte-speciali, #special-offers {
-  list-style: none;
-  padding-left: 0;
-  margin-bottom: 30px;
-}
-#offerte-speciali li, #special-offers li {
+/* ===== offerte speciali ===== */
+#offerte-speciali { list-style: none; padding-left: 0; margin-bottom: 30px; }
+#offerte-speciali li {
   background-color: white;
   border: 1px solid #ddd;
   border-left: 5px solid #007BFF;
@@ -49,14 +46,15 @@ button:hover { background-color: #218838; }
   display: flex;
   align-items: center;
 }
-#offerte-speciali img, #special-offers img {
-  width: 80px; height: auto;
+#offerte-speciali img {
+  width: 80px;
+  height: auto;
   margin-right: 15px;
   border-radius: 6px;
   object-fit: cover;
 }
 
-/* box piatti selezionabili */
+/* ===== box piatti selezionabili ===== */
 .meal-item {
   background-color: #ffffff;
   border: 1px solid #ddd;
@@ -65,159 +63,165 @@ button:hover { background-color: #218838; }
   border-radius: 6px;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
 }
-
-/* testo dei piatti */
 .meal-item strong { font-size: 16px; color: #333; }
 .meal-item em { color: #666; margin-left: 5px; }
 .meal-item small { display: block; margin-top: 4px; color: #555; font-size: 13px; }
 
-/* riepilogo ordine */
+/* ===== riepilogo ordine ===== */
 #total { font-size: 18px; margin-top: 10px; font-weight: bold; color: #007BFF; }
 
-/* pagamento */
+/* ===== pagamento ===== */
 form#payment-form {
-  max-width: 400px; background-color: #ffffff;
-  padding: 20px; margin: 20px auto; border-radius: 8px;
+  max-width: 400px;
+  background-color: #ffffff;
+  padding: 20px;
+  margin: 20px auto;
+  border-radius: 8px;
   box-shadow: 0 2px 6px rgba(0, 0, 0, 0.1);
 }
 form#payment-form label {
-  font-weight: bold; display: block; margin-top: 12px; color: #333;
+  font-weight: bold;
+  display: block;
+  margin-top: 12px;
+  color: #333;
 }
 form#payment-form input {
-  width: 100%; padding: 8px; margin-top: 4px;
-  border: 1px solid #ccc; border-radius: 4px; font-size: 15px;
+  width: 100%;
+  padding: 8px;
+  margin-top: 4px;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  font-size: 15px;
 }
 form#payment-form button {
-  width: 100%; padding: 12px; font-size: 16px;
-  background-color: #007BFF; color: white; border: none; border-radius: 5px;
-  margin-top: 20px; cursor: pointer;
+  width: 100%;
+  padding: 12px;
+  font-size: 16px;
+  background-color: #007BFF;
+  color: white;
+  border: none;
+  border-radius: 5px;
+  margin-top: 20px;
+  cursor: pointer;
 }
 form#payment-form button:hover { background-color: #0056b3; }
 
-/* conferma ordine */
+/* ===== conferma ordine ===== */
 #conferma-container {
-  max-width: 600px; background-color: #ffffff; margin: 40px auto;
-  padding: 30px; border-radius: 8px; box-shadow: 0 3px 10px rgba(0, 0, 0, 0.08);
+  max-width: 600px;
+  background-color: #ffffff;
+  margin: 40px auto;
+  padding: 30px;
+  border-radius: 8px;
+  box-shadow: 0 3px 10px rgba(0, 0, 0, 0.08);
   text-align: center;
 }
 #conferma-container h3 { margin-top: 30px; color: #333; }
 #conferma-container p { font-size: 16px; color: #444; margin-bottom: 10px; }
 #conferma-container ul { list-style: none; padding: 0; margin-top: 15px; }
 #conferma-container li {
-  background-color: #f8f9fa; padding: 10px 15px; margin-bottom: 8px;
-  border-radius: 5px; text-align: left; color: #333;
+  background-color: #f8f9fa;
+  padding: 10px 15px;
+  margin-bottom: 8px;
+  border-radius: 5px;
+  text-align: left;
+  color: #333;
 }
 #conferma-container a {
-  display: inline-block; margin-top: 25px; color: #007BFF;
-  text-decoration: none; font-weight: bold;
+  display: inline-block;
+  margin-top: 25px;
+  color: #007BFF;
+  text-decoration: none;
+  font-weight: bold;
 }
 #conferma-container a:hover { text-decoration: underline; }
 
-/* box riepilogo e tempi */
+/* ===== box riepilogo e tempi ===== */
 #riepilogo {
-  background-color: #ffffff; padding: 15px 20px; border-radius: 6px;
-  border: 1px solid #ddd; margin-bottom: 20px; box-shadow: 0 0 8px rgba(0,0,0,0.05);
+  background-color: #ffffff;
+  padding: 15px 20px;
+  border-radius: 6px;
+  border: 1px solid #ddd;
+  margin-bottom: 20px;
+  box-shadow: 0 0 8px rgba(0,0,0,0.05);
 }
 #tempo-attesa {
-  background-color: #fff3cd; color: #856404;
-  padding: 12px 20px; border: 1px solid #ffeeba; border-radius: 5px;
-  margin-bottom: 20px; font-weight: bold;
+  background-color: #fff3cd;
+  color: #856404;
+  padding: 12px 20px;
+  border: 1px solid #ffeeba;
+  border-radius: 5px;
+  margin-bottom: 20px;
+  font-weight: bold;
 }
 #tempo-attesa p { margin: 0; }
 
-/* lista piatti */
+/* ===== lista piatti ===== */
 ul#lista-piatti {
-  list-style-type: disc; padding-left: 20px; background-color: #fff;
-  border: 1px solid #ddd; border-radius: 6px; padding: 10px 15px;
+  list-style-type: disc;
+  padding-left: 20px;
+  background-color: #fff;
+  border: 1px solid #ddd;
+  border-radius: 6px;
+  padding: 10px 15px;
   box-shadow: 0 0 5px rgba(0,0,0,0.04);
 }
 
-/* home */
+/* ===== home ===== */
 #welcome, #links {
-  background-color: #ffffff; padding: 10px 15px; margin-bottom: 20px;
-  border-radius: 6px; border: 1px solid #ddd; box-shadow: 0 1px 4px rgba(0, 0, 0, 0.05);
+  background-color: #ffffff;
+  padding: 10px 15px;
+  margin-bottom: 20px;
+  border-radius: 6px;
+  border: 1px solid #ddd;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.05);
 }
+#links a { margin-right: 10px; font-weight: bold; }
 
-/* --- Filtro ingredienti (IT+EN) --- */
-#filtro-container, #filter-container {
-  background-color: #ffffff; padding: 15px; border-radius: 6px;
-  border: 1px solid #ccc; box-shadow: 0 1px 4px rgba(0, 0, 0, 0.05);
+/* ===== filtro ingredienti ===== */
+#filtro-container {
+  background-color: #ffffff;
+  padding: 15px;
+  border-radius: 6px;
+  border: 1px solid #ccc;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.05);
   margin-bottom: 30px;
 }
-#filtro-container input, #filter-container input {
-  width: 100%; padding: 10px; font-size: 14px; border: 1px solid #bbb; border-radius: 4px; margin-top: 8px;
+#filtro-container input {
+  width: 100%;
+  padding: 10px;
+  font-size: 14px;
+  border: 1px solid #bbb;
+  border-radius: 4px;
+  margin-top: 8px;
 }
 
-/* tabella menu' */
+/* ===== tabella menu' ===== */
 #menu-container {
-  margin-top: 30px; background-color: #fff; padding: 15px;
-  border: 1px solid #ddd; border-radius: 6px; box-shadow: 0 1px 5px rgba(0, 0, 0, 0.05);
+  margin-top: 30px;
+  background-color: #fff;
+  padding: 15px;
+  border: 1px solid #ddd;
+  border-radius: 6px;
+  box-shadow: 0 1px 5px rgba(0, 0, 0, 0.05);
 }
-#menu-container table { width: 100%; background-color: #fff; border-collapse: collapse; font-size: 14px; }
+#menu-container table {
+  width: 100%;
+  background-color: #fff;
+  border-collapse: collapse;
+  font-size: 14px;
+}
 #menu-container th { background-color: #e9ecef; color: #333; font-weight: bold; }
 #menu-container td, #menu-container th { padding: 12px; border: 1px solid #dee2e6; }
 
-/* link secondari */
-#links a { margin-right: 10px; font-weight: bold; }
-
-/* --- Card ordine (unificata) --- */
-.ordine-box {
-  border: 1px solid #e2e8f0;
-  border-radius: 10px;
-  padding: 14px;
-  margin: 14px 0;
-  background: #fff;
-}
-
-/* Badge stato (solo ritiro, no delivery + opzionali) */
-.badge { display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: .85rem; color: #222; }
-.badge.ordinato { background: #eef; }
-.badge.preparazione { background: #ffe9b3; }
-.badge.ritirato { background: #c7f9cc; }
-.badge.annullato { background: #ffd6d6; }
-.badge.consegna { background: #e7f1ff; }
-.badge.consegnato { background: #d7ffe0; }
-
-/* Azioni e testi di servizio */
-.azioni button { margin-right: 8px; }
-.muted { color: #666; }
-.success {
-  background: #e8ffe8; border: 1px solid #b6e3b6;
-  padding: 8px 10px; border-radius: 8px;
-}
-
-/* Box generico */
-.box {
-  padding: 12px; border: 1px solid #ddd; border-radius: 10px; margin: 12px 0; background-color: #fff;
-}
-
-/* Messaggi di stato */
-.ok { color: #1b5e20; }
-.err { color: #b00020; }
-
-/* ---- Stili pagina "My orders" ---- */
-.eta { font-weight: 600; }
-.eta.soon { color: #1b5e20; }
-.eta.wait { color: #b45309; }
-.eta.done { color: #0b61a4; }
-.rig { margin: 4px 0; }
-.stato.badge { padding: 2px 8px; border-radius: 999px; background: #eee; font-size: 0.9rem; }
-.actions { margin-top: 10px; }
-.actions button {
-  background: #22c55e; color: #fff; border: 0; padding: 10px 14px; border-radius: 8px; cursor: pointer;
-}
-.actions button:hover { filter: brightness(0.95); }
-ul.dishes { margin: 6px 0 0 0; padding-left: 20px; }
-
-/* --- NAV LINKS (definitivo, unica definizione) --- */
+/* ===== barra link orizzontale ===== */
 .link-bar {
   display: flex;
-  gap: 16px;            /* spazio tra i link */
-  flex-wrap: wrap;      /* va a capo solo su schermi stretti */
+  gap: 16px;
+  flex-wrap: wrap;
   align-items: center;
   margin: 10px 0;
 }
-.link-bar p { margin: 0; }
 .link-bar a {
   padding: 10px 15px;
   background-color: #007BFF;
@@ -227,13 +231,44 @@ ul.dishes { margin: 6px 0 0 0; padding-left: 20px; }
   white-space: nowrap;
 }
 .link-bar a:hover { background-color: #0056b3; }
+.link-bar p { margin: 0; }
 
-/* logo principale */
-.logo {
-  max-height: 80px; display: block; margin: 0 auto 15px auto;
+/* ===== statistiche / popolari ===== */
+#statistiche-box {
+  background-color: #ffffff;
+  padding: 25px;
+  border-radius: 8px;
+  border: 1px solid #ddd;
+  box-shadow: 0 1px 6px rgba(0, 0, 0, 0.07);
+  margin-bottom: 30px;
+  max-width: 500px;
+}
+#statistiche-box p { font-size: 18px; color: #333; margin: 10px 0; }
+#statistiche-box strong { color: #007BFF; }
+#piatti-popolari { list-style: none; padding: 0; max-width: 500px; }
+#piatti-popolari li {
+  background-color: #f8f9fa;
+  border-left: 5px solid #28a745;
+  padding: 12px 15px;
+  margin-bottom: 10px;
+  border-radius: 6px;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+  color: #333;
+  font-weight: bold;
 }
 
-/* footer */
+/* ===== link indietro ===== */
+a[href="index.html"] {
+  display: inline-block;
+  margin-top: 30px;
+  color: #007BFF;
+  text-decoration: none;
+  font-weight: bold;
+}
+a[href="index.html"]:hover { text-decoration: underline; }
+
+/* ===== logo + footer ===== */
+.logo { max-height: 80px; display: block; margin: 0 auto 15px auto; }
 footer.tech-footer {
   width: 100%;
   margin-top: 40px;
@@ -244,42 +279,119 @@ footer.tech-footer {
   box-shadow: inset 0 1px 0 #ffffff80;
 }
 footer.tech-footer p {
-  margin: 0 0 8px 0; color: #4a5568; font-weight: 500; letter-spacing: .2px;
+  margin: 0 0 8px 0;
+  color: #4a5568;
+  font-weight: 500;
+  letter-spacing: .2px;
 }
 footer.tech-footer .stack { display: inline-flex; gap: 16px; align-items: center; }
 footer.tech-footer img.tech-logo {
-  height: 34px; vertical-align: middle; opacity: .95;
+  height: 34px;
+  vertical-align: middle;
+  opacity: .95;
   transition: transform .15s ease, opacity .15s ease;
 }
 footer.tech-footer img.tech-logo:hover { transform: translateY(-1px); opacity: 1; }
 
-/* layout desktop: fondo bianco */
+/* ===== layout desktop ===== */
 @media (min-width: 768px) {
   body { background-color: #fff; }
   main, #menu-container { background: #fff; }
 }
 
-/* ===== vista "menu' per ristorante" ===== */
+/* ===== vista menu per ristorante ===== */
 .ristorante-section {
-  margin: 24px 0; padding: 16px; border: 1px solid #e6e6e6;
-  border-radius: 16px; background: #ffffff; box-shadow: 0 1px 4px rgba(0,0,0,0.04);
+  margin: 24px 0;
+  padding: 16px;
+  border: 1px solid #e6e6e6;
+  border-radius: 16px;
+  background: #ffffff;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.04);
 }
 .ristorante-title { margin: 0 0 12px 0; font-size: 1.4rem; color: #333; }
 .menu-grid {
-  display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
-  gap: 12px; align-items: stretch;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 12px;
+  align-items: stretch;
 }
 .piatto-card {
-  display: flex; flex-direction: column; border: 1px solid #ddd; border-radius: 12px;
-  padding: 12px; background: #fafafa; box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+  display: flex;
+  flex-direction: column;
+  border: 1px solid #ddd;
+  border-radius: 12px;
+  padding: 12px;
+  background: #fafafa;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.05);
 }
-.piatto-img { width: 100%; height: 150px; object-fit: cover; border-radius: 8px; margin-bottom: 8px; }
+.piatto-img {
+  width: 100%;
+  height: 150px;
+  object-fit: cover;
+  border-radius: 8px;
+  margin-bottom: 8px;
+}
 .piatto-title { margin: 4px 0; font-size: 1.05rem; color: #222; }
-.badge { display: inline-block; margin-top: 2px; padding: 2px 8px; border-radius: 999px; font-size: .8rem; background: #f0f0f0; color: #555; width: max-content; }
-.piatto-ingredients { color: #555; font-size: .9rem; margin-top: 6px; }
-.piatto-price { margin-top: auto; font-weight: 700; color: #222; }
-.btn-add {
-  margin-top: 10px; padding: 8px 10px; border: none; border-radius: 10px; cursor: pointer;
-  background-color: #28a745; color: #fff; font-weight: 600;
+
+/* badge generico (ultimo valido) */
+.badge {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: .85rem;
+  color: #222;
 }
-.btn-add:hover { background-color: #218838; }
+
+/* badge stato (solo ritiro, no delivery) */
+.badge.ordinato { background: #eef; }
+.badge.preparazione { background: #ffe9b3; }
+.badge.ritirato { background: #c7f9cc; }
+.badge.annullato { background: #ffd6d6; }
+/* opzionali */
+.badge.consegna { background: #e7f1ff; }
+.badge.consegnato { background: #d7ffe0; }
+
+/* ===== ordini ===== */
+.ordine-box {
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  padding: 14px;
+  margin: 14px 0;
+  background: #fff;
+}
+.azioni { margin-top: 10px; }
+.azioni button {
+  background-color: #28a745;
+  color: white;
+  border: none;
+  padding: 8px 12px;
+  border-radius: 5px;
+  cursor: pointer;
+}
+.azioni button:hover { background-color: #218838; }
+
+/* my orders (ultimo blocco) */
+.muted { color: #666; }
+.eta { font-weight: 600; }
+.eta.soon { color: #1b5e20; }
+.eta.wait { color: #b45309; }
+.eta.done { color: #0b61a4; }
+.rig { margin: 4px 0; }
+.stato.badge { padding: 2px 8px; border-radius: 999px; background: #eee; font-size: 0.9rem; }
+.actions { margin-top: 10px; }
+.actions button {
+  background: #22c55e;
+  color: #fff;
+  border: 0;
+  padding: 10px 14px;
+  border-radius: 8px;
+  cursor: pointer;
+}
+.actions button:hover { filter: brightness(0.95); }
+ul.dishes { margin: 6px 0 0 0; padding-left: 20px; }
+
+/* ===== box generici e messaggi (ultimi validi) ===== */
+.box { padding: 12px; border: 1px solid #ddd; border-radius: 10px; margin: 12px 0; }
+.ok { color: #1b5e20; }
+.err { color: #b00020; }
+.muted { color: #666; }
