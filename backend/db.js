@@ -9,7 +9,7 @@ mongoose.set("strictQuery", true);
 async function connectDB(uri) {
   const mongoUri = uri || process.env.MONGO_URI;
 
-  // Se non c'è URI → non uscire: avvisa e continua senza DB
+  // se non c'è URI → non uscire: avvisa e continua senza DB
   if (!mongoUri) {
     console.warn(" Missing MONGO_URI. start without DB.");
     return null;
@@ -21,7 +21,7 @@ async function connectDB(uri) {
   // connessione già in corso
   if (connectingPromise) return connectingPromise;
 
-  // Avvia connessione NON bloccante
+  // avvia connessione NON bloccante
   connectingPromise = mongoose.connect(mongoUri, {
     // timeout breve per evitare deploy timeout su Render
     serverSelectionTimeoutMS: 5000,
@@ -61,7 +61,7 @@ async function connectDB(uri) {
     return mongoose.connection;
   })
   .catch(err => {
-    // NON terminare il processo: lascia partire l'HTTP server
+    // non terminare il processo: lascia partire l'HTTP server
     console.error("Connected failed to MongoDB :", err.message);
     // resetta lo stato così eventuali retry futuri sono possibili
     connectingPromise = null;
@@ -72,7 +72,7 @@ async function connectDB(uri) {
   return connectingPromise;
 }
 
-// Utility per sapere se il DB è pronto (senza cambiare import esistenti)
+// utility per sapere se il DB è pronto (senza cambiare import esistenti)
 connectDB.mongoReady = () => isConnected === 1;
 
 module.exports = connectDB;

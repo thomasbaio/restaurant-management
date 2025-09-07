@@ -183,10 +183,10 @@ async function findOrderByAnyId(idParam) {
 
 function validateForCreate(payload) {
   const errors = [];
-  if (!payload.username) errors.push("username mancante");
-  if (!payload.items || !payload.items.length) errors.push("nessun piatto nell'ordine");
-  if (!payload.userId) errors.push("userId mancante");
-  if (!payload.restaurantId) errors.push("restaurantId mancante");
+  if (!payload.username) errors.push("missing username");
+  if (!payload.items || !payload.items.length) errors.push("no dish in the order");
+  if (!payload.userId) errors.push("missing userId ");
+  if (!payload.restaurantId) errors.push("missing restaurantId ");
   return errors;
 }
 

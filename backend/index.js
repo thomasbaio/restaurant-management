@@ -14,7 +14,7 @@ app.set('trust proxy', 1);
 app.use(cors());
 app.use(express.json({ limit: '10mb' }));
 
-// -------------------- MongoDB (non blocca l'avvio se manca) --------------------
+// -------------------- mongoDB (non blocca l'avvio se manca) --------------------
 (async () => {
   try {
     if (!process.env.MONGO_URI) {
@@ -28,7 +28,7 @@ app.use(express.json({ limit: '10mb' }));
   }
 })();
 
-// -------------------- Rotte API (caricamento sicuro) --------------------
+// -------------------- rotte API (caricamento sicuro) --------------------
 function safeRequire(relPath) {
   try {
     return require(relPath);
@@ -53,7 +53,7 @@ app.get('/health', (_req, res) =>
   })
 );
 
-// -------------------- Frontend statico (se presente) --------------------
+// -------------------- frontend statico (se presente) --------------------
 const FRONTEND_DIR = path.join(__dirname, '..', 'frontend');
 const hasFrontend = fs.existsSync(FRONTEND_DIR);
 if (hasFrontend) {
@@ -64,13 +64,13 @@ if (hasFrontend) {
   app.get('/', (_req, res) => res.send('OK'));
 }
 
-// -------------------- Mount API --------------------
+// -------------------- mount API --------------------
 app.use('/users', userRoutes);
 if (orderRoutes) app.use('/orders', orderRoutes);
 if (restaurantRoutes) app.use('/restaurant', restaurantRoutes);
 app.use('/meals', mealsRoutes);
 
-// -------------------- Swagger --------------------
+// -------------------- swagger --------------------
 const PUBLIC_BASE =
   process.env.PUBLIC_BASE_URL ||
   process.env.RENDER_EXTERNAL_URL ||
@@ -87,21 +87,21 @@ const swaggerSpec = swaggerJsdoc({
 
 app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec, { explorer: true }));
 
-// Catch-all verso SPA solo se il frontend è servito da qui
+// catch-all verso SPA solo se il frontend è servito da qui
 if (hasFrontend) {
   app.get(/^(?!\/(meals|orders|users|restaurant|healthz?|api-docs)(\/|$)).*/, (_req, res) => {
     res.sendFile(path.join(FRONTEND_DIR, 'index.html'));
   });
 }
 
-// -------------------- Error handler --------------------
+// -------------------- error handler --------------------
 app.use((err, _req, res, _next) => {
   console.error(' Unhandled error:', err);
-  res.status(500).send('Errore interno');
+  res.status(500).send('Internal error');
 });
 
 // -------------------- Listen --------------------
 app.listen(PORT, '0.0.0.0', () => {
-  console.log(` Server in ascolto su :${PORT}`);
+  console.log(` Server listening on :${PORT}`);
   console.log(` Swagger UI: ${PUBLIC_BASE}/api-docs`);
 });
