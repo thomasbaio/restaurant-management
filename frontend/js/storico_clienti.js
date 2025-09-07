@@ -1,4 +1,4 @@
-// Base URL per API
+// base url per api
 const isLocal = location.hostname === "localhost" || location.hostname === "127.0.0.1";
 const API_BASE = isLocal ? "http://localhost:3000" : "https://restaurant-management-wzhj.onrender.com";
 
@@ -50,7 +50,8 @@ function buildMealsMap(rawMeals) {
 // ------- helpers robusti per items/id/qty -------
 const getQty = it => Number(it?.qty ?? it?.quantity ?? it?.quantita ?? it?.q ?? 1) || 1;
 const getItemId = it => it?.mealId ?? it?.idmeal ?? it?.idmeals ?? it?.idMeal ?? it?.id ?? it?._id;
-const getItemNameFromSnapshot = it => it?.name ?? it?.nome ?? it?.strMeal || "";
+// ⬇️ FIX: parentesi per non mescolare ?? con ||
+const getItemNameFromSnapshot = it => (it?.name ?? it?.nome ?? it?.strMeal) || "";
 
 // Estrae array di id dai vari formati di `meals`
 function extractIdsFromMeals(meals) {
@@ -66,11 +67,9 @@ function renderItemsAndTotal(order, mealsMap) {
 
   if (Array.isArray(order.items) && order.items.length) {
     parts = order.items.map((it, idx) => {
-      // id: dall'item oppure dal parallelo meals[idx]
       const id  = getItemId(it) ?? mealsIdsByIndex[idx];
       const cat = id != null ? mealsMap.get(String(id)) : null;
 
-      // nome: snapshot -> catalogo -> fallback
       let name = getItemNameFromSnapshot(it);
       const noName = !name || ["senza nome","unnamed","dish"].includes(String(name).trim().toLowerCase());
       if (noName) name = cat?.nome || (id != null ? `Dish #${id}` : "Dish");
@@ -94,7 +93,6 @@ function renderItemsAndTotal(order, mealsMap) {
       return `${name} x${qty} (${money(price)})`;
     });
   } else {
-    // nessuna info: usa total dell’ordine se presente
     return { text: "—", total: Number(order.total) || 0 };
   }
 
@@ -130,7 +128,6 @@ window.onload = async () => {
       return;
     }
 
-    // separa attivi / passati
     const attivi  = safeOrders.filter(o => !FINAL.has(normStatus(o)));
     const passati = safeOrders.filter(o =>  FINAL.has(normStatus(o)));
 
@@ -147,7 +144,7 @@ window.onload = async () => {
 
         const created = o.createdAt ? when(o.createdAt) : "n/a";
         const closed  = (o.closedAt || o.deliveredAt || o.ritiratoAt) ? when(o.closedAt || o.deliveredAt || o.ritiratoAt) : "—";
-        const delivery = "Pickup at restaurant"; // solo ritiro in store
+        const delivery = "Pickup at restaurant";
 
         return `
           <li>
