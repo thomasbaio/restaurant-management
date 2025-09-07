@@ -1,10 +1,9 @@
-// users.js — versione MongoDB con bcrypt e campi ristoratore
 const express = require('express');
 const bcrypt = require('bcrypt');
 const router = express.Router();
 const User = require('./models/user'); // modello Mongoose User
 
-// POST /users/register
+// post /users/register
 router.post('/register', async (req, res) => {
   try {
     const {
@@ -20,22 +19,22 @@ router.post('/register', async (req, res) => {
       restaurantId: restaurantIdFromBody
     } = req.body;
 
-    // 1) Validazione minima
+    // 1) validazione minima
     if (!username || !email || !password) {
-      return res.status(400).send('username, email e password sono obbligatori');
+      return res.status(400).send('username, email e password are obligatory');
     }
 
-    // 2) Unicità username/email
+    // 2) unicità username/email
     const existing = await User.findOne({ $or: [{ username }, { email }] });
     if (existing) {
       const field = existing.username === username ? 'username' : 'email';
       return res.status(400).send(`${field} già registrato`);
     }
 
-    // 3) Hash password
+    // 3) hash password
     const passwordHash = await bcrypt.hash(password, 10);
 
-    // 4) Se ristoratore, gestisci restaurantId e campi ristorante
+    // 4) se ristoratore, gestisci restaurantId e campi ristorante
     let restaurant = undefined;
     let restaurantId = null;
     if (role === 'ristoratore') {
@@ -50,7 +49,7 @@ router.post('/register', async (req, res) => {
       };
     }
 
-    // 5) Crea utente
+    // 5) crea utente
     const newUser = new User({
       username,
       email,
@@ -66,7 +65,7 @@ router.post('/register', async (req, res) => {
 
     await newUser.save();
 
-    // 6) Risposta (senza password)
+    // 6) risposta (senza password)
     return res.status(201).json({
       message: 'Registrazione completata',
       user: {

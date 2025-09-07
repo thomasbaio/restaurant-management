@@ -1,4 +1,3 @@
-// db.js — versione non-bloccante per Render/produzione
 const mongoose = require("mongoose");
 
 let isConnected = 0;           // 0 = no, 1 = sì
@@ -12,7 +11,7 @@ async function connectDB(uri) {
 
   // Se non c'è URI → non uscire: avvisa e continua senza DB
   if (!mongoUri) {
-    console.warn("⚠️  MONGO_URI mancante. Avvio senza DB (le rotte che richiedono il DB potrebbero fallire).");
+    console.warn(" Missing MONGO_URI. start without DB.");
     return null;
   }
 
@@ -22,7 +21,7 @@ async function connectDB(uri) {
   // connessione già in corso
   if (connectingPromise) return connectingPromise;
 
-  // Avvia connessione NON bloccante (non fare process.exit in caso di errore)
+  // Avvia connessione NON bloccante
   connectingPromise = mongoose.connect(mongoUri, {
     // timeout breve per evitare deploy timeout su Render
     serverSelectionTimeoutMS: 5000,
@@ -34,24 +33,24 @@ async function connectDB(uri) {
   })
   .then(() => {
     isConnected = 1;
-    console.log("✅ MongoDB connesso");
+    console.log(" MongoDB connected");
 
     // Eventi utili
-    mongoose.connection.on("reconnected", () => console.log("🔄 MongoDB riconnesso"));
+    mongoose.connection.on("reconnected", () => console.log(" MongoDB reconnected"));
     mongoose.connection.on("disconnected", () => {
       isConnected = 0;
-      console.warn("⚠️  MongoDB disconnesso");
+      console.warn(" MongoDB disconnected");
     });
     mongoose.connection.on("error", (err) => {
       isConnected = 0;
-      console.error("💥 Errore MongoDB:", err.message);
+      console.error(" Error MongoDB:", err.message);
     });
 
     // Spegnimento pulito
     const gracefulExit = async (signal) => {
       try {
         await mongoose.connection.close();
-        console.log(`👋 Chiusura MongoDB su ${signal}`);
+        console.log(`Closure MongoDB su ${signal}`);
       } finally {
         process.exit(0);
       }
@@ -63,7 +62,7 @@ async function connectDB(uri) {
   })
   .catch(err => {
     // NON terminare il processo: lascia partire l'HTTP server
-    console.error("❌ Connessione MongoDB fallita (continua senza DB):", err.message);
+    console.error("Connected failed to MongoDB :", err.message);
     // resetta lo stato così eventuali retry futuri sono possibili
     connectingPromise = null;
     isConnected = 0;

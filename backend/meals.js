@@ -6,13 +6,13 @@ const path = require("path");
 const mongoose = require("mongoose");
 const Meal = require("./models/meal");
 
-// --------------------- Helpers ---------------------
+// --------------------- helpers ---------------------
 
 function mongoReady() {
   return mongoose?.connection?.readyState === 1; // 1 = connected
 }
 
-// Trova il primo percorso esistente per meals1.json
+// trova il primo percorso esistente per meals1.json
 function resolveMealsFile() {
   const candidates = [
     process.env.MEALS_FILE,                                  // 1) variabile d'ambiente
@@ -47,7 +47,7 @@ function writeFileMeals(data, filePath) {
   fs.writeFileSync(filePath, JSON.stringify(out, null, 2), "utf8");
 }
 
-// Riconosce “aspetto piatto”
+// riconosce “aspetto piatto”
 function looksLikeMeal(o) {
   if (!o || typeof o !== "object") return false;
   return (
@@ -56,16 +56,16 @@ function looksLikeMeal(o) {
   );
 }
 
-// Appiattisce sia struttura [{restaurantId, menu:[...]}, ...] sia lista di piatti top-level
+// appiattisce sia struttura [{restaurantId, menu:[...]}, ...] sia lista di piatti top-level
 function flattenFileMeals(data) {
   if (!Array.isArray(data)) return [];
 
-  // Caso A: array di piatti top-level
+  // caso A: array di piatti top-level
   if (data.length && looksLikeMeal(data[0])) {
     return data.map(m => ({ ...m }));
   }
 
-  // Caso B: array di ristoranti con menu
+  // caso B: array di ristoranti con menu
   const out = [];
   for (const r of data) {
     const menu = Array.isArray(r?.menu) ? r.menu : [];
@@ -76,7 +76,7 @@ function flattenFileMeals(data) {
   return out;
 }
 
-// ---------- Normalizzazione + alias ingredienti ----------
+// ---------- normalizzazione + alias ingredienti ----------
 
 function normalizeIngredients(obj) {
   if (Array.isArray(obj?.ingredienti)) {
@@ -96,7 +96,7 @@ function normalizeIngredients(obj) {
   return list;
 }
 
-// Restituisce un oggetto con ingredienti sempre presenti
+// restituisce un oggetto con ingredienti sempre presenti
 function withIngredients(m) {
   const clone = { ...m };
 
@@ -132,21 +132,21 @@ function withIngredients(m) {
   return clone;
 }
 
-// --------------------- Rotte ----------------------
+// --------------------- rotte ----------------------
 
 // GET /meals/common-meals
-// Unisce piatti "comuni" da file + DB (dedup, priorità DB)
+// unisce piatti "comuni" da file + DB (dedup, priorità DB)
 router.get("/common-meals", async (req, res) => {
   try {
     const source = String(req.query.source || "all").toLowerCase();
     const dedupMode = String(req.query.dedup || "perRestaurant").toLowerCase();
 
-    // --- File ---
+    // --- file ---
     let fileMeals = [];
     const { data, filePath, error, exists } = readFileMeals();
     if (source !== "db") {
       if (error && source === "file") {
-        return res.status(500).json({ error: "Impossibile leggere il file dei piatti comuni", detail: error });
+        return res.status(500).json({ error: "Unable to read common dishes file", detail: error });
       }
       fileMeals = flattenFileMeals(data).map(withIngredients);
     }
@@ -154,7 +154,7 @@ router.get("/common-meals", async (req, res) => {
     res.setHeader("X-Meals-File-Exists", String(!!exists));
     res.setHeader("X-Meals-File-Count", String(fileMeals.length));
 
-    // --- DB ---
+    // --- db ---
     let dbMeals = [];
     if (source !== "file" && mongoReady()) {
       dbMeals = await Meal
@@ -163,10 +163,10 @@ router.get("/common-meals", async (req, res) => {
       dbMeals = dbMeals.map(withIngredients);
       res.setHeader("X-Meals-DB-Count", String(dbMeals.length));
     } else if (source === "db" && !mongoReady()) {
-      return res.status(503).json({ error: "Database non connesso" });
+      return res.status(503).json({ error: "Database not connected" });
     }
 
-    // --- Unione + dedup ---
+    // --- unione + dedup ---
     const keyOf = (m) => {
       const id = m.idmeals ?? m.idMeal ?? m.id ?? m._id;
       if (id != null) return String(id).toLowerCase();
@@ -193,17 +193,17 @@ router.get("/common-meals", async (req, res) => {
     return res.json(merged);
   } catch (err) {
     console.error("Errore /meals/common-meals:", err);
-    return res.status(500).json({ error: "Errore nella lettura dei piatti comuni", detail: String(err?.message || err) });
+    return res.status(500).json({ error: "Error in reading common dishes", detail: String(err?.message || err) });
   }
 });
 
-// ✅ POST /meals — crea un piatto con fallback robusto (DB se c'è, altrimenti file)
+// post /meals — crea un piatto con fallback robusto (db se c'è, altrimenti file)
 router.post("/", async (req, res) => {
   try {
     const b = req.body || {};
 
     if (!b.restaurantId) {
-      return res.status(400).json({ error: "restaurantId mancante" });
+      return res.status(400).json({ error: "RestaurantId missing" });
     }
 
     const ingr = normalizeIngredients(b);
@@ -246,7 +246,7 @@ router.post("/", async (req, res) => {
       return res.status(201).json(created);
     }
 
-    // ---- Fallback su file meals1.json ----
+    // ---- fallback su file meals1.json ----
     const { data, filePath } = readFileMeals();
     const restaurants = Array.isArray(data) ? data : [];
 
@@ -267,23 +267,23 @@ router.post("/", async (req, res) => {
     return res.status(201).json(newMeal);
   } catch (err) {
     console.error("POST /meals error:", err);
-    return res.status(500).json({ error: "Errore nel salvataggio del piatto", detail: String(err?.message || err) });
+    return res.status(500).json({ error: "Error saving dish", detail: String(err?.message || err) });
   }
 });
 
-// ---- Helpers cancellazione ----
+// ---- helpers cancellazione ----
 function isHex24(s) {
   return typeof s === "string" && /^[0-9a-fA-F]{24}$/.test(s);
 }
 
-// ✅ DELETE /meals/:id — accetta sia ObjectId che idmeals numerico, con fallback file
+// delete /meals/:id — accetta sia ObjectId che idmeals numerico, con fallback file
 router.delete("/:id", async (req, res) => {
   try {
     const raw = String(req.params.id);
 
-    // --- MongoDB ---
+    // --- mongodb ---
     if (mongoReady()) {
-      // 1) prova con _id ObjectId
+      // 1) prova con _id objectId
       if (isHex24(raw)) {
         const del = await Meal.deleteOne({ _id: raw });
         if (del.deletedCount > 0) return res.json({ ok: true, deleted: 1 });
@@ -294,13 +294,13 @@ router.delete("/:id", async (req, res) => {
         const del = await Meal.deleteOne({ idmeals: n });
         if (del.deletedCount > 0) return res.json({ ok: true, deleted: 1 });
       }
-      // Se non trovato in DB, continuo col file
+      // se non trovato in DB, continuo col file
     }
 
-    // --- Fallback su file: solo id numerico ---
+    // --- fallback su file: solo id numerico ---
     const id = Number(raw);
     if (!Number.isFinite(id)) {
-      return res.status(400).json({ error: "id non valido" });
+      return res.status(400).json({ error: "Id not valid" });
     }
 
     const { data, filePath } = readFileMeals();
@@ -321,15 +321,15 @@ router.delete("/:id", async (req, res) => {
       writeFileMeals(restaurants, filePath);
       return res.json({ ok: true, deleted: 1 });
     } else {
-      return res.status(404).json({ error: "Piatto non trovato" });
+      return res.status(404).json({ error: "dish not found" });
     }
   } catch (err) {
     console.error("DELETE /meals/:id error:", err);
-    return res.status(500).json({ error: "Errore nella rimozione del piatto", detail: String(err?.message || err) });
+    return res.status(500).json({ error: "Error during the deletingof the dish", detail: String(err?.message || err) });
   }
 });
 
-// (Opzionale) DELETE /meals/:restaurantId/:id — compatibilità con frontend annidato
+// (opzionale) delete /meals/:restaurantId/:id — compatibilità con frontend annidato
 router.delete("/:restaurantId/:id", async (req, res) => {
   try {
     const rid = String(req.params.restaurantId);
@@ -348,42 +348,42 @@ router.delete("/:restaurantId/:id", async (req, res) => {
       // se non trovato, passo al file
     }
 
-    // Fallback file (serve id numerico)
+    // fallback file (serve id numerico)
     const id = Number(raw);
     if (!Number.isFinite(id)) {
-      return res.status(400).json({ error: "id non valido" });
+      return res.status(400).json({ error: "Id not valid" });
     }
 
     const { data, filePath } = readFileMeals();
     const restaurants = Array.isArray(data) ? data : [];
     const rest = restaurants.find(r => String(r.restaurantId) === rid);
     if (!rest || !Array.isArray(rest.menu)) {
-      return res.status(404).json({ error: "Ristorante o menu non trovato" });
+      return res.status(404).json({ error: "Restaurant or menu' not found" });
     }
     const idx = rest.menu.findIndex(m => Number(m.idmeals) === id);
-    if (idx < 0) return res.status(404).json({ error: "Piatto non trovato" });
+    if (idx < 0) return res.status(404).json({ error: "Dish not found" });
 
     rest.menu.splice(idx, 1);
     writeFileMeals(restaurants, filePath);
     return res.json({ ok: true, deleted: 1 });
   } catch (err) {
     console.error("DELETE /meals/:restaurantId/:id error:", err);
-    return res.status(500).json({ error: "Errore nella rimozione del piatto", detail: String(err?.message || err) });
+    return res.status(500).json({ error: "Error during the deletingof the dish", detail: String(err?.message || err) });
   }
 });
 
-// GET /meals — lista ristoranti con menu (DB se c'è, altrimenti file)
+// get /meals — lista ristoranti con menu (DB se c'è, altrimenti file)
 router.get("/", async (req, res) => {
   try {
     const wantedRid = req.query.restaurantId ? String(req.query.restaurantId) : null;
 
-    // --- DB ---
+    // --- db ---
     if (mongoReady()) {
       const query = wantedRid ? { restaurantId: wantedRid } : {};
       const docs = await Meal.find(query).lean();
       const meals = docs.map(withIngredients);
 
-      // Raggruppo per restaurantId
+      // raggruppo per restaurantId
       const byRid = {};
       for (const m of meals) {
         const rid = String(m.restaurantId || "");
@@ -393,7 +393,7 @@ router.get("/", async (req, res) => {
       return res.json(Object.values(byRid));
     }
 
-    // --- Fallback file ---
+    // --- fallback file ---
     const { data } = readFileMeals();
 
     if (Array.isArray(data) && data.length && (data[0].menu || data[0].restaurantId)) {
@@ -417,7 +417,7 @@ router.get("/", async (req, res) => {
     return res.json(Object.values(byRid));
   } catch (err) {
     console.error("GET /meals error:", err);
-    res.status(500).json({ error: "Errore nel caricamento dei menu", detail: String(err?.message || err) });
+    res.status(500).json({ error: "Error during the loading of the menu'", detail: String(err?.message || err) });
   }
 });
 

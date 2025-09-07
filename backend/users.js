@@ -1,10 +1,9 @@
-// users.js — versione MongoDB (Mongoose) robusta
 const express = require("express");
 const router = express.Router();
 const User = require("./models/user");
 const Restaurant = require("./models/restaurant");
 
-// 🧮 ID numerico incrementale per compatibilità col vecchio frontend
+// id numerico incrementale per compatibilità col vecchio frontend
 async function nextLegacyId() {
   const last = await User.findOne({ legacyId: { $ne: null } })
     .sort({ legacyId: -1 })
@@ -13,7 +12,7 @@ async function nextLegacyId() {
   return (last?.legacyId || 0) + 1;
 }
 
-// Helper: normalizza i campi tra vecchi e nuovi nomi
+// helper: normalizza i campi tra vecchi e nuovi nomi
 function normalizeBody(b) {
   return {
     username: b.username,
@@ -34,30 +33,30 @@ function normalizeBody(b) {
   };
 }
 
-// ✅ REGISTRAZIONE
+// registrazione
 router.post("/register", async (req, res) => {
   try {
     const body = normalizeBody(req.body);
     const { username, email, password, role } = body;
 
     if (!username || !email || !password || !role) {
-      return res.status(400).send("Tutti i campi obbligatori non sono stati forniti.");
+      return res.status(400).send("All required fields have not been provided.");
     }
 
-    // Username o email già presenti?
+    // username o email già presenti?
     const dup = await User.findOne({ $or: [{ username }, { email }] }).lean();
-    if (dup) return res.status(409).send("Username o email già registrati.");
+    if (dup) return res.status(409).send("Username or email already registered.");
 
     // legacy id numerico come nel vecchio file JSON
     const legacyId = await nextLegacyId();
 
-    // Prepara restaurantId solo per ristoratore
+    // prepara restaurantId solo per ristoratore
     let restaurantId = null;
     if (role === "ristoratore") {
       restaurantId = `r_${username.toLowerCase().replace(/\s+/g, "")}`;
     }
 
-    // Crea utente (password in chiaro come nel tuo file attuale)
+    // crea utente (password in chiaro come nel tuo file attuale)
     const newUser = await User.create({
       legacyId,
       username,
@@ -75,10 +74,10 @@ router.post("/register", async (req, res) => {
       restaurantId
     });
 
-    // Se è ristoratore, prova a creare/aggiornare il Restaurant in modo compatibile con il suo schema
+    // se è ristoratore, prova a creare/aggiornare il Restaurant in modo compatibile con il suo schema
     if (role === "ristoratore") {
       try {
-        // Se il tuo Restaurant richiede ownerUserId e indirizzo oggetto, li forniamo qui
+        // se il tuo Restaurant richiede ownerUserId e indirizzo oggetto, li forniamo qui
         const indirizzoObj =
           typeof body.indirizzo === "object" && body.indirizzo !== null
             ? body.indirizzo
@@ -102,13 +101,13 @@ router.post("/register", async (req, res) => {
           { upsert: true, new: true, setDefaultsOnInsert: true }
         );
       } catch (errR) {
-        // Non blocco la registrazione se fallisce la creazione del Restaurant
-        console.error("⚠️  Creazione/aggiornamento Restaurant fallita:", errR?.message);
+        // non blocco la registrazione se fallisce la creazione del Restaurant
+        console.error("  Restaurant creation/update failed:", errR?.message);
       }
     }
 
     res.status(201).json({
-      message: "Registrazione completata",
+      message: "Registration completed",
       user: {
         id: newUser.legacyId,
         _id: newUser._id,
@@ -119,21 +118,21 @@ router.post("/register", async (req, res) => {
       }
     });
   } catch (err) {
-    console.error("Errore registrazione:", err);
-    res.status(500).send("Errore durante la registrazione");
+    console.error("Error registration:", err);
+    res.status(500).send("Error during recording");
   }
 });
 
-// ✅ LOGIN (ritorna restaurantId se ristoratore)
+// login (ritorna restaurantId se ristoratore)
 router.post("/login", async (req, res) => {
   try {
     const { username, password } = req.body;
 
     // plain-text (coerente col tuo attuale salvataggio)
     const user = await User.findOne({ username, password }).lean();
-    if (!user) return res.status(401).send("Credenziali non valide");
+    if (!user) return res.status(401).send("Invalid credentials");
 
-    // Se ristoratore e non ha restaurantId in user, prova a recuperarlo da Restaurant
+    // se ristoratore e non ha restaurantId in user, prova a recuperarlo da Restaurant
     let restaurantId = user.restaurantId || null;
     if (user.role === "ristoratore" && !restaurantId) {
       const r = await Restaurant.findOne({
@@ -151,17 +150,17 @@ router.post("/login", async (req, res) => {
       ...(restaurantId ? { restaurantId } : {})
     });
   } catch (err) {
-    console.error("Errore login:", err);
-    res.status(500).send("Errore durante il login");
+    console.error("Error login:", err);
+    res.status(500).send("Error during the login");
   }
 });
 
-// Helper per individuare se l'ID è un ObjectId
+// helper per individuare se l'ID è un ObjectId
 function isObjectId(id) {
   return /^[a-f0-9]{24}$/i.test(String(id));
 }
 
-// ✅ MODIFICA profilo (compat sia con /users/:id numerico che con /users/:_id Mongo)
+// modifica profilo (compat sia con /users/:id numerico che con /users/:_id Mongo)
 router.put("/:id", async (req, res) => {
   try {
     const param = String(req.params.id);
@@ -178,35 +177,35 @@ router.put("/:id", async (req, res) => {
     delete updates.password; // evita di sovrascrivere per sbaglio
 
     const updated = await User.findOneAndUpdate(filter, { $set: updates }, { new: true });
-    if (!updated) return res.status(404).send("Utente non trovato");
+    if (!updated) return res.status(404).send("Utente not found");
 
     res.json(updated);
   } catch (err) {
-    console.error("Errore modifica utente:", err);
-    res.status(500).send("Errore durante la modifica");
+    console.error("error while editing:", err);
+    res.status(500).send("error while editing");
   }
 });
 
-// ✅ CANCELLAZIONE (compat legacyId/_id)
+// cancellazione (compat legacyId/_id)
 router.delete("/:id", async (req, res) => {
   try {
     const param = String(req.params.id);
     const filter = isObjectId(param) ? { _id: param } : { legacyId: parseInt(param) };
 
     const deleted = await User.findOneAndDelete(filter);
-    if (!deleted) return res.status(404).send("Utente non trovato");
+    if (!deleted) return res.status(404).send("Utente not found");
 
     res.sendStatus(204);
   } catch (err) {
-    console.error("Errore cancellazione utente:", err);
-    res.status(500).send("Errore durante la cancellazione");
+    console.error("User deletion error:", err);
+    res.status(500).send("Error while deleting");
   }
 });
 
-// ✅ Lista “ristoratori” (compat con vecchio /users/restaurants)
+// lista “ristoratori” (compat con vecchio /users/restaurants)
 router.get("/restaurants", async (req, res) => {
   try {
-    // Preferisci la tabella ristoranti dedicata (più completa)
+    // preferisci la tabella ristoranti dedicata (più completa)
     const restaurants = await Restaurant.find().lean();
     if (restaurants.length) {
       const out = restaurants.map(r => ({
@@ -219,7 +218,7 @@ router.get("/restaurants", async (req, res) => {
       return res.json(out);
     }
 
-    // Fallback: dagli utenti con role="ristoratore"
+    // fallback: dagli utenti con role="ristoratore"
     const users = await User.find({ role: "ristoratore" }).lean();
     const out = users.map(u => ({
       nome: `${u.username} Ristorante`,
@@ -230,8 +229,8 @@ router.get("/restaurants", async (req, res) => {
     }));
     res.json(out);
   } catch (err) {
-    console.error("Errore GET /users/restaurants:", err);
-    res.status(500).send("Errore nel recupero ristoratori");
+    console.error("Error GET /users/restaurants:", err);
+    res.status(500).send("Error in restaurateur recovery");
   }
 });
 

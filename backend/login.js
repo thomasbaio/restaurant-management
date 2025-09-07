@@ -5,7 +5,7 @@ router.post('/login', (req, res) => {
   const user = users.find(u => u.username === username && u.password === password);
 
   if (!user) {
-    return res.status(401).send("Credenziali non valide");
+    return res.status(401).send("Invalid credentials");
   }
 
   res.json({ username: user.username, role: user.role });

@@ -1,4 +1,3 @@
-// backend/index.js — bootstrap robusto per Render
 const express = require('express');
 const cors = require('cors');
 const path = require('path');
@@ -19,13 +18,13 @@ app.use(express.json({ limit: '10mb' }));
 (async () => {
   try {
     if (!process.env.MONGO_URI) {
-      console.warn('⚠️  MONGO_URI non impostata: proseguo senza DB');
+      console.warn('MONGO_URI not set: I continue without DB');
     } else {
       await mongoose.connect(process.env.MONGO_URI);
-      console.log('✅ Mongo connesso');
+      console.log('Mongo connected');
     }
   } catch (err) {
-    console.error('❌ Errore connessione Mongo (continuo):', err.message);
+    console.error('Error connected Mongo:', err.message);
   }
 })();
 
@@ -34,7 +33,7 @@ function safeRequire(relPath) {
   try {
     return require(relPath);
   } catch (e) {
-    console.warn(`⚠️  Modulo opzionale "${relPath}" non caricato: ${e.message}`);
+    console.warn(` Optional module "${relPath}" not loaded: ${e.message}`);
     return null;
   }
 }
@@ -58,7 +57,7 @@ app.get('/health', (_req, res) =>
 const FRONTEND_DIR = path.join(__dirname, '..', 'frontend');
 const hasFrontend = fs.existsSync(FRONTEND_DIR);
 if (hasFrontend) {
-  console.log('📁 FRONTEND_DIR:', FRONTEND_DIR);
+  console.log('FRONTEND_DIR:', FRONTEND_DIR);
   app.use(express.static(FRONTEND_DIR));
   app.get('/', (_req, res) => res.sendFile(path.join(FRONTEND_DIR, 'index.html')));
 } else {
@@ -97,12 +96,12 @@ if (hasFrontend) {
 
 // -------------------- Error handler --------------------
 app.use((err, _req, res, _next) => {
-  console.error('💥 Unhandled error:', err);
+  console.error(' Unhandled error:', err);
   res.status(500).send('Errore interno');
 });
 
 // -------------------- Listen --------------------
 app.listen(PORT, '0.0.0.0', () => {
-  console.log(`🚀 Server in ascolto su :${PORT}`);
-  console.log(`📚 Swagger UI: ${PUBLIC_BASE}/api-docs`);
+  console.log(` Server in ascolto su :${PORT}`);
+  console.log(` Swagger UI: ${PUBLIC_BASE}/api-docs`);
 });

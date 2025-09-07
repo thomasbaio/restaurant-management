@@ -1,9 +1,8 @@
-// restaurant.js — versione MongoDB (Mongoose)
 const express = require("express");
 const router = express.Router();
 const Restaurant = require("./models/restaurant");
 
-// 🔎 GET lista ristoranti (filtri opzionali: ?nome=&luogo=)
+// get lista ristoranti
 router.get("/", async (req, res) => {
   try {
     const { nome, luogo } = req.query;
@@ -13,25 +12,25 @@ router.get("/", async (req, res) => {
     const data = await Restaurant.find(q).lean();
     res.json(data);
   } catch (err) {
-    console.error("Errore GET /restaurant:", err);
-    res.status(500).send("Errore nel recupero ristoranti");
+    console.error("Error get /restaurant:", err);
+    res.status(500).send("Error during in restaurant recovery");
   }
 });
 
-// 🔎 GET ristorante per restaurantId (stringa o numero nel path)
+// get ristorante per restaurantId (stringa o numero nel path)
 router.get("/:id", async (req, res) => {
   try {
     const id = String(req.params.id); // manteniamo tutto come stringa (es. "r_o")
     const restaurant = await Restaurant.findOne({ restaurantId: id }).lean();
-    if (!restaurant) return res.status(404).send("Ristorante non trovato");
+    if (!restaurant) return res.status(404).send("Restaurant not found");
     res.json(restaurant);
   } catch (err) {
-    console.error("Errore GET /restaurant/:id:", err);
-    res.status(500).send("Errore nel recupero del ristorante");
+    console.error("Error GET /restaurant/:id:", err);
+    res.status(500).send("Error in the recovery of the restaurant");
   }
 });
 
-// ➕ POST nuovo ristorante
+// post nuovo ristorante
 router.post("/", async (req, res) => {
   try {
     const payload = { ...req.body };
@@ -46,14 +45,14 @@ router.post("/", async (req, res) => {
   } catch (err) {
     // gestione duplicate key (es. restaurantId già esistente)
     if (err?.code === 11000) {
-      return res.status(400).json({ error: "Chiave duplicata", details: err.keyValue });
+      return res.status(400).json({ error: "Chiave duplicated", details: err.keyValue });
     }
-    console.error("Errore POST /restaurant:", err);
-    res.status(500).send("Errore nella creazione del ristorante");
+    console.error("Error POST /restaurant:", err);
+    res.status(500).send("Error in the creation of the restaurant");
   }
 });
 
-// ✏️ PUT modifica ristorante per restaurantId
+// put modifica ristorante per restaurantId
 router.put("/:id", async (req, res) => {
   try {
     const id = String(req.params.id);
@@ -62,11 +61,11 @@ router.put("/:id", async (req, res) => {
       { $set: req.body },
       { new: true }
     );
-    if (!updated) return res.status(404).send("Ristorante non trovato");
+    if (!updated) return res.status(404).send("Ristorante not found");
     res.json(updated);
   } catch (err) {
     console.error("Errore PUT /restaurant/:id:", err);
-    res.status(500).send("Errore nella modifica del ristorante");
+    res.status(500).send("Error in the modification of the restaurant");
   }
 });
 

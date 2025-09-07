@@ -1,15 +1,14 @@
-// orders.js — Mongoose + normalizzazione items + snapshot name/price
 const express = require("express");
 const fs = require("fs");
 const path = require("path");
 const router = express.Router();
 const Order = require("./models/order");
 
-// === File locali (fallback)
+// === file locali (fallback)
 const USERS_FILE = path.join(__dirname, "users.json");
 const MEALS_FILE = path.join(__dirname, "meals1.json");
 
-// === Stati e transizioni (➕ 'ritirato')
+// === stati e transizioni (+ 'ritirato')
 const VALID_STATES = ["ordinato", "preparazione", "consegna", "consegnato", "ritirato", "annullato"];
 const FINAL_STATES = new Set(["consegnato", "annullato", "ritirato"]);
 
@@ -22,7 +21,7 @@ const NEXT_ALLOWED = {
   annullato:    []
 };
 
-// ---------- Helpers ----------
+// ---------- helpers ----------
 async function nextOrderId() {
   const last = await Order.findOne().sort({ id: -1 }).select("id").lean();
   return (last?.id || 0) + 1;
@@ -168,7 +167,7 @@ function normalizePaymentMethod(m) {
   return "carta";
 }
 
-// Cerca ordine sia per id incrementale sia per _id Mongo
+// cerca ordine sia per id incrementale sia per _id Mongo
 async function findOrderByAnyId(idParam) {
   const asNumber = Number(idParam);
   if (Number.isFinite(asNumber)) {
@@ -191,9 +190,9 @@ function validateForCreate(payload) {
   return errors;
 }
 
-// ---------- ROUTES ----------
+// ---------- routers ----------
 
-// POST /orders — crea ordine completo con snapshot items
+// post /orders — crea ordine completo con snapshot items
 router.post("/", async (req, res) => {
   try {
     const raw = normalizeBody(req.body);
@@ -234,18 +233,18 @@ router.post("/", async (req, res) => {
 
     const errors = validateForCreate(payload);
     if (errors.length) {
-      return res.status(400).json({ error: "Payload non valido", details: errors });
+      return res.status(400).json({ error: "Payload not valid", details: errors });
     }
 
     const created = await Order.create(payload);
     return res.status(201).json(created);
   } catch (err) {
     console.error("Errore POST /orders:", err);
-    return res.status(500).json({ error: "Errore creazione ordine", detail: String(err?.message || err) });
+    return res.status(500).json({ error: "Error during create of the order ", detail: String(err?.message || err) });
   }
 });
 
-// GET /orders — elenco (filtri opzionali)
+// get /orders — elenco (filtri opzionali)
 router.get("/", async (req, res) => {
   try {
     const { username, restaurantId, status, state } = req.query;
@@ -259,8 +258,8 @@ router.get("/", async (req, res) => {
     const orders = await Order.find(q).sort({ createdAt: -1, id: -1 }).lean();
     return res.json(orders);
   } catch (err) {
-    console.error("Errore GET /orders:", err);
-    return res.status(500).json({ error: "Errore recupero ordini" });
+    console.error("Error GET /orders:", err);
+    return res.status(500).json({ error: "Error order recovery" });
   }
 });
 
@@ -270,11 +269,11 @@ async function updateOrderStateGeneric(idParam, incomingBody, res) {
   const clienteConfermaRitiro = incomingBody?.clienteConfermaRitiro;
 
   if (!VALID_STATES.includes(desired)) {
-    return res.status(400).json({ error: `Stato non valido: ${desired}` });
+    return res.status(400).json({ error: `Status not valid: ${desired}` });
   }
 
   const order = await findOrderByAnyId(idParam);
-  if (!order) return res.status(404).json({ error: "Ordine non trovato" });
+  if (!order) return res.status(404).json({ error: "Order not found" });
 
   const current = order.status || order.state || "ordinato";
   const allowedNext = NEXT_ALLOWED[current] || [];
