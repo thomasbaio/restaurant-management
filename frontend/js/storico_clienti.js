@@ -5,7 +5,7 @@ const API_BASE = isLocal ? "http://localhost:3000" : "https://restaurant-managem
 // ---- fetch helper con timeout + error handling
 async function apiGet(path) {
   const ctrl = new AbortController();
-  const t = setTimeout(() => ctrl.abort(), 12000); // 12s timeout
+  const t = setTimeout(() => ctrl.abort(), 12000);
   try {
     const res = await fetch(`${API_BASE}${path}`, { signal: ctrl.signal, mode: "cors" });
     if (!res.ok) {
@@ -19,13 +19,13 @@ async function apiGet(path) {
 }
 
 // ---- utils
-const money = n => `€${Number(n || 0).toFixed(2)}`;
-const when  = d => { try { return new Date(d).toLocaleString(); } catch { return ""; } };
-const normId = o => o?.id ?? o?._id ?? "";
+const money   = n => `€${Number(n || 0).toFixed(2)}`;
+const when    = d => { try { return new Date(d).toLocaleString(); } catch { return ""; } };
+const normId  = o => o?.id ?? o?._id ?? "";
 const normStatus = o => String(o?.status ?? o?.state ?? o?.stato ?? "ordinato").toLowerCase();
 
 // stati finali (storico)
-const FINAL = new Set(["consegnato", "ritirato", "annullato"]);
+const FINAL = new Set(["consegnato","ritirato","annullato","delivered","withdrawn","canceled","cancelled"]);
 
 // ---- normalizza /meals -> mappa { id -> {nome, prezzo} }
 function buildMealsMap(rawMeals) {
@@ -37,39 +37,68 @@ function buildMealsMap(rawMeals) {
 
   for (const p of allDishes) {
     const id = p.idmeals ?? p.idMeal ?? p.id ?? p._id;
-    if (!id) continue;
+    if (id == null) continue;
     const key = String(id);
     const nome = p.nome ?? p.strMeal ?? p.name ?? `Dish #${key}`;
     let prezzo = p.prezzo ?? p.price;
     prezzo = (typeof prezzo === "string") ? Number(prezzo) : prezzo;
-    map.set(key, { nome, prezzo: Number.isFinite(prezzo) ? Number(prezzo) : null });
+    map.set(key, { nome, prezzo: Number.isFinite(prezzo) ? Number(prezzo) : 0 });
   }
   return map;
 }
 
+// ------- helpers robusti per items/id/qty -------
+const getQty = it => Number(it?.qty ?? it?.quantity ?? it?.quantita ?? it?.q ?? 1) || 1;
+const getItemId = it => it?.mealId ?? it?.idmeal ?? it?.idmeals ?? it?.idMeal ?? it?.id ?? it?._id;
+const getItemNameFromSnapshot = it => it?.name ?? it?.nome ?? it?.strMeal || "";
 
+// Estrae array di id dai vari formati di `meals`
+function extractIdsFromMeals(meals) {
+  if (!Array.isArray(meals)) return [];
+  return meals.map(m => (typeof m === "object" && m !== null) ? getItemId(m) : m);
+}
+
+// ---- rende l’elenco piatti + totale (robusto)
 function renderItemsAndTotal(order, mealsMap) {
-  // preferisci snapshot items (name/price/qty)
+  let total = 0;
+  let parts = [];
+  const mealsIdsByIndex = extractIdsFromMeals(order.meals);
+
   if (Array.isArray(order.items) && order.items.length) {
-    let tot = 0;
-    const parts = order.items.map(it => {
-      const q = Number(it.qty || 1);
-      const pr = Number(it.price || 0);
-      tot += q * pr;
-      return `${it.name ?? "Dish"} x${q} (${money(pr)})`;
+    parts = order.items.map((it, idx) => {
+      // id: dall'item oppure dal parallelo meals[idx]
+      const id  = getItemId(it) ?? mealsIdsByIndex[idx];
+      const cat = id != null ? mealsMap.get(String(id)) : null;
+
+      // nome: snapshot -> catalogo -> fallback
+      let name = getItemNameFromSnapshot(it);
+      const noName = !name || ["senza nome","unnamed","dish"].includes(String(name).trim().toLowerCase());
+      if (noName) name = cat?.nome || (id != null ? `Dish #${id}` : "Dish");
+
+      const qty   = getQty(it);
+      const price = Number(it.prezzo ?? it.price ?? cat?.prezzo ?? 0) || 0;
+
+      total += price * qty;
+      return `${name} x${qty} (${money(price)})`;
     });
-    return { text: parts.join(", "), total: tot };
+  } else if (Array.isArray(order.meals) && order.meals.length) {
+    parts = order.meals.map(m => {
+      const id  = (typeof m === "object") ? getItemId(m) : m;
+      const qty = (typeof m === "object") ? getQty(m) : 1;
+      const cat = id != null ? mealsMap.get(String(id)) : null;
+
+      const name  = cat?.nome || (id != null ? `Dish #${id}` : "Dish");
+      const price = Number(cat?.prezzo ?? 0) || 0;
+
+      total += price * qty;
+      return `${name} x${qty} (${money(price)})`;
+    });
+  } else {
+    // nessuna info: usa total dell’ordine se presente
+    return { text: "—", total: Number(order.total) || 0 };
   }
-  // fallback: ricava da meals id -> nome/prezzo
-  const ids = Array.isArray(order.meals) ? order.meals : [];
-  let tot = 0;
-  const parts = ids.map(id => {
-    const info = mealsMap.get(String(id));
-    if (!info) return `Dish ID ${id}`;
-    if (Number.isFinite(info.prezzo)) tot += info.prezzo;
-    return `${info.nome}${Number.isFinite(info.prezzo) ? " (" + money(info.prezzo) + ")" : ""}`;
-  });
-  return { text: parts.join(", "), total: tot || order.total || 0 };
+
+  return { text: parts.join(", "), total };
 }
 
 window.onload = async () => {
@@ -92,7 +121,7 @@ window.onload = async () => {
       apiGet(`/meals`)
     ]);
 
-    const mealsMap = buildMealsMap(mealsRaw);
+    const mealsMap   = buildMealsMap(mealsRaw);
     const safeOrders = Array.isArray(orders) ? orders : [];
 
     if (safeOrders.length === 0) {
@@ -102,34 +131,32 @@ window.onload = async () => {
     }
 
     // separa attivi / passati
-    const attivi = safeOrders.filter(o => !FINAL.has(normStatus(o)));
-    const passati = safeOrders.filter(o => FINAL.has(normStatus(o)));
+    const attivi  = safeOrders.filter(o => !FINAL.has(normStatus(o)));
+    const passati = safeOrders.filter(o =>  FINAL.has(normStatus(o)));
 
     const render = (ordini, container) => {
       if (!ordini.length) {
         container.innerHTML = "<li>-- No orders --</li>";
         return;
       }
-      // ordina per data desc se possibile
       ordini.sort((a,b) => new Date(b.createdAt||0) - new Date(a.createdAt||0));
 
       container.innerHTML = ordini.map(o => {
         const stato = normStatus(o);
         const { text, total } = renderItemsAndTotal(o, mealsMap);
-        const delivery = (o.delivery ?? o.tipoConsegna) === "domicilio"
-          ? (o.address ?? o.indirizzo ?? "Home delivery")
-          : "Pickup at restaurant";
+
         const created = o.createdAt ? when(o.createdAt) : "n/a";
         const closed  = (o.closedAt || o.deliveredAt || o.ritiratoAt) ? when(o.closedAt || o.deliveredAt || o.ritiratoAt) : "—";
+        const delivery = "Pickup at restaurant"; // solo ritiro in store
 
         return `
           <li>
             <strong>ID:</strong> ${normId(o)}<br>
-             Created: ${created}${FINAL.has(stato) ? ` · Closed: ${closed}` : ""}<br>
-             Status: ${stato}<br>
-             Dishes: ${text || "—"}<br>
-             Total: ${money(o.total || total)}<br>
-              ${delivery}
+            Created: ${created}${FINAL.has(stato) ? ` · Closed: ${closed}` : ""}<br>
+            Status: ${stato}<br>
+            Dishes: ${text}<br>
+            Total: ${money(o.total || total)}<br>
+            ${delivery}
           </li>
         `;
       }).join("");
@@ -143,7 +170,7 @@ window.onload = async () => {
     const hint = isLocal
       ? "Make sure the local backend is running at http://localhost:3000."
       : "Make sure the backend on Render is online.";
-    attiviList.innerHTML = `<li style="color:#b00">Error while loading: ${err?.message ?? err}. ${hint}</li>`;
+    attiviList.innerHTML  = `<li style="color:#b00">Error while loading: ${err?.message ?? err}. ${hint}</li>`;
     passatiList.innerHTML = `<li style="color:#b00">Error while loading: ${err?.message ?? err}. ${hint}</li>`;
   }
 };
