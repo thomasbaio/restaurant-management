@@ -1,12 +1,10 @@
 // ricerca_piatti.js
 
-// ================= base URL per API: locale vs produzione =================
-const isLocal = location.hostname === "localhost" || location.hostname === "127.0.0.1";
+const isLocal = ["localhost","127.0.0.1"].includes(location.hostname);
 const API_BASE = isLocal ? "http://localhost:3000" : location.origin;
 
-/* ===================== helpers ===================== */
+/* ---------------- helpers ---------------- */
 
-// URL immagine valido (http/https, //cdn, oppure /percorso/relativo)
 function isValidImgPath(s) {
   if (typeof s !== "string") return false;
   const t = s.trim();
@@ -14,15 +12,39 @@ function isValidImgPath(s) {
   return /^https?:\/\//i.test(t) || t.startsWith("//") || t.startsWith("/");
 }
 
-// piccola icona segnaposto inline (SVG) se l’immagine manca o fallisce
-const FALLBACK_IMG =
-  'data:image/svg+xml;utf8,' +
-  encodeURIComponent(
-    `<svg xmlns="http://www.w3.org/2000/svg" width="120" height="90">
-       <rect width="100%" height="100%" fill="#EEE"/>
-       <text x="50%" y="50%" font-size="12" text-anchor="middle" fill="#777" dy=".3em">no image</text>
-     </svg>`
-  );
+const FALLBACK_IMG = 'data:image/svg+xml;utf8,' + encodeURIComponent(
+  `<svg xmlns="http://www.w3.org/2000/svg" width="120" height="90">
+     <rect width="100%" height="100%" fill="#EEE"/>
+     <text x="50%" y="50%" font-size="12" text-anchor="middle" fill="#777" dy=".3em">no image</text>
+   </svg>`
+);
+
+// Raccoglie il primo URL immagine valido, con TRIM e priorità a strMealThumb
+function getFirstImage(obj) {
+  const m = obj ?? {};
+  const raw = m._raw ?? m;
+
+  const candidates = [
+    m.strMealThumb, raw.strMealThumb,            // priorità TheMealDB
+    m.foto, m.image, m.img, m.photo, m.picture, m.thumb,
+    raw.foto, raw.image, raw.img, raw.photo, raw.picture, raw.thumb,
+    ...(Array.isArray(m.images) ? m.images : []),
+    ...(Array.isArray(raw.images) ? raw.images : []),
+  ].filter(Boolean).map(x => typeof x === "string" ? x.trim() : x);
+
+  for (const c of candidates) {
+    if (typeof c === "string" && isValidImgPath(c)) return c;
+  }
+  for (const c of candidates) {
+    if (typeof c === "string") {
+      const t = c.trim();
+      if (t && !t.startsWith("http") && !t.startsWith("//")) {
+        return t.startsWith("/") ? t : `/${t}`;
+      }
+    }
+  }
+  return "";
+}
 
 const money = n => `€${Number(n || 0).toFixed(2)}`;
 
@@ -32,56 +54,7 @@ function includesCI(hay, needle) {
   return String(hay).toLowerCase().includes(String(needle).toLowerCase());
 }
 
-/* ===================== extraction helpers (TheMealDB-like) ===================== */
-
-// Estrae la prima immagine “buona” dando priorità a strMealThumb
-function getFirstImage(obj) {
-  const m = obj ?? {};
-  const raw = m._raw ?? m;
-
-  const candidates = [
-    m.strMealThumb, raw.strMealThumb, // PRIORITÀ
-    m.foto, m.image, m.img, m.photo, m.picture, m.thumb,
-    raw.foto, raw.image, raw.img, raw.photo, raw.picture, raw.thumb,
-    ...(Array.isArray(m.images) ? m.images : []),
-    ...(Array.isArray(raw.images) ? raw.images : []),
-  ].filter(Boolean);
-
-  for (const c of candidates) {
-    if (typeof c === "string" && isValidImgPath(c)) return c;
-  }
-  // prova a “normalizzare” un path relativo (es. images/pasta.jpg)
-  for (const c of candidates) {
-    if (typeof c === "string") {
-      const t = c.trim();
-      if (t && !t.startsWith("http") && !t.startsWith("//")) {
-        return t.startsWith("/") ? t : `/${t}`;
-      }
-    }
-  }
-  return ""; // nessuna valida
-}
-
-// Costruisce array ingredienti da:
-// - array già presenti (ingredienti/ingredients)
-// - campi numerati TheMealDB: strIngredient1..20 (+ strMeasure1..20)
-function extractIngredientsFlexible(m) {
-  if (Array.isArray(m.ingredienti) && m.ingredienti.length) return m.ingredienti.filter(Boolean);
-  if (Array.isArray(m.ingredients) && m.ingredients.length) return m.ingredients.filter(Boolean);
-
-  const list = [];
-  for (let i = 1; i <= 20; i++) {
-    const ing = m[`strIngredient${i}`];
-    const qty = m[`strMeasure${i}`];
-    if (ing && String(ing).trim()) {
-      const txt = qty && String(qty).trim() ? `${ing} (${qty})` : String(ing);
-      list.push(txt);
-    }
-  }
-  return list;
-}
-
-/* ===================== normalizzazioni ===================== */
+/* ---------------- normalizzazione ---------------- */
 
 function normalizeMeal(m) {
   const nome        = m.nome ?? m.strMeal ?? m.name ?? "";
@@ -89,18 +62,24 @@ function normalizeMeal(m) {
   const prezzoRaw   = m.prezzo ?? m.price ?? m.cost ?? null;
   const prezzo      = prezzoRaw === null ? null : Number(prezzoRaw);
 
-  // immagine: priorità a strMealThumb
-  const foto        = getFirstImage({ ...m, _raw: m });
+  const foto        = getFirstImage({ ...m, _raw: m });        // <-- fix immagine
+  const descrizione = m.descrizione ?? m.description ?? m.desc ?? m.details ?? m.strInstructions ?? "";
 
-  // descrizione: prova diversi alias, priorità a strInstructions (TheMealDB)
-  const descrizione =
-    m.descrizione ?? m.description ?? m.desc ?? m.details ?? m.strInstructions ?? "";
-
-  // ingredienti da array o da campi numerati
-  const ingredienti = extractIngredientsFlexible(m);
+  // ingredienti: array o campi TheMealDB
+  let ingredienti = [];
+  if (Array.isArray(m.ingredienti)) ingredienti = m.ingredienti.filter(Boolean);
+  else if (Array.isArray(m.ingredients)) ingredienti = m.ingredients.filter(Boolean);
+  else {
+    const list = [];
+    for (let i = 1; i <= 20; i++) {
+      const ing = m[`strIngredient${i}`];
+      const qty = m[`strMeasure${i}`];
+      if (ing && String(ing).trim()) list.push(qty ? `${String(ing).trim()} (${String(qty).trim()})` : String(ing).trim());
+    }
+    ingredienti = list;
+  }
 
   const id = m.idmeals ?? m.id ?? m._id ?? null;
-
   return { id, nome, tipologia, prezzo, foto, ingredienti, descrizione, _raw: m };
 }
 
@@ -114,24 +93,15 @@ function normalizeRestaurant(r) {
   return { id, nome, luogo, indirizzo, telefono, menu, _raw: r };
 }
 
-/* ===================== rendering ===================== */
+/* ---------------- rendering ---------------- */
 
 function mealCardHTML(piatto, risto) {
-  const priceHTML = Number.isFinite(piatto.prezzo)
-    ? `<div><strong>Price:</strong> ${money(piatto.prezzo)}</div>`
-    : "";
+  const imgSrc = (piatto.foto && piatto.foto.trim()) ? piatto.foto.trim() : FALLBACK_IMG;
 
-  const tipoHTML = piatto.tipologia
-    ? `<div><strong>Type:</strong> <em>${piatto.tipologia}</em></div>`
-    : "";
-
-  const ingHTML = (piatto.ingredienti && piatto.ingredienti.length)
-    ? `<div><strong>Ingredients:</strong> ${piatto.ingredienti.join(", ")}</div>`
-    : "";
-
-  const descHTML = piatto.descrizione
-    ? `<div class="muted" style="margin-top:4px;">${piatto.descrizione}</div>`
-    : "";
+  const priceHTML = Number.isFinite(piatto.prezzo) ? `<div><strong>Price:</strong> ${money(piatto.prezzo)}</div>` : "";
+  const tipoHTML  = piatto.tipologia ? `<div><strong>Type:</strong> <em>${piatto.tipologia}</em></div>` : "";
+  const ingHTML   = (piatto.ingredienti && piatto.ingredienti.length) ? `<div><strong>Ingredients:</strong> ${piatto.ingredienti.join(", ")}</div>` : "";
+  const descHTML  = piatto.descrizione ? `<div class="muted" style="margin-top:4px;">${piatto.descrizione}</div>` : "";
 
   const ristoPosizione = [risto.indirizzo, risto.luogo].filter(Boolean).join(", ");
   const ristoHTML = `
@@ -141,8 +111,6 @@ function mealCardHTML(piatto, risto) {
       ${risto.telefono ? `<div><strong>Phone:</strong> ${risto.telefono}</div>` : ""}
     </div>
   `;
-
-  const imgSrc = (piatto.foto && piatto.foto.trim()) ? piatto.foto : FALLBACK_IMG;
 
   return `
     <div style="display:flex; gap:12px; align-items:flex-start; border:1px solid #e5e5e5; border-radius:10px; padding:10px;">
@@ -161,16 +129,16 @@ function mealCardHTML(piatto, risto) {
   `;
 }
 
-/* ===================== main search ===================== */
+/* ---------------- main search ---------------- */
 
 window.cercaPiatti = async function cercaPiatti() {
   const ul = document.getElementById("risultati-piatti");
   if (!ul) return;
   ul.innerHTML = "<li>Searching...</li>";
 
-  const qNome         = (document.getElementById("nome")      ?.value || "").trim();
-  const qTipo         = (document.getElementById("tipologia") ?.value || "").trim();
-  const qPrezzoMaxStr = (document.getElementById("prezzo")    ?.value || "").trim();
+  const qNome         = (document.getElementById("nome")?.value || "").trim();
+  const qTipo         = (document.getElementById("tipologia")?.value || "").trim();
+  const qPrezzoMaxStr = (document.getElementById("prezzo")?.value || "").trim();
   const qPrezzoMax    = qPrezzoMaxStr ? Number(qPrezzoMaxStr) : null;
 
   try {
@@ -213,16 +181,11 @@ window.cercaPiatti = async function cercaPiatti() {
   }
 };
 
-/* ===================== UX extra ===================== */
+/* ---------------- UX ---------------- */
 document.addEventListener("DOMContentLoaded", () => {
-  const inputs = ["nome", "tipologia", "prezzo"]
-    .map(id => document.getElementById(id))
-    .filter(Boolean);
-  for (const el of inputs) {
-    el.addEventListener("keydown", (e) => {
-      if (e.key === "Enter") window.cercaPiatti();
-    });
-  }
-  // esegui subito la prima ricerca se vuoi:
+  ["nome","tipologia","prezzo"].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.addEventListener("keydown", e => { if (e.key === "Enter") window.cercaPiatti(); });
+  });
   // window.cercaPiatti();
 });
