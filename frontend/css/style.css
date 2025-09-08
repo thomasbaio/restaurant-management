@@ -365,7 +365,7 @@ footer.tech-footer {
 }
 footer.tech-footer p {
   margin: 0 0 8px 0;
-  color: #4a5568;
+  color: #cfcccc;
   font-weight: 500;
   letter-spacing: .2px;
 }
@@ -375,7 +375,7 @@ footer.tech-footer .stack {
   align-items: center; 
                           }
 footer.tech-footer img.tech-logo {
-  height: 70px;
+  height: 150px;
   vertical-align: middle;
   opacity: .95;
   transition: transform .15s ease, opacity .15s ease;
