@@ -1,87 +1,53 @@
-// ricerca_piatti.js
+// ricerca_piatti.js — versione allineata a main.js (immagini + descrizione)
 
-const isLocal = ["localhost","127.0.0.1"].includes(location.hostname);
+// ========================= base URL per API =========================
+const isLocal = ["localhost", "127.0.0.1"].includes(location.hostname);
 const API_BASE = isLocal ? "http://localhost:3000" : location.origin;
 
-/* ---------------- helpers ---------------- */
+/* ===================== helpers immagini come in main.js ===================== */
 
+// valida una stringa come URL immagine accettabile
 function isValidImgPath(s) {
   if (typeof s !== "string") return false;
   const t = s.trim();
   if (!t || t === "-" || t === "#") return false;
+  // http(s)://...  oppure  //cdn...  oppure  /uploads/...
   return /^https?:\/\//i.test(t) || t.startsWith("//") || t.startsWith("/");
 }
 
-const FALLBACK_IMG = 'data:image/svg+xml;utf8,' + encodeURIComponent(
-  `<svg xmlns="http://www.w3.org/2000/svg" width="120" height="90">
-     <rect width="100%" height="100%" fill="#EEE"/>
-     <text x="50%" y="50%" font-size="12" text-anchor="middle" fill="#777" dy=".3em">no image</text>
-   </svg>`
-);
-
-// Raccoglie il primo URL immagine valido, con TRIM e priorità a strMealThumb
-function getFirstImage(obj) {
-  const m = obj ?? {};
-  const raw = m._raw ?? m;
+// trova il primo campo immagine davvero valido tra vari alias (priorità strMealThumb)
+function firstImage(p) {
+  const src = p || {};
+  const raw = src._raw || src.raw || {};
 
   const candidates = [
-    m.strMealThumb, raw.strMealThumb,            // priorità TheMealDB
-    m.foto, m.image, m.img, m.photo, m.picture, m.thumb,
-    raw.foto, raw.image, raw.img, raw.photo, raw.picture, raw.thumb,
-    ...(Array.isArray(m.images) ? m.images : []),
-    ...(Array.isArray(raw.images) ? raw.images : []),
-  ].filter(Boolean).map(x => typeof x === "string" ? x.trim() : x);
+    // normalizzato
+    src.immagine, src.foto, src.strMealThumb, src.image, src.thumb, src.picture, src.img,
+    // originale (raw)
+    raw.immagine, raw.foto, raw.strMealThumb, raw.image, raw.thumb, raw.picture, raw.img
+  ];
 
-  for (const c of candidates) {
-    if (typeof c === "string" && isValidImgPath(c)) return c;
-  }
-  for (const c of candidates) {
-    if (typeof c === "string") {
-      const t = c.trim();
-      if (t && !t.startsWith("http") && !t.startsWith("//")) {
-        return t.startsWith("/") ? t : `/${t}`;
-      }
-    }
+  for (let c of candidates) {
+    if (!isValidImgPath(c)) continue;
+    c = String(c).trim();
+    if (c.startsWith("//")) return "https:" + c; // protocol-relative -> forza https
+    return c;
   }
   return "";
 }
 
-const money = n => `€${Number(n || 0).toFixed(2)}`;
-
-function includesCI(hay, needle) {
-  if (!needle) return true;
-  if (!hay) return false;
-  return String(hay).toLowerCase().includes(String(needle).toLowerCase());
-}
-
-/* ---------------- normalizzazione ---------------- */
-
-function normalizeMeal(m) {
-  const nome        = m.nome ?? m.strMeal ?? m.name ?? "";
-  const tipologia   = m.tipologia ?? m.strCategory ?? m.category ?? "";
-  const prezzoRaw   = m.prezzo ?? m.price ?? m.cost ?? null;
-  const prezzo      = prezzoRaw === null ? null : Number(prezzoRaw);
-
-  const foto        = getFirstImage({ ...m, _raw: m });        // <-- fix immagine
-  const descrizione = m.descrizione ?? m.description ?? m.desc ?? m.details ?? m.strInstructions ?? "";
-
-  // ingredienti: array o campi TheMealDB
-  let ingredienti = [];
-  if (Array.isArray(m.ingredienti)) ingredienti = m.ingredienti.filter(Boolean);
-  else if (Array.isArray(m.ingredients)) ingredienti = m.ingredients.filter(Boolean);
-  else {
-    const list = [];
-    for (let i = 1; i <= 20; i++) {
-      const ing = m[`strIngredient${i}`];
-      const qty = m[`strMeasure${i}`];
-      if (ing && String(ing).trim()) list.push(qty ? `${String(ing).trim()} (${String(qty).trim()})` : String(ing).trim());
-    }
-    ingredienti = list;
+// seleziona URL immagine con fallback (come in main.js: placehold.co)
+function pickImageURL(p) {
+  const cand = firstImage(p);
+  if (isValidImgPath(cand)) {
+    if (cand.startsWith("/")) return `${location.origin}${cand}`; // relativo -> assoluto
+    return cand; // http/https
   }
-
-  const id = m.idmeals ?? m.id ?? m._id ?? null;
-  return { id, nome, tipologia, prezzo, foto, ingredienti, descrizione, _raw: m };
+  const label = encodeURIComponent((p.nome || "Food").split(" ")[0]);
+  return `https://placehold.co/90x90?text=${label}`;
 }
+
+/* ===================== normalizzazione dati ===================== */
 
 function normalizeRestaurant(r) {
   const id        = r.restaurantId ?? r.id ?? r._id ?? r.ownerUserId ?? null;
@@ -93,21 +59,72 @@ function normalizeRestaurant(r) {
   return { id, nome, luogo, indirizzo, telefono, menu, _raw: r };
 }
 
-/* ---------------- rendering ---------------- */
+function normalizeMeal(m, restaurantIdFallback) {
+  // id
+  let id = m.idmeals ?? m.idMeal ?? m.id;
+  if (!id && typeof m._id === "string") id = m._id;
+
+  // nome/categoria
+  const nome      = m.nome ?? m.strMeal ?? m.name ?? "No name";
+  const tipologia = m.tipologia ?? m.strCategory ?? m.category ?? "";
+
+  // prezzo (se presente)
+  const prezzoRaw = m.prezzo ?? m.price ?? m.cost ?? null;
+  const prezzo    = (prezzoRaw !== null && !isNaN(Number(prezzoRaw))) ? Number(prezzoRaw) : undefined;
+
+  // descrizione (priorità strInstructions)
+  const descrizione = m.descrizione ?? m.description ?? m.desc ?? m.details ?? m.strInstructions ?? "";
+
+  // ingredienti (array oppure TheMealDB strIngredient1..20)
+  let ingredienti = [];
+  if (Array.isArray(m.ingredienti)) ingredienti = m.ingredienti.filter(Boolean);
+  else if (Array.isArray(m.ingredients)) ingredienti = m.ingredients.filter(Boolean);
+  else {
+    const list = [];
+    for (let i = 1; i <= 20; i++) {
+      const ing = m[`strIngredient${i}`];
+      const qty = m[`strMeasure${i}`];
+      if (ing && String(ing).trim()) {
+        list.push(qty ? `${String(ing).trim()} (${String(qty).trim()})` : String(ing).trim());
+      }
+    }
+    ingredienti = list;
+  }
+
+  const immagine    = firstImage({ ...m, _raw: m });
+  const restaurantId= m.restaurantId ?? restaurantIdFallback ?? null;
+
+  return { _raw: m, id, nome, tipologia, prezzo, descrizione, ingredienti, immagine, restaurantId };
+}
+
+const money = n => `€${Number(n || 0).toFixed(2)}`;
+function includesCI(hay, needle) {
+  if (!needle) return true;
+  if (!hay) return false;
+  return String(hay).toLowerCase().includes(String(needle).toLowerCase());
+}
+
+/* ===================== rendering ===================== */
 
 function mealCardHTML(piatto, risto) {
-  const imgSrc = (piatto.foto && piatto.foto.trim()) ? piatto.foto.trim() : FALLBACK_IMG;
+  const imgSrc = pickImageURL(piatto);
 
-  const priceHTML = Number.isFinite(piatto.prezzo) ? `<div><strong>Price:</strong> ${money(piatto.prezzo)}</div>` : "";
+  const priceHTML = (typeof piatto.prezzo === "number" && isFinite(piatto.prezzo))
+    ? `<div><strong>Price:</strong> ${money(piatto.prezzo)}</div>` : "";
+
   const tipoHTML  = piatto.tipologia ? `<div><strong>Type:</strong> <em>${piatto.tipologia}</em></div>` : "";
-  const ingHTML   = (piatto.ingredienti && piatto.ingredienti.length) ? `<div><strong>Ingredients:</strong> ${piatto.ingredienti.join(", ")}</div>` : "";
-  const descHTML  = piatto.descrizione ? `<div class="muted" style="margin-top:4px;">${piatto.descrizione}</div>` : "";
 
-  const ristoPosizione = [risto.indirizzo, risto.luogo].filter(Boolean).join(", ");
+  const ingHTML   = (piatto.ingredienti && piatto.ingredienti.length)
+    ? `<div><strong>Ingredients:</strong> ${piatto.ingredienti.join(", ")}</div>` : "";
+
+  const descHTML  = piatto.descrizione
+    ? `<div class="muted" style="margin-top:4px;">${piatto.descrizione}</div>` : "";
+
+  const ristoPos  = [risto.indirizzo, risto.luogo].filter(Boolean).join(", ");
   const ristoHTML = `
     <div style="margin-top:6px;">
       <div><strong>Restaurant:</strong> ${risto.nome || "—"}</div>
-      ${ristoPosizione ? `<div><strong>Location:</strong> ${ristoPosizione}</div>` : ""}
+      ${ristoPos ? `<div><strong>Location:</strong> ${ristoPos}</div>` : ""}
       ${risto.telefono ? `<div><strong>Phone:</strong> ${risto.telefono}</div>` : ""}
     </div>
   `;
@@ -116,9 +133,9 @@ function mealCardHTML(piatto, risto) {
     <div style="display:flex; gap:12px; align-items:flex-start; border:1px solid #e5e5e5; border-radius:10px; padding:10px;">
       <img src="${imgSrc}" alt="${piatto.nome}"
            style="width:90px;height:90px;object-fit:cover;border-radius:8px;"
-           onerror="this.onerror=null; this.src='${FALLBACK_IMG}';">
+           referrerpolicy="no-referrer" loading="lazy">
       <div style="flex:1; min-width:0;">
-        <div style="font-weight:700;">${piatto.nome || "No name"}</div>
+        <div style="font-weight:700;">${piatto.nome}</div>
         ${tipoHTML}
         ${priceHTML}
         ${ingHTML}
@@ -129,7 +146,7 @@ function mealCardHTML(piatto, risto) {
   `;
 }
 
-/* ---------------- main search ---------------- */
+/* ===================== main search ===================== */
 
 window.cercaPiatti = async function cercaPiatti() {
   const ul = document.getElementById("risultati-piatti");
@@ -146,20 +163,22 @@ window.cercaPiatti = async function cercaPiatti() {
     if (!res.ok) throw new Error(`HTTP ${res.status} ${res.statusText}`);
     const data = await res.json();
 
+    // array ristoranti con menu annidato
     const ristoranti = (Array.isArray(data) ? data : []).map(normalizeRestaurant);
 
+    // piatti flatten con info ristorante
     const allMeals = [];
     for (const r of ristoranti) {
       for (const m of r.menu) {
-        const p = normalizeMeal(m);
-        allMeals.push({ risto: r, piatto: p });
+        allMeals.push({ piatto: normalizeMeal(m, r.id), risto: r });
       }
     }
 
+    // filtri
     const filtered = allMeals.filter(({ piatto }) => {
       if (!includesCI(piatto.nome, qNome)) return false;
       if (!includesCI(piatto.tipologia, qTipo)) return false;
-      if (qPrezzoMax !== null && Number.isFinite(piatto.prezzo) && piatto.prezzo > qPrezzoMax) return false;
+      if (qPrezzoMax !== null && typeof piatto.prezzo === "number" && isFinite(piatto.prezzo) && piatto.prezzo > qPrezzoMax) return false;
       return true;
     });
 
@@ -168,6 +187,7 @@ window.cercaPiatti = async function cercaPiatti() {
       return;
     }
 
+    // render
     ul.innerHTML = "";
     for (const { piatto, risto } of filtered) {
       const li = document.createElement("li");
@@ -181,11 +201,12 @@ window.cercaPiatti = async function cercaPiatti() {
   }
 };
 
-/* ---------------- UX ---------------- */
+/* ===================== UX extra ===================== */
 document.addEventListener("DOMContentLoaded", () => {
   ["nome","tipologia","prezzo"].forEach(id => {
     const el = document.getElementById(id);
     if (el) el.addEventListener("keydown", e => { if (e.key === "Enter") window.cercaPiatti(); });
   });
+  // facoltativo: prima ricerca automatica
   // window.cercaPiatti();
 });
