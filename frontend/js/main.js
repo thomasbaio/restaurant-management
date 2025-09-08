@@ -180,6 +180,58 @@ function getUserPreferredCategory(u) {
     .trim();
 }
 
+/* ===================== Client exclusivity helpers ===================== */
+
+function setDisabled(el, disabled) {
+  if (!el) return;
+  el.disabled = !!disabled;
+  el.querySelectorAll("input, select, textarea, button").forEach(c => c.disabled = !!disabled);
+}
+
+function enforceClientExclusivity(isCustomer) {
+  // Blocchi marcati data-client-only
+  document.querySelectorAll("[data-client-only]").forEach(block => {
+    if (isCustomer) {
+      block.hidden = false;
+      setDisabled(block, false);
+    } else {
+      block.hidden = true;
+      setDisabled(block, true);
+    }
+  });
+
+  // SEARCH DISH (filtro ingredienti)
+  const ingInput = document.getElementById("filter-ingredient");
+  if (ingInput) {
+    if (isCustomer) {
+      ingInput.disabled = false;
+      if (!ingInput.placeholder) ingInput.placeholder = "Filter by ingredient…";
+    } else {
+      ingInput.value = "";
+      ingInput.disabled = true;
+      ingInput.placeholder = "Login as customer to use search";
+    }
+  }
+
+  // SEARCH RESTAURANT
+  const restForm   = document.getElementById("search-restaurants-form");
+  const btnSearch  = document.getElementById("btn-cerca-ristoranti");
+  const nomeInput  = document.getElementById("nome");
+  const luogoInput = document.getElementById("luogo");
+
+  if (isCustomer) {
+    setDisabled(restForm, false);
+    setDisabled(btnSearch, false);
+    if (nomeInput)  nomeInput.disabled  = false;
+    if (luogoInput) luogoInput.disabled = false;
+  } else {
+    setDisabled(restForm, true);
+    setDisabled(btnSearch, true);
+    if (nomeInput)  { nomeInput.value = "";  nomeInput.disabled  = true; }
+    if (luogoInput) { luogoInput.value = ""; luogoInput.disabled = true; }
+  }
+}
+
 /* =========================== renderers =========================== */
 
 // tabella classica (se presente)
@@ -204,13 +256,13 @@ function renderTable(meals, isRestaurateur) {
     // delete abilitato solo a ristoratore con id valido
     const hasIdMeals = meal.idmeals != null && meal.idmeals !== "";
     const oidRaw = meal.raw && typeof meal.raw._id === "string" ? meal.raw._id : "";
-    const oidIsValid = /^[0-9a-fA-F]{24}$/.test(oidRaw);
-    const canDelete = isRestaurateur && (hasIdMeals || oidIsValid);
+    theOidIsValid = /^[0-9a-fA-F]{24}$/.test(oidRaw);
+    const canDelete = isRestaurateur && (hasIdMeals || theOidIsValid);
 
     const deleteHTML = canDelete
       ? `<button class="btn-delete"
                   data-idmeals="${hasIdMeals ? String(meal.idmeals) : ""}"
-                  data-oid="${oidIsValid ? oidRaw : ""}"
+                  data-oid="${theOidIsValid ? oidRaw : ""}"
                   data-rid="${meal.restaurantId || ""}">Delete</button>`
       : "";
 
@@ -415,40 +467,19 @@ window.onload = async () => {
   const isCustomer = role === "cliente";
   const isRestaurateur = role === "ristoratore";
 
+  // ⬇️ Rendi “search dish” e “search restaurant” esclusivi dei clienti
+  enforceClientExclusivity(isCustomer);
+
   // Banner “browse only” per non clienti
   (function showBrowseOnlyBanner() {
     const noti = document.getElementById("noti");
     if (noti && (!user || user.role !== "cliente")) {
       noti.innerHTML = `
         <div class="box muted">
-          Sei libero di sfogliare i menu. <strong>Le funzioni di ricerca di ristoranti e piatti</strong> sono riservate ai clienti.
-          <a href="login.html">Accedi come cliente</a>
+          Sei libero di sfogliare i menu. <strong>Accedi come cliente</strong> per aggiungere piatti al carrello.
+          <a href="login.html">Vai al login</a>
         </div>
       `;
-    }
-  })();
-
-  // ====== SOLO CLIENTE: gate per i controlli di ricerca ======
-  (function restrictSearchToClients() {
-    if (isCustomer) return;
-
-    // Nascondi eventuali blocchi "ricerca ristoranti" se presenti nella pagina
-    ["restaurant-search", "search-restaurants", "restaurant-search-form"].forEach(id => {
-      const el = document.getElementById(id);
-      if (el) el.style.display = "none";
-    });
-
-    // Disabilita ricerca piatti (categoria + ingredienti)
-    const catSel = document.getElementById("category-filter");
-    if (catSel) {
-      catSel.disabled = true;
-      catSel.title = "Disponibile solo per i clienti";
-    }
-    const ingInput = document.getElementById("filter-ingredient");
-    if (ingInput) {
-      ingInput.disabled = true;
-      ingInput.placeholder = "Accedi come cliente per cercare";
-      ingInput.title = "Disponibile solo per i clienti";
     }
   })();
 
@@ -522,20 +553,18 @@ window.onload = async () => {
     }
 
     // ———— DECISIONE CATEGORIA ATTIVA ————
-    // I menù NON usano la preferenza del cliente.
+    // (FIX) I menù NON devono usare la preferenza del cliente.
     // Priorità: 1) select #category-filter, 2) URL ?cat=, 3) "*"
     const urlCat = getQueryParam("cat");
-    let activeCategory = "*"; // default: tutto
+    let activeCategory = "*"; // di default mostra tutto
 
-    if (isCustomer && catSelect && catSelect.value && catSelect.value !== "*") {
-      // il cliente può usare il filtro categoria
+    if (catSelect && catSelect.value && catSelect.value !== "*") {
       activeCategory = catSelect.value;
-    } else if (isCustomer && urlCat) {
-      // il cliente può usare ?cat=
+    } else if (urlCat) {
       activeCategory = urlCat;
       if (catSelect) catSelect.value = urlCat;
     }
-    // Per non-clienti lasciamo "*"
+    // <-- rimosso l'uso di userPref per i menù
 
     setSelectedCategoryLabel(activeCategory && activeCategory !== "*" ? activeCategory : "All categories");
 
@@ -558,9 +587,9 @@ window.onload = async () => {
     }
     mealsToShow.forEach(m => applyImageFallbackFromMap(m, imgMap));
 
-    // salva global per offerte speciali
+    // salva global per filtro ingredienti
     window.__allMeals = mealsToShow;
-    window.__allMealsAll = allMealsNormalized;
+    window.__allMealsAll = allMealsNormalized; // utile per offerte speciali
 
     // render tabella (se presente)
     renderTable(
@@ -603,7 +632,7 @@ window.onload = async () => {
     }
 
     // ———— eventi: cambio categoria dal select ————
-    if (isCustomer && catSelect) {
+    if (catSelect) {
       catSelect.addEventListener("change", () => {
         const newCat = catSelect.value || "*";
         setSelectedCategoryLabel(newCat && newCat !== "*" ? newCat : "All categories");
@@ -617,13 +646,16 @@ window.onload = async () => {
 
         // aggiorna vista per ristorante
         renderMenusGroupedSection(mealsNow, allData, newCat);
+
+        // NON aggiorniamo le offerte: restano ancorate alla preferenza profilo
       });
     }
 
-    // filtro ingredienti live (SOLO cliente)
+    // filtro ingredienti live (se presente) — esclusivo clienti già gestito da enforceClientExclusivity
     const filterInput = document.getElementById("filter-ingredient");
-    if (isCustomer && filterInput) {
+    if (filterInput) {
       filterInput.addEventListener("input", () => {
+        if (filterInput.disabled) return; // se non cliente, non fa nulla
         const text = filterInput.value.trim().toLowerCase();
         const base = (window.__allMeals || []);
         const categoryNow = (catSelect && catSelect.value) ? catSelect.value : activeCategory;

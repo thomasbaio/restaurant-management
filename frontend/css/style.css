@@ -25,10 +25,16 @@ a {
      color: #3de605; 
      text-decoration: none; 
    }
-a:hover { text-decoration: underline; }
-strong { font-weight: bold; }
+a:hover { 
+  text-decoration: underline; 
+        }
+strong { 
+   font-weight: bold; 
+  }
 
-.muted { color: #666; }
+.muted { 
+   color: #666; 
+ }
 
 /* ===== tabelle ===== */
 table {
@@ -36,8 +42,14 @@ table {
   border-collapse: collapse;
   background-color: white;
 }
-th, td { padding: 10px; border: 1px solid #ddd; text-align: left; }
-th { background-color: #f0f0f0; }
+th, td { 
+  padding: 10px; 
+  border: 1px solid #ddd; 
+  text-align: left; 
+  }
+th { 
+   background-color: #f0f0f0; 
+ }
 
 /* ===== pulsanti ===== */
 button {
@@ -50,7 +62,9 @@ button {
   border-radius: 5px;
   cursor: pointer;
 }
-button:hover { background-color:#181a19; }
+button:hover { 
+  background-color:#181a19; 
+}
 
 /* ===== offerte speciali ===== */
 /* supporto sia all'ID inglese che italiano */
@@ -89,12 +103,29 @@ button:hover { background-color:#181a19; }
   border-radius: 6px;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
 }
-.meal-item strong { font-size: 16px; color: #333; }
-.meal-item em { color: #666; margin-left: 5px; }
-.meal-item small { display: block; margin-top: 4px; color: #555; font-size: 13px; }
+.meal-item strong { 
+   font-size: 16px; 
+   color: #333; 
+                  }
+
+.meal-item em { 
+  color: #666; 
+  margin-left: 5px; 
+                }
+
+.meal-item small { 
+  display: block; margin-top: 4px; 
+  color: #555; 
+  font-size: 13px; 
+                 }
 
 /* ===== riepilogo ordine ===== */
-#total { font-size: 18px; margin-top: 10px; font-weight: bold; color: #007BFF; }
+#total { 
+  font-size: 18px; 
+  margin-top: 10px; 
+  font-weight: bold; 
+  color: #007BFF; 
+  }
 
 /* ===== pagamento ===== */
 form#payment-form {
@@ -299,7 +330,11 @@ a[href="index.html"] {
 a[href="index.html"]:hover { text-decoration: underline; }
 
 /* ===== logo + footer ===== */
-.logo { max-height: 120px; display: block; margin: 0 auto 15px auto; }
+.logo { 
+  max-height: 120px; 
+  display: block; 
+  margin: 0 auto 50px auto; 
+}
 footer.tech-footer {
   width: 100%;
   margin-top: 40px;

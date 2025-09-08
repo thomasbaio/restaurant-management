@@ -22,22 +22,24 @@
 
   <!-- Navigazione secondaria -->
   <div id="nav-links" class="link-bar" style="margin-bottom: 20px;">
-    <a href="ricerca_piatti.html">Search for dishes</a>
-    <a href="ricerca_ristoranti.html">Search restaurants</a>
+    <!-- ⬇️ link client-only -->
+    <a href="ricerca_piatti.html" data-client-only>Search for dishes</a>
+    <a href="ricerca_ristoranti.html" data-client-only>Search restaurants</a>
+
     <a id="link-order" href="order.html" style="display:none;">Order here</a>
     <a id="link-ordini-ristoratore" href="ordini_ristoratore.html" style="display:none;">Orders received</a>
     <a id="link-statistiche" href="statistiche_ristoratore.html" style="display:none;">Statistics</a>
   </div>
 
-  <!-- Filtro ingredienti -->
-  <div id="filter-container" style="margin-bottom: 20px;">
+  <!-- Filtro ingredienti (client-only) -->
+  <div id="filter-container" data-client-only style="margin-bottom: 20px;">
     <label for="filter-ingredient"><strong>Filter by ingredient:</strong></label>
     <input type="text" id="filter-ingredient" placeholder="e.g. tomato, mozzarella..." />
   </div>
 
-  <!-- Offerte speciali (solo clienti; main.js la nasconde se non cliente) -->
-  <h2>Personalized offers only</h2>
-  <ul id="special-offers">
+  <!-- Offerte speciali (solo clienti; main.js le nasconde se non cliente, ma aggiungo anche data-client-only) -->
+  <h2 data-client-only>Personalized offers only</h2>
+  <ul id="special-offers" data-client-only>
     <li>Loading...</li>
   </ul>
 
@@ -49,7 +51,7 @@
 
   <!-- footer con loghi tecnologia -->
   <footer class="tech-footer">
-    <p style="margin:0 0 8px;">Powered by</p>
+    <p style="margin:0 0 50px;">Powered by</p>
     <div class="stack">
       <img src="images/express.png" alt="Express" class="tech-logo" />
       <img src="images/mongo.png" alt="MongoDB" class="tech-logo" />
