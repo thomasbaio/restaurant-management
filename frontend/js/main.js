@@ -1,4 +1,4 @@
-// base URL per API: locale vs produzione
+// ========================= base URL per API =========================
 const isLocal = location.hostname === "localhost" || location.hostname === "127.0.0.1";
 const API_BASE = isLocal ? "http://localhost:3000" : location.origin;
 
@@ -200,7 +200,7 @@ function enforceClientExclusivity(isCustomer) {
     }
   });
 
-  // search dish(filtro ingredienti)
+  // search dish (filtro ingredienti)
   const ingInput = document.getElementById("filter-ingredient");
   if (ingInput) {
     if (isCustomer) {
@@ -213,7 +213,7 @@ function enforceClientExclusivity(isCustomer) {
     }
   }
 
-  // search resturant
+  // search restaurant
   const restForm   = document.getElementById("search-restaurants-form");
   const btnSearch  = document.getElementById("btn-cerca-ristoranti");
   const nomeInput  = document.getElementById("nome");
@@ -256,7 +256,7 @@ function renderTable(meals, isRestaurateur) {
     // delete abilitato solo a ristoratore con id valido
     const hasIdMeals = meal.idmeals != null && meal.idmeals !== "";
     const oidRaw = meal.raw && typeof meal.raw._id === "string" ? meal.raw._id : "";
-    theOidIsValid = /^[0-9a-fA-F]{24}$/.test(oidRaw);
+    const theOidIsValid = /^[0-9a-fA-F]{24}$/.test(oidRaw);
     const canDelete = isRestaurateur && (hasIdMeals || theOidIsValid);
 
     const deleteHTML = canDelete
@@ -340,7 +340,9 @@ function renderMenusGroupedSection(meals, rawAllData, activeCategory) {
 
   // se c'è una categoria attiva, filtra prima
   const cat = (activeCategory || "").trim().toLowerCase();
-  const mealsFiltered = cat && cat !== "*" ? (meals || []).filter(p => (p.tipologia || "").toLowerCase() === cat) : (meals || []);
+  const mealsFiltered = cat && cat !== "*"
+    ? (meals || []).filter(p => (p.tipologia || "").toLowerCase() === cat)
+    : (meals || []);
 
   // costruisco mappa restaurantId -> { name, items[] }
   const groups = new Map();
@@ -457,6 +459,101 @@ function renderMenusGroupedSection(meals, rawAllData, activeCategory) {
   enrichNames().then(draw).catch(() => {});
 }
 
+/* ========================= Personalized offers helpers ========================= */
+
+// ——— Ricava una mappa { restaurantId -> nomeRistorante } dai ristoratori
+async function fetchRestaurantsNameMap() {
+  try {
+    const res = await fetch(`${API_BASE}/users/restaurants`, { mode: "cors" });
+    if (!res.ok) return new Map();
+    const arr = await res.json();
+    return new Map(
+      (Array.isArray(arr) ? arr : []).map(u => {
+        const id = String(u.restaurantId ?? u.id ?? u._id ?? "");
+        const name = u.nome ?? u.name ?? (id ? `Ristorante ${id}` : "Ristorante");
+        return [id, name];
+      })
+    );
+  } catch {
+    return new Map();
+  }
+}
+
+// ——— Raggruppa per restaurantId una lista di piatti
+function groupMealsByRestaurant(meals) {
+  const groups = new Map();
+  for (const m of (Array.isArray(meals) ? meals : [])) {
+    const rid = String(m.restaurantId ?? "");
+    if (!groups.has(rid)) groups.set(rid, []);
+    groups.get(rid).push(m);
+  }
+  return groups;
+}
+
+// ——— Render “Personalized offers” raggruppate per ristorante
+async function renderPersonalizedOffersGrouped(user, allMeals) {
+  const container = document.getElementById("special-offers");
+  if (!container) return;
+
+  const pref = (user?.preferenza ?? user?.preferredCategory ?? "").toString().trim();
+  if (!pref) {
+    container.innerHTML = `
+      <li>No preference set. <a href="edituser.html">Set your preferred category</a> to receive personalized offers.</li>
+    `;
+    return;
+  }
+
+  // Filtra SOLO per preferenza (le offerte non dipendono dalla select categoria dei menu)
+  const matches = (Array.isArray(allMeals) ? allMeals : [])
+    .filter(p => (p.tipologia || "").toLowerCase() === pref.toLowerCase());
+
+  if (!matches.length) {
+    container.innerHTML = `<li>No dishes found for your preference "<strong>${pref}</strong>".</li>`;
+    return;
+  }
+
+  // Mappa nomi ristoranti
+  const nameMap = await fetchRestaurantsNameMap();
+  const groups   = groupMealsByRestaurant(matches);
+
+  const sections = [];
+  for (const [rid, items] of groups.entries()) {
+    if (!items.length) continue;
+    const rName = nameMap.get(rid) || (rid ? `Ristorante ${rid}` : "Ristorante");
+
+    const itemsHTML = items.map(p => `
+      <li style="display:flex;align-items:center;gap:10px;margin:8px 0;">
+        <img src="${pickImageURL(p)}" alt="Photo" width="80" height="60">
+        <div style="flex:1 1 auto;">
+          <div><strong>${p.nome}</strong> ${p.tipologia ? `– <span class="muted">(${p.tipologia})</span>` : ""}</div>
+          <div>€ ${formatPrice(p.prezzo)}</div>
+          ${(JSON.parse(localStorage.getItem("loggedUser")||"null")?.role === "cliente")
+            ? `<button class="btn-add" data-id="${p.id}">Add to cart</button>`
+            : ``}
+        </div>
+      </li>
+    `).join("");
+
+    sections.push(`
+      <li class="box" style="list-style:none;">
+        <h3 style="margin:0 0 8px 0;">${rName}</h3>
+        <ul style="margin:0;padding-left:0;">${itemsHTML}</ul>
+      </li>
+    `);
+  }
+
+  container.innerHTML = sections.join("") || `<li>No restaurants available for "<strong>${pref}</strong>".</li>`;
+
+  // Attach “Add to cart”
+  container.querySelectorAll("button.btn-add").forEach(btn => {
+    btn.addEventListener("click", () => {
+      const id = btn.getAttribute("data-id");
+      const m  = matches.find(x => String(x.id) === String(id));
+      if (m) addToCart(m);
+    });
+  });
+}
+
 /* ============================== boot ============================== */
 
 window.onload = async () => {
@@ -553,7 +650,7 @@ window.onload = async () => {
     }
 
     // ———— DECISIONE CATEGORIA ATTIVA ————
-    // (fix) I menù NON devono usare la preferenza del cliente.
+    // I menù NON devono usare la preferenza del cliente.
     // Priorità: 1) select #category-filter, 2) URL ?cat=, 3) "*"
     const urlCat = getQueryParam("cat");
     let activeCategory = "*"; // di default mostra tutto
@@ -564,7 +661,6 @@ window.onload = async () => {
       activeCategory = urlCat;
       if (catSelect) catSelect.value = urlCat;
     }
-    // <-- rimosso l'uso di userPref per i menù
 
     setSelectedCategoryLabel(activeCategory && activeCategory !== "*" ? activeCategory : "All categories");
 
@@ -602,32 +698,16 @@ window.onload = async () => {
     // render vista per ristorante (card) con la categoria attiva
     renderMenusGroupedSection(mealsToShow, allData, activeCategory);
 
-    // ———— offert (solo cliente) ————
+    // ———— Personalized offers (solo cliente), raggruppate per ristorante ————
     if (isCustomer) {
+      await renderPersonalizedOffersGrouped(user, (window.__allMealsAll || []));
+    } else {
       const offersContainer = document.getElementById("special-offers");
       if (offersContainer) {
-        const pref = getUserPreferredCategory(user);
-
-        if (!pref) {
-          offersContainer.innerHTML = `
-            <li>No preference set. <a href="edituser.html">Set your preferred category</a> to receive personalized offers.</li>
-          `;
-        } else {
-          // Le offerte usano SOLO la preferenza salvata nel profilo
-          const suggestedMeals = (window.__allMealsAll || [])
-            .filter(p => (p.tipologia || "").toLowerCase() === pref.toLowerCase());
-
-          if (!suggestedMeals.length) {
-            offersContainer.innerHTML = `<li>No dishes found for your preference "<strong>${pref}</strong>".</li>`;
-          } else {
-            offersContainer.innerHTML = suggestedMeals.map(p => `
-              <li style="margin-bottom:10px;">
-                <img src="${pickImageURL(p)}" alt="Photo" width="80" height="60" style="vertical-align:middle;margin-right:10px;">
-                <strong>${p.nome}</strong> - €${formatPrice(p.prezzo)} ${p.tipologia ? `(${p.tipologia})` : ""}
-              </li>
-            `).join("");
-          }
-        }
+        offersContainer.innerHTML = "";
+        offersContainer.style.display = "none";
+        const prev = offersContainer.previousElementSibling;
+        if (prev && prev.tagName === "H2") prev.style.display = "none";
       }
     }
 
@@ -647,7 +727,7 @@ window.onload = async () => {
         // aggiorna vista per ristorante
         renderMenusGroupedSection(mealsNow, allData, newCat);
 
-        // non aggiorniamo le offerte: restano ancorate alla preferenza profilo
+        // le offerte restano ancorate alla preferenza profilo
       });
     }
 

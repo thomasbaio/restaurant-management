@@ -375,7 +375,7 @@ footer.tech-footer .stack {
   align-items: center; 
                           }
 footer.tech-footer img.tech-logo {
-  height: 150px;
+  height: 200px;
   vertical-align: middle;
   opacity: .95;
   transition: transform .15s ease, opacity .15s ease;
