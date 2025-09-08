@@ -200,7 +200,7 @@ function enforceClientExclusivity(isCustomer) {
     }
   });
 
-  // SEARCH DISH (filtro ingredienti)
+  // search dish(filtro ingredienti)
   const ingInput = document.getElementById("filter-ingredient");
   if (ingInput) {
     if (isCustomer) {
@@ -213,7 +213,7 @@ function enforceClientExclusivity(isCustomer) {
     }
   }
 
-  // SEARCH RESTAURANT
+  // search resturant
   const restForm   = document.getElementById("search-restaurants-form");
   const btnSearch  = document.getElementById("btn-cerca-ristoranti");
   const nomeInput  = document.getElementById("nome");
@@ -530,7 +530,7 @@ window.onload = async () => {
 
     allMealsNormalized.forEach(m => applyImageFallbackFromMap(m, imgMap));
 
-    // ———— COSTRUZIONE LISTA CATEGORIE (per select) ————
+    // ———— costruzione lista categorie (per select) ————
     const categories = Array.from(new Set(
       allMealsNormalized.map(m => (m.tipologia || "").trim()).filter(Boolean)
     )).sort((a, b) => a.localeCompare(b));
@@ -553,7 +553,7 @@ window.onload = async () => {
     }
 
     // ———— DECISIONE CATEGORIA ATTIVA ————
-    // (FIX) I menù NON devono usare la preferenza del cliente.
+    // (fix) I menù NON devono usare la preferenza del cliente.
     // Priorità: 1) select #category-filter, 2) URL ?cat=, 3) "*"
     const urlCat = getQueryParam("cat");
     let activeCategory = "*"; // di default mostra tutto
@@ -602,7 +602,7 @@ window.onload = async () => {
     // render vista per ristorante (card) con la categoria attiva
     renderMenusGroupedSection(mealsToShow, allData, activeCategory);
 
-    // ———— OFFERS (solo cliente) ————
+    // ———— offert (solo cliente) ————
     if (isCustomer) {
       const offersContainer = document.getElementById("special-offers");
       if (offersContainer) {
@@ -647,7 +647,7 @@ window.onload = async () => {
         // aggiorna vista per ristorante
         renderMenusGroupedSection(mealsNow, allData, newCat);
 
-        // NON aggiorniamo le offerte: restano ancorate alla preferenza profilo
+        // non aggiorniamo le offerte: restano ancorate alla preferenza profilo
       });
     }
 
