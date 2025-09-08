@@ -1,53 +1,45 @@
-// ricerca_piatti.js — versione allineata a main.js (immagini + descrizione)
+// ricerca_piatti.js — immagini + descrizione con fallback dal file (come main.js)
 
 // ========================= base URL per API =========================
 const isLocal = ["localhost", "127.0.0.1"].includes(location.hostname);
 const API_BASE = isLocal ? "http://localhost:3000" : location.origin;
 
-/* ===================== helpers immagini come in main.js ===================== */
+/* ===================== helpers immagini (stessa logica di main.js) ===================== */
 
-// valida una stringa come URL immagine accettabile
 function isValidImgPath(s) {
   if (typeof s !== "string") return false;
   const t = s.trim();
   if (!t || t === "-" || t === "#") return false;
-  // http(s)://...  oppure  //cdn...  oppure  /uploads/...
   return /^https?:\/\//i.test(t) || t.startsWith("//") || t.startsWith("/");
 }
 
-// trova il primo campo immagine davvero valido tra vari alias (priorità strMealThumb)
 function firstImage(p) {
   const src = p || {};
   const raw = src._raw || src.raw || {};
-
   const candidates = [
-    // normalizzato
     src.immagine, src.foto, src.strMealThumb, src.image, src.thumb, src.picture, src.img,
-    // originale (raw)
     raw.immagine, raw.foto, raw.strMealThumb, raw.image, raw.thumb, raw.picture, raw.img
   ];
-
   for (let c of candidates) {
     if (!isValidImgPath(c)) continue;
     c = String(c).trim();
-    if (c.startsWith("//")) return "https:" + c; // protocol-relative -> forza https
+    if (c.startsWith("//")) return "https:" + c;
     return c;
   }
   return "";
 }
 
-// seleziona URL immagine con fallback (come in main.js: placehold.co)
 function pickImageURL(p) {
   const cand = firstImage(p);
   if (isValidImgPath(cand)) {
-    if (cand.startsWith("/")) return `${location.origin}${cand}`; // relativo -> assoluto
-    return cand; // http/https
+    if (cand.startsWith("/")) return `${location.origin}${cand}`;
+    return cand;
   }
   const label = encodeURIComponent((p.nome || "Food").split(" ")[0]);
   return `https://placehold.co/90x90?text=${label}`;
 }
 
-/* ===================== normalizzazione dati ===================== */
+/* ===================== normalizzazione + chiavi mappa ===================== */
 
 function normalizeRestaurant(r) {
   const id        = r.restaurantId ?? r.id ?? r._id ?? r.ownerUserId ?? null;
@@ -60,22 +52,17 @@ function normalizeRestaurant(r) {
 }
 
 function normalizeMeal(m, restaurantIdFallback) {
-  // id
   let id = m.idmeals ?? m.idMeal ?? m.id;
   if (!id && typeof m._id === "string") id = m._id;
 
-  // nome/categoria
   const nome      = m.nome ?? m.strMeal ?? m.name ?? "No name";
   const tipologia = m.tipologia ?? m.strCategory ?? m.category ?? "";
 
-  // prezzo (se presente)
   const prezzoRaw = m.prezzo ?? m.price ?? m.cost ?? null;
   const prezzo    = (prezzoRaw !== null && !isNaN(Number(prezzoRaw))) ? Number(prezzoRaw) : undefined;
 
-  // descrizione (priorità strInstructions)
   const descrizione = m.descrizione ?? m.description ?? m.desc ?? m.details ?? m.strInstructions ?? "";
 
-  // ingredienti (array oppure TheMealDB strIngredient1..20)
   let ingredienti = [];
   if (Array.isArray(m.ingredienti)) ingredienti = m.ingredienti.filter(Boolean);
   else if (Array.isArray(m.ingredients)) ingredienti = m.ingredients.filter(Boolean);
@@ -91,11 +78,54 @@ function normalizeMeal(m, restaurantIdFallback) {
     ingredienti = list;
   }
 
-  const immagine    = firstImage({ ...m, _raw: m });
-  const restaurantId= m.restaurantId ?? restaurantIdFallback ?? null;
+  const immagine     = firstImage({ ...m, _raw: m });
+  const restaurantId = m.restaurantId ?? restaurantIdFallback ?? null;
 
   return { _raw: m, id, nome, tipologia, prezzo, descrizione, ingredienti, immagine, restaurantId };
 }
+
+// chiave “nome|categoria” normalizzata (come in main.js)
+function normalizeKey(nome, cat) {
+  const strip = (s) => String(s || "")
+    .normalize("NFD").replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase().trim().replace(/\s+/g, " ");
+  return `${strip(nome)}|${strip(cat)}`;
+}
+
+/* ============ mappa da file: nome+categoria -> {img, descrizione} ============ */
+
+async function buildCommonMealMap() {
+  try {
+    const res = await fetch(`${API_BASE}/meals/common-meals?source=file`, { mode: "cors" });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const list = await res.json();
+    const map = new Map();
+    for (const m of Array.isArray(list) ? list : []) {
+      const nome = m.nome ?? m.strMeal ?? m.name ?? "";
+      const cat  = m.tipologia ?? m.strCategory ?? m.category ?? "";
+      const key  = normalizeKey(nome, cat);
+      const img  = firstImage(m);
+      const desc = m.descrizione ?? m.description ?? m.desc ?? m.details ?? m.strInstructions ?? "";
+      if (!map.has(key)) map.set(key, { img, desc });
+    }
+    return map;
+  } catch (e) {
+    console.warn("Common-meals map error:", e.message);
+    return new Map();
+  }
+}
+
+function applyFallbackFromMap(piatto, map) {
+  if (!piatto) return piatto;
+  const key = normalizeKey(piatto.nome, piatto.tipologia);
+  const hit = map.get(key);
+  if (!hit) return piatto;
+  if (!isValidImgPath(piatto.immagine)) piatto.immagine = hit.img || piatto.immagine;
+  if (!piatto.descrizione && hit.desc) piatto.descrizione = hit.desc;
+  return piatto;
+}
+
+/* ===================== rendering ===================== */
 
 const money = n => `€${Number(n || 0).toFixed(2)}`;
 function includesCI(hay, needle) {
@@ -103,8 +133,6 @@ function includesCI(hay, needle) {
   if (!hay) return false;
   return String(hay).toLowerCase().includes(String(needle).toLowerCase());
 }
-
-/* ===================== rendering ===================== */
 
 function mealCardHTML(piatto, risto) {
   const imgSrc = pickImageURL(piatto);
@@ -159,18 +187,23 @@ window.cercaPiatti = async function cercaPiatti() {
   const qPrezzoMax    = qPrezzoMaxStr ? Number(qPrezzoMaxStr) : null;
 
   try {
-    const res = await fetch(`${API_BASE}/meals`, { mode: "cors" });
-    if (!res.ok) throw new Error(`HTTP ${res.status} ${res.statusText}`);
-    const data = await res.json();
+    // carico sia /meals che la mappa dal file (per fallback)
+    const [mealsRes, commonMap] = await Promise.all([
+      fetch(`${API_BASE}/meals`, { mode: "cors" }),
+      buildCommonMealMap(),
+    ]);
+    if (!mealsRes.ok) throw new Error(`HTTP ${mealsRes.status} ${mealsRes.statusText}`);
+    const data = await mealsRes.json();
 
-    // array ristoranti con menu annidato
     const ristoranti = (Array.isArray(data) ? data : []).map(normalizeRestaurant);
 
-    // piatti flatten con info ristorante
+    // flat + normalize + FALLBACK da mappa file per img/descrizione
     const allMeals = [];
     for (const r of ristoranti) {
       for (const m of r.menu) {
-        allMeals.push({ piatto: normalizeMeal(m, r.id), risto: r });
+        const p = normalizeMeal(m, r.id);
+        applyFallbackFromMap(p, commonMap);
+        allMeals.push({ piatto: p, risto: r });
       }
     }
 
@@ -207,6 +240,6 @@ document.addEventListener("DOMContentLoaded", () => {
     const el = document.getElementById(id);
     if (el) el.addEventListener("keydown", e => { if (e.key === "Enter") window.cercaPiatti(); });
   });
-  // facoltativo: prima ricerca automatica
   // window.cercaPiatti();
 });
+
