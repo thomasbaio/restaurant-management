@@ -289,9 +289,9 @@ a[href="index.html"]:hover { text-decoration: underline; }
 footer.tech-footer {
   width: 100%;
   margin-top: 40px;
-  padding: 40px 36px;
+  padding: 100px 96px;
   text-align: center;
-  background: #f5f7fb;
+  background: #4c4d4c;
   border-top: 1px solid #e2e6ef;
   box-shadow: inset 0 1px 0 #ffffff80;
 }
