@@ -1,16 +1,20 @@
-/* base */ body { font-family: Arial, /* ===== base ===== */
+/* ===== base ===== */
 body {
   font-family: Arial, sans-serif;
   padding: 30px;
   background-color: #f7f7f7;
   color: #333;
 }
+
 h1 { color: #28a745; font-size: 2em; text-align: center; }
 h2 { margin-top: 10px; font-weight: normal; text-align: center; }
 h3 { margin-top: 25px; color: #555; }
+
 a { color: #007BFF; text-decoration: none; }
 a:hover { text-decoration: underline; }
 strong { font-weight: bold; }
+
+.muted { color: #666; }
 
 /* ===== tabelle ===== */
 table {
@@ -35,7 +39,14 @@ button {
 button:hover { background-color: #218838; }
 
 /* ===== offerte speciali ===== */
-#offerte-speciali { list-style: none; padding-left: 0; margin-bottom: 30px; }
+/* supporto sia all'ID inglese che italiano */
+#special-offers,
+#offerte-speciali {
+  list-style: none;
+  padding-left: 0;
+  margin-bottom: 30px;
+}
+#special-offers li,
 #offerte-speciali li {
   background-color: white;
   border: 1px solid #ddd;
@@ -46,6 +57,7 @@ button:hover { background-color: #218838; }
   display: flex;
   align-items: center;
 }
+#special-offers img,
 #offerte-speciali img {
   width: 80px;
   height: auto;
@@ -179,6 +191,8 @@ ul#lista-piatti {
 #links a { margin-right: 10px; font-weight: bold; }
 
 /* ===== filtro ingredienti ===== */
+/* supporto a entrambi gli ID */
+#filter-container,
 #filtro-container {
   background-color: #ffffff;
   padding: 15px;
@@ -187,6 +201,7 @@ ul#lista-piatti {
   box-shadow: 0 1px 4px rgba(0, 0, 0, 0.05);
   margin-bottom: 30px;
 }
+#filter-container input,
 #filtro-container input {
   width: 100%;
   padding: 10px;
@@ -214,12 +229,13 @@ ul#lista-piatti {
 #menu-container th { background-color: #e9ecef; color: #333; font-weight: bold; }
 #menu-container td, #menu-container th { padding: 12px; border: 1px solid #dee2e6; }
 
-/* ===== barra link orizzontale ===== */
+/* ===== barra link orizzontale (NAV secondaria) ===== */
 .link-bar {
   display: flex;
-  gap: 16px;
-  flex-wrap: wrap;
+  justify-content: center;  /* allineati su una riga e centrati */
   align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;          /* a capo in schermi piccoli */
   margin: 10px 0;
 }
 .link-bar a {
@@ -229,9 +245,10 @@ ul#lista-piatti {
   border-radius: 5px;
   font-weight: bold;
   white-space: nowrap;
+  text-decoration: none;
 }
 .link-bar a:hover { background-color: #0056b3; }
-.link-bar p { margin: 0; }
+.link-bar p { margin: 0; } /* safe per vecchio markup */
 
 /* ===== statistiche / popolari ===== */
 #statistiche-box {
@@ -333,7 +350,7 @@ footer.tech-footer img.tech-logo:hover { transform: translateY(-1px); opacity: 1
 }
 .piatto-title { margin: 4px 0; font-size: 1.05rem; color: #222; }
 
-/* badge generico (ultimo valido) */
+/* badge generico */
 .badge {
   display: inline-block;
   padding: 2px 8px;
@@ -370,8 +387,7 @@ footer.tech-footer img.tech-logo:hover { transform: translateY(-1px); opacity: 1
 }
 .azioni button:hover { background-color: #218838; }
 
-/* my orders (ultimo blocco) */
-.muted { color: #666; }
+.muted { color: #666; } /* (richiamo unico) */
 .eta { font-weight: 600; }
 .eta.soon { color: #1b5e20; }
 .eta.wait { color: #b45309; }
@@ -390,16 +406,18 @@ footer.tech-footer img.tech-logo:hover { transform: translateY(-1px); opacity: 1
 .actions button:hover { filter: brightness(0.95); }
 ul.dishes { margin: 6px 0 0 0; padding-left: 20px; }
 
-/* ===== box generici e messaggi (ultimi validi) ===== */
+/* ===== box generici & messaggi ===== */
 .box { padding: 12px; border: 1px solid #ddd; border-radius: 10px; margin: 12px 0; }
 .ok { color: #1b5e20; }
 .err { color: #b00020; }
-.muted { color: #666; }
-/* allineamento orizzontale dei link utente */
-#user-info {
+
+/* ===== allineamento orizzontale link utente (area #links) ===== */
+#user-info,
+#links {           /* se usi un contenitore dedicato */
   display: flex;
-  justify-content: center; /* centra orizzontalmente */
+  justify-content: center;
   align-items: center;
-  gap: 12px; /* spazio uniforme tra i link */
+  gap: 12px;
+  flex-wrap: wrap;
   margin-bottom: 20px;
 }
