@@ -1,82 +1,48 @@
-const mongoose = require("mongoose");
+// app.js
+require("dotenv").config();
+const path = require("path");
+const express = require("express");
+const cors = require("cors");
 
-let connectingPromise = null;   // evita doppi tentativi concorrenti
-let listenersBound = false;     // evita di aggiungere più volte i listener
+const connectDB = require("./connectDB"); // <— il file che hai fornito
+const mealsRouter = require("./meals");   // <— le tue route su file JSON o Mongo
+const { setupSwagger } = require("./swagger"); // <— definito sotto al punto 2
 
-// opzionale: meno rumore con query non mappate (lascia pure true)
-mongoose.set("strictQuery", true);
+const app = express();
 
-async function connectDB(uri) {
-  const mongoUri = uri || process.env.MONGO_URI;
+// fidati del proxy (Render/Heroku)
+app.set("trust proxy", 1);
 
-  // se non c'è URI → non uscire: avvisa e continua senza DB
-  if (!mongoUri) {
-    console.warn("Missing MONGO_URI. Starting without DB.");
-    return null;
-  }
+// middlewares base
+app.use(cors());
+app.use(express.json({ limit: "1mb" }));
+app.use(express.urlencoded({ extended: true }));
 
-  // già connessi
-  if (mongoose.connection.readyState === 1) return mongoose.connection;
+// static (se servono file pubblici, opzionale)
+app.use(express.static(path.join(__dirname, "public")));
 
-  // connessione già in corso
-  if (connectingPromise) return connectingPromise;
+// API routes
+app.use("/meals", mealsRouter);
 
-  // bind listener una sola volta
-  if (!listenersBound) {
-    listenersBound = true;
-    mongoose.connection.on("reconnected", () => console.log("MongoDB reconnected"));
-    mongoose.connection.on("disconnected", () => {
-      console.warn("MongoDB disconnected");
-    });
-    mongoose.connection.on("error", (err) => {
-      console.error("MongoDB error:", err.message);
-    });
-
-    // Spegnimento pulito
-    const gracefulExit = async (signal) => {
-      try {
-        await mongoose.connection.close();
-        console.log(`MongoDB connection closed on ${signal}`);
-      } finally {
-        process.exit(0);
-      }
-    };
-    process.on("SIGINT", () => gracefulExit("SIGINT"));
-    process.on("SIGTERM", () => gracefulExit("SIGTERM"));
-  }
-
-  // avvia connessione NON bloccante
-  connectingPromise = mongoose.connect(mongoUri, {
-    serverSelectionTimeoutMS: 5000, // breve per Render
-    maxPoolSize: 10,
-    autoIndex: process.env.NODE_ENV !== "production",
-    dbName: process.env.MONGO_DB_NAME || undefined,
-    family: 4, // preferisci IPv4 (opzionale ma utile su alcuni host)
-  })
-  .then(() => {
-    console.log("MongoDB connected");
-    return mongoose.connection;
-  })
-  .catch(err => {
-    // non terminare il processo: lascia partire l'HTTP server
-    console.error("Failed to connect to MongoDB:", err.message);
-    // reset per permettere retry futuri
-    connectingPromise = null;
-    return null;
+// Health check (utile per Render)
+app.get("/health", (req, res) => {
+  res.json({
+    ok: true,
+    dbConnected: connectDB.mongoReady(),
+    time: new Date().toISOString(),
   });
+});
 
-  return connectingPromise;
-}
+// Swagger UI + JSON spec
+setupSwagger(app);
 
-// utility per sapere se il DB è pronto
-connectDB.mongoReady = () => mongoose.connection.readyState === 1;
-
-// (opzionale) utility per disconnettersi esplicitamente (test/shutdown)
-connectDB.disconnect = async () => {
-  if (mongoose.connection.readyState !== 0) {
-    await mongoose.connection.close();
-    console.log("MongoDB connection closed");
-  }
-};
-
-module.exports = connectDB;
+// avvio server + connessione DB (non blocca se MONGO_URI manca)
+const PORT = process.env.PORT || 3000;
+(async () => {
+  await connectDB(process.env.MONGO_URI); // parte anche se non c’è MONGO_URI
+  app.listen(PORT, () => {
+    console.log(`HTTP server on http://localhost:${PORT}`);
+    console.log(`Swagger UI → http://localhost:${PORT}/api-docs`);
+    console.log(`OpenAPI JSON → http://localhost:${PORT}/api-docs.json`);
+  });
+})();
