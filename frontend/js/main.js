@@ -498,20 +498,18 @@ window.onload = async () => {
     }
 
     // ———— DECISIONE CATEGORIA ATTIVA ————
-    // Priorità: 1) select #category-filter (se già valorizzata), 2) URL ?cat=, 3) preferenza utente (cliente), 4) "*"
+    // (FIX) I menù NON devono usare la preferenza del cliente.
+    // Priorità: 1) select #category-filter, 2) URL ?cat=, 3) "*"
     const urlCat = getQueryParam("cat");
-    const userPref = isCustomer ? (user?.preferenza || "") : "";
-    let activeCategory = "*";
+    let activeCategory = "*"; // di default mostra tutto
 
     if (catSelect && catSelect.value && catSelect.value !== "*") {
       activeCategory = catSelect.value;
     } else if (urlCat) {
       activeCategory = urlCat;
       if (catSelect) catSelect.value = urlCat;
-    } else if (userPref) {
-      activeCategory = userPref;
-      if (catSelect) catSelect.value = userPref;
     }
+    // <-- rimosso l'uso di userPref per i menù
 
     setSelectedCategoryLabel(activeCategory && activeCategory !== "*" ? activeCategory : "All categories");
 
@@ -594,7 +592,7 @@ window.onload = async () => {
         // aggiorna vista per ristorante
         renderMenusGroupedSection(mealsNow, allData, newCat);
 
-        // non aggiorniamo le offerte qui: restano ancorate alla preferenza profilo
+        // NON aggiorniamo le offerte: restano ancorate alla preferenza profilo
       });
     }
 
