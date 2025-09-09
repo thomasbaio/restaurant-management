@@ -176,17 +176,6 @@ function getLoggedUser() {
   catch { return null; }
 }
 
-// Edit SOLO per cliente (difesa in profondità)
-function handleEditAsClient(piatto) {
-  const user = getLoggedUser();
-  if (!user || user.role !== "cliente") {
-    alert("Only customers can edit a dish.");
-    return;
-  }
-  // reindirizzo a edit.html con id del piatto
-  location.href = `edit.html?id=${encodeURIComponent(piatto.id)}`;
-}
-
 // Delete SOLO per ristoratore DEL proprio ristorante
 async function handleDeleteAsRestaurant(piatto) {
   const user = getLoggedUser();
@@ -201,7 +190,6 @@ async function handleDeleteAsRestaurant(piatto) {
   if (!confirm(`Delete dish "${piatto.nome}"? This action cannot be undone.`)) return;
 
   try {
-    // endpoint minimale; il tuo backend potrebbe usare percorsi diversi
     const res = await fetch(`${API_BASE}/meals/${encodeURIComponent(piatto.id)}`, {
       method: "DELETE",
       headers: { "Content-Type": "application/json" }
@@ -232,12 +220,10 @@ function mealCardHTML(piatto, risto) {
   // azioni condizionate dal ruolo
   const user = getLoggedUser();
   const role = user?.role;
-  const editBtn = role === "cliente"
-    ? `<button class="btn" data-act="edit" data-id="${piatto.id}">Edit</button>` : "";
   const delBtn = role === "ristoratore"
     ? `<button class="btn danger" data-act="delete" data-id="${piatto.id}">Delete</button>` : "";
-  const actions = (editBtn || delBtn)
-    ? `<div class="actions" style="margin-top:8px; display:flex; gap:8px;">${editBtn}${delBtn}</div>` : "";
+  const actions = delBtn
+    ? `<div class="actions" style="margin-top:8px; display:flex; gap:8px;">${delBtn}</div>` : "";
 
   return `
     <div style="display:flex; gap:12px; align-items:flex-start;">
@@ -255,8 +241,6 @@ function mealCardHTML(piatto, risto) {
 }
 
 function renderGroupedByRestaurant(items, targetUL) {
-  // items: [{ piatto, risto }]
-  // group
   const groups = new Map();
   for (const it of items) {
     const rid = String(it.risto.id || "");
@@ -264,12 +248,10 @@ function renderGroupedByRestaurant(items, targetUL) {
     groups.get(rid).items.push(it.piatto);
   }
 
-  // order by restaurant name
   const ordered = [...groups.values()].sort((a, b) =>
     (a.risto.nome || "").localeCompare(b.risto.nome || "")
   );
 
-  // render
   targetUL.innerHTML = "";
   for (const g of ordered) {
     const liHeader = document.createElement("li");
@@ -299,7 +281,7 @@ function renderGroupedByRestaurant(items, targetUL) {
 // =========================
 /* main search */
 // =========================
-let __ricercaPiattiIndex = new Map(); // id -> {piatto, risto}
+let __ricercaPiattiIndex = new Map();
 
 window.cercaPiatti = async function () {
   const ul = document.getElementById("risultati-piatti");
@@ -322,12 +304,10 @@ window.cercaPiatti = async function () {
 
     const data = await mealsRes.json();
 
-    // normalizza ristoranti e arricchisci con /users/restaurants
     const ristoranti = (Array.isArray(data) ? data : [])
       .map(normalizeRestaurant)
       .map((r) => enrichRestaurantWithUsersMap(r, usersMap));
 
-    // flat piatti + fallback (img/descrizione) + filtri
     const all = [];
     for (const r of ristoranti) {
       for (const m of r.menu) {
@@ -355,12 +335,10 @@ window.cercaPiatti = async function () {
       return;
     }
 
-    // indice per handler (id -> item)
     __ricercaPiattiIndex = new Map(
       filtered.map(it => [String(it.piatto.id), it])
     );
 
-    // Render raggruppato per ristorante
     renderGroupedByRestaurant(filtered, ul);
   } catch (err) {
     console.error("Dish search error:", err);
@@ -389,11 +367,8 @@ document.addEventListener("DOMContentLoaded", () => {
       const item = __ricercaPiattiIndex.get(String(id));
       if (!item) return;
 
-      if (act === "edit")        handleEditAsClient(item.piatto);
-      else if (act === "delete") handleDeleteAsRestaurant(item.piatto);
+      if (act === "delete") handleDeleteAsRestaurant(item.piatto);
     });
   }
-
-  // avvio automatico opzionale:
-  // window.cercaPiatti();
 });
+
