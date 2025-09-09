@@ -176,16 +176,32 @@ function getLoggedUser() {
   catch { return null; }
 }
 
-// edit solo per cliente
+// Edit SOLO per cliente (difesa in profondità)
 function handleEditAsClient(piatto) {
-  // Reindirizza a pagina di editing se presente
-  location.href = `editdish.html?id=${encodeURIComponent(piatto.id)}`;
+  const user = getLoggedUser();
+  if (!user || user.role !== "cliente") {
+    alert("Only customers can edit a dish.");
+    return;
+  }
+  // reindirizzo a edit.html con id del piatto
+  location.href = `edit.html?id=${encodeURIComponent(piatto.id)}`;
 }
 
-// Delete SOLO per ristoratore
+// Delete SOLO per ristoratore DEL proprio ristorante
 async function handleDeleteAsRestaurant(piatto) {
+  const user = getLoggedUser();
+  if (!user || user.role !== "ristoratore") {
+    alert("Only restaurateurs can delete dishes.");
+    return;
+  }
+  if (!piatto.restaurantId || String(piatto.restaurantId) !== String(user.restaurantId || "")) {
+    alert("You can delete only dishes from your own restaurant.");
+    return;
+  }
   if (!confirm(`Delete dish "${piatto.nome}"? This action cannot be undone.`)) return;
+
   try {
+    // endpoint minimale; il tuo backend potrebbe usare percorsi diversi
     const res = await fetch(`${API_BASE}/meals/${encodeURIComponent(piatto.id)}`, {
       method: "DELETE",
       headers: { "Content-Type": "application/json" }
@@ -194,7 +210,6 @@ async function handleDeleteAsRestaurant(piatto) {
       const txt = await res.text().catch(() => "");
       throw new Error(`HTTP ${res.status} ${res.statusText}${txt ? " – " + txt : ""}`);
     }
-    // Ricarica risultati dopo la cancellazione
     window.cercaPiatti();
   } catch (err) {
     console.error("Delete error:", err);
@@ -374,7 +389,7 @@ document.addEventListener("DOMContentLoaded", () => {
       const item = __ricercaPiattiIndex.get(String(id));
       if (!item) return;
 
-      if (act === "edit")      handleEditAsClient(item.piatto);
+      if (act === "edit")        handleEditAsClient(item.piatto);
       else if (act === "delete") handleDeleteAsRestaurant(item.piatto);
     });
   }

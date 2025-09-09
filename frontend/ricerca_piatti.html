@@ -12,7 +12,8 @@
 
   <!-- messaggio utente -->
   <div id="user-info" style="margin-bottom:20px;">
-    <a href="edit.html" data-client-only>Edit dish </a>
+    <!-- visibile solo ai CLIENTI -->
+    <a href="edit.html" data-client-only id="link-edit-dish" hidden>Edit dish</a>
   </div>
 
   <label> Name: <input type="text" id="nome"></label><br>
@@ -23,28 +24,47 @@
 
   <p><a href="index.html">Back to homepage</a></p>
 
-
   <h2>Results</h2>
   <ul id="risultati-piatti"></ul>
 
-  
   <script src="js/ricerca_piatti.js?v=5" defer></script>
 
   <script>
-    // gestione info utente come in index.html
-    const user = JSON.parse(localStorage.getItem("loggedUser"));
-    const info = document.getElementById("user-info");
+    (function enforceClientOnly() {
+      const user = JSON.parse(localStorage.getItem("loggedUser") || "null");
+      const isCustomer = !!user && user.role === "cliente";
+      const info = document.getElementById("user-info");
+      const editLink = document.getElementById("link-edit-dish");
 
-    if (user) {
-      info.innerHTML = `
-        <a href="edit.html">Edit</a> |
-         `;
-    } else {
-      info.innerHTML = `
-        <a href="login.html">Login</a> |
-        <a href="register.html">Register</a>
-      `;
-    }
+      if (isCustomer) {
+        // Mostra link edit SOLO ai clienti
+        if (editLink) editLink.hidden = false;
+        info.innerHTML = `
+          <a href="edit.html" id="link-edit-dish-2">Edit dish</a> |
+          <a href="login.html" onclick="localStorage.removeItem('loggedUser')">Logout</a>
+        `;
+      } else {
+        // Nessun link a edit.html per ospiti o ristoratori
+        if (editLink) {
+          editLink.hidden = true;
+          editLink.addEventListener("click", (e) => { e.preventDefault(); return false; });
+        }
+        info.innerHTML = `
+          <a href="login.html">Login</a> |
+          <a href="register.html">Register</a>
+        `;
+      }
+
+      // Difesa in profondità: disabilita qualsiasi link con data-client-only se non cliente
+      document.querySelectorAll("[data-client-only]").forEach(a => {
+        if (!isCustomer) {
+          a.hidden = true;
+          a.addEventListener("click", (e) => { e.preventDefault(); return false; });
+        } else {
+          a.hidden = false;
+        }
+      });
+    })();
 
     function logout() {
       localStorage.removeItem("loggedUser");
@@ -53,3 +73,4 @@
   </script>
 </body>
 </html>
+

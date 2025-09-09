@@ -1,3 +1,5 @@
+// main.js — versione senza alcun riferimento a "edit dish" o "edit.html"
+
 // ========================= base URL per API =========================
 const isLocal = location.hostname === "localhost" || location.hostname === "127.0.0.1";
 const API_BASE = isLocal ? "http://localhost:3000" : location.origin;
@@ -755,3 +757,4 @@ window.onload = async () => {
     alert("Error loading menu");
   }
 };
+
