@@ -176,7 +176,7 @@ function getLoggedUser() {
   catch { return null; }
 }
 
-// Edit SOLO per cliente
+// edit solo per cliente
 function handleEditAsClient(piatto) {
   // Reindirizza a pagina di editing se presente
   location.href = `editdish.html?id=${encodeURIComponent(piatto.id)}`;
@@ -241,7 +241,7 @@ function mealCardHTML(piatto, risto) {
 
 function renderGroupedByRestaurant(items, targetUL) {
   // items: [{ piatto, risto }]
-  // Group
+  // group
   const groups = new Map();
   for (const it of items) {
     const rid = String(it.risto.id || "");
@@ -249,12 +249,12 @@ function renderGroupedByRestaurant(items, targetUL) {
     groups.get(rid).items.push(it.piatto);
   }
 
-  // Order by restaurant name
+  // order by restaurant name
   const ordered = [...groups.values()].sort((a, b) =>
     (a.risto.nome || "").localeCompare(b.risto.nome || "")
   );
 
-  // Render
+  // render
   targetUL.innerHTML = "";
   for (const g of ordered) {
     const liHeader = document.createElement("li");
@@ -282,7 +282,7 @@ function renderGroupedByRestaurant(items, targetUL) {
 }
 
 // =========================
-/* Main search */
+/* main search */
 // =========================
 let __ricercaPiattiIndex = new Map(); // id -> {piatto, risto}
 
@@ -307,12 +307,12 @@ window.cercaPiatti = async function () {
 
     const data = await mealsRes.json();
 
-    // Normalizza ristoranti e arricchisci con /users/restaurants
+    // normalizza ristoranti e arricchisci con /users/restaurants
     const ristoranti = (Array.isArray(data) ? data : [])
       .map(normalizeRestaurant)
       .map((r) => enrichRestaurantWithUsersMap(r, usersMap));
 
-    // Flat piatti + fallback (img/descrizione) + filtri
+    // flat piatti + fallback (img/descrizione) + filtri
     const all = [];
     for (const r of ristoranti) {
       for (const m of r.menu) {
@@ -354,7 +354,7 @@ window.cercaPiatti = async function () {
 };
 
 // =========================
-// UX + delega eventi
+// ux + delega eventi
 // =========================
 document.addEventListener("DOMContentLoaded", () => {
   ["nome", "tipologia", "prezzo"].forEach((id) => {
@@ -379,6 +379,6 @@ document.addEventListener("DOMContentLoaded", () => {
     });
   }
 
-  // Avvio automatico opzionale:
+  // avvio automatico opzionale:
   // window.cercaPiatti();
 });
