@@ -32,8 +32,6 @@
     <a id="link-order" href="order.html" style="display:none;">Order here</a>
     <a id="link-ordini-ristoratore" href="ordini_ristoratore.html" style="display:none;">Orders received</a>
 
-    <!-- ⬇️ nascosto di default; lo mostriamo SOLO ai clienti da JS -->
-    <a id="link-edit" href="edit.html" style="display:none;">Edit dish</a>
 
     <a id="link-statistiche" href="statistiche_ristoratore.html" style="display:none;">Statistics</a>
   </div>
@@ -76,7 +74,6 @@
       const linkOrder = document.getElementById("link-order");
       const linkRestaurantOrders = document.getElementById("link-ordini-ristoratore");
       const linkStatistics = document.getElementById("link-statistiche");
-      const linkEdit = document.getElementById("link-edit");
 
       if (user) {
         welcome.textContent = `Welcome, ${user.username}`;
