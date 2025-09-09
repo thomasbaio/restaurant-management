@@ -1,11 +1,11 @@
 // =========================
-// Configurazione API base
+// configurazione API base
 // =========================
 const isLocal = ["localhost", "127.0.0.1"].includes(location.hostname);
 const API_BASE = isLocal ? "http://localhost:3000" : location.origin;
 
 // =========================
-// Helpers immagini
+// helpers immagini
 // =========================
 function isValidImgPath(s) {
   if (typeof s !== "string") return false;
@@ -18,20 +18,8 @@ function firstImage(p) {
   const src = p || {};
   const raw = src._raw || src.raw || {};
   const candidates = [
-    src.immagine,
-    src.foto,
-    src.strMealThumb,
-    src.image,
-    src.thumb,
-    src.picture,
-    src.img,
-    raw.immagine,
-    raw.foto,
-    raw.strMealThumb,
-    raw.image,
-    raw.thumb,
-    raw.picture,
-    raw.img,
+    src.immagine, src.foto, src.strMealThumb, src.image, src.thumb, src.picture, src.img,
+    raw.immagine, raw.foto, raw.strMealThumb, raw.image, raw.thumb, raw.picture, raw.img,
   ];
   for (let u of candidates) {
     if (!isValidImgPath(u)) continue;
@@ -53,7 +41,7 @@ function pickImageURL(p) {
 }
 
 // =========================
-// Normalizzazione & chiavi
+// normalizzazione & chiavi
 // =========================
 function normalizeRestaurant(r) {
   const id = r.restaurantId ?? r.id ?? r._id ?? r.ownerUserId ?? null;
@@ -72,15 +60,8 @@ function normalizeMeal(m, restaurantIdFallback) {
   const nome = m.nome ?? m.strMeal ?? m.name ?? "No name";
   const tipologia = m.tipologia ?? m.strCategory ?? m.category ?? "";
   const prezzoRaw = m.prezzo ?? m.price ?? m.cost ?? null;
-  const prezzo =
-    prezzoRaw !== null && !isNaN(Number(prezzoRaw)) ? Number(prezzoRaw) : undefined;
-  const descrizione =
-    m.descrizione ??
-    m.description ??
-    m.desc ??
-    m.details ??
-    m.strInstructions ??
-    "";
+  const prezzo = (prezzoRaw !== null && !isNaN(Number(prezzoRaw))) ? Number(prezzoRaw) : undefined;
+  const descrizione = m.descrizione ?? m.description ?? m.desc ?? m.details ?? m.strInstructions ?? "";
 
   let ingredienti = [];
   if (Array.isArray(m.ingredienti)) {
@@ -93,9 +74,7 @@ function normalizeMeal(m, restaurantIdFallback) {
       const ing = m[`strIngredient${i}`];
       const qty = m[`strMeasure${i}`];
       if (ing && String(ing).trim()) {
-        list.push(
-          qty ? `${String(ing).trim()} (${String(qty).trim()})` : String(ing).trim()
-        );
+        list.push(qty ? `${String(ing).trim()} (${String(qty).trim()})` : String(ing).trim());
       }
     }
     ingredienti = list;
@@ -110,16 +89,13 @@ function normalizeMeal(m, restaurantIdFallback) {
 function normalizeKey(nome, cat) {
   const strip = (s) =>
     String(s || "")
-      .normalize("NFD")
-      .replace(/[\u0300-\u036f]/g, "")
-      .toLowerCase()
-      .trim()
-      .replace(/\s+/g, " ");
+      .normalize("NFD").replace(/[\u0300-\u036f]/g, "")
+      .toLowerCase().trim().replace(/\s+/g, " ");
   return `${strip(nome)}|${strip(cat)}`;
 }
 
 // =========================
-/* Utilità semplici */
+/* utilità semplici */
 // =========================
 const money = (n) => `€${Number(n || 0).toFixed(2)}`;
 
@@ -130,7 +106,7 @@ function includesCI(hay, needle) {
 }
 
 // =========================
-// Mappe ausiliarie (API)
+// mappe ausiliarie (API)
 // =========================
 async function buildCommonMealMap() {
   try {
@@ -139,13 +115,9 @@ async function buildCommonMealMap() {
     const list = await r.json();
     const map = new Map();
     for (const m of Array.isArray(list) ? list : []) {
-      const key = normalizeKey(
-        m.nome ?? m.strMeal ?? m.name ?? "",
-        m.tipologia ?? m.strCategory ?? m.category ?? ""
-      );
+      const key = normalizeKey(m.nome ?? m.strMeal ?? m.name ?? "", m.tipologia ?? m.strCategory ?? m.category ?? "");
       const img = firstImage(m);
-      const desc =
-        m.descrizione ?? m.description ?? m.desc ?? m.details ?? m.strInstructions ?? "";
+      const desc = m.descrizione ?? m.description ?? m.desc ?? m.details ?? m.strInstructions ?? "";
       if (!map.has(key)) map.set(key, { img, desc });
     }
     return map;
@@ -197,24 +169,60 @@ function enrichRestaurantWithUsersMap(r, map) {
 }
 
 // =========================
-// Rendering
+// ruolo & azioni
+// =========================
+function getLoggedUser() {
+  try { return JSON.parse(localStorage.getItem("loggedUser")) || null; }
+  catch { return null; }
+}
+
+// Edit SOLO per cliente
+function handleEditAsClient(piatto) {
+  // Reindirizza a pagina di editing se presente
+  location.href = `editdish.html?id=${encodeURIComponent(piatto.id)}`;
+}
+
+// Delete SOLO per ristoratore
+async function handleDeleteAsRestaurant(piatto) {
+  if (!confirm(`Delete dish "${piatto.nome}"? This action cannot be undone.`)) return;
+  try {
+    const res = await fetch(`${API_BASE}/meals/${encodeURIComponent(piatto.id)}`, {
+      method: "DELETE",
+      headers: { "Content-Type": "application/json" }
+    });
+    if (!res.ok) {
+      const txt = await res.text().catch(() => "");
+      throw new Error(`HTTP ${res.status} ${res.statusText}${txt ? " – " + txt : ""}`);
+    }
+    // Ricarica risultati dopo la cancellazione
+    window.cercaPiatti();
+  } catch (err) {
+    console.error("Delete error:", err);
+    alert("Error deleting the dish: " + err.message);
+  }
+}
+
+// =========================
+// rendering
 // =========================
 function mealCardHTML(piatto, risto) {
   const imgSrc = pickImageURL(piatto);
-  const priceHTML =
-    typeof piatto.prezzo === "number" && isFinite(piatto.prezzo)
-      ? `<div><strong>Price:</strong> ${money(piatto.prezzo)}</div>`
-      : "";
-  const tipoHTML = piatto.tipologia
-    ? `<div><strong>Type:</strong> <em>${piatto.tipologia}</em></div>`
-    : "";
-  const ingHTML =
-    piatto.ingredienti && piatto.ingredienti.length
-      ? `<div><strong>Ingredients:</strong> ${piatto.ingredienti.join(", ")}</div>`
-      : "";
-  const descHTML = piatto.descrizione
-    ? `<div class="muted" style="margin-top:4px;">${piatto.descrizione}</div>`
-    : "";
+  const priceHTML = (typeof piatto.prezzo === "number" && isFinite(piatto.prezzo))
+    ? `<div><strong>Price:</strong> ${money(piatto.prezzo)}</div>` : "";
+  const tipoHTML = piatto.tipologia ? `<div><strong>Type:</strong> <em>${piatto.tipologia}</em></div>` : "";
+  const ingHTML = (piatto.ingredienti && piatto.ingredienti.length)
+    ? `<div><strong>Ingredients:</strong> ${piatto.ingredienti.join(", ")}</div>` : "";
+  const descHTML = piatto.descrizione ? `<div class="muted" style="margin-top:4px;">${piatto.descrizione}</div>` : "";
+
+  // azioni condizionate dal ruolo
+  const user = getLoggedUser();
+  const role = user?.role;
+  const editBtn = role === "cliente"
+    ? `<button class="btn" data-act="edit" data-id="${piatto.id}">Edit</button>` : "";
+  const delBtn = role === "ristoratore"
+    ? `<button class="btn danger" data-act="delete" data-id="${piatto.id}">Delete</button>` : "";
+  const actions = (editBtn || delBtn)
+    ? `<div class="actions" style="margin-top:8px; display:flex; gap:8px;">${editBtn}${delBtn}</div>` : "";
 
   return `
     <div style="display:flex; gap:12px; align-items:flex-start;">
@@ -225,6 +233,7 @@ function mealCardHTML(piatto, risto) {
         ${priceHTML}
         ${ingHTML}
         ${descHTML}
+        ${actions}
       </div>
     </div>
   `;
@@ -275,6 +284,8 @@ function renderGroupedByRestaurant(items, targetUL) {
 // =========================
 /* Main search */
 // =========================
+let __ricercaPiattiIndex = new Map(); // id -> {piatto, risto}
+
 window.cercaPiatti = async function () {
   const ul = document.getElementById("risultati-piatti");
   if (!ul) return;
@@ -319,15 +330,20 @@ window.cercaPiatti = async function () {
         typeof piatto.prezzo === "number" &&
         isFinite(piatto.prezzo) &&
         piatto.prezzo > qPM
-      )
-        return false;
+      ) return false;
       return true;
     });
 
     if (!filtered.length) {
       ul.innerHTML = "<li>No dishes found.</li>";
+      __ricercaPiattiIndex = new Map();
       return;
     }
+
+    // indice per handler (id -> item)
+    __ricercaPiattiIndex = new Map(
+      filtered.map(it => [String(it.piatto.id), it])
+    );
 
     // Render raggruppato per ristorante
     renderGroupedByRestaurant(filtered, ul);
@@ -338,7 +354,7 @@ window.cercaPiatti = async function () {
 };
 
 // =========================
-// UX
+// UX + delega eventi
 // =========================
 document.addEventListener("DOMContentLoaded", () => {
   ["nome", "tipologia", "prezzo"].forEach((id) => {
@@ -347,6 +363,22 @@ document.addEventListener("DOMContentLoaded", () => {
       if (e.key === "Enter") window.cercaPiatti();
     });
   });
-  // Avvio automatico (se lo vuoi):
+
+  const ul = document.getElementById("risultati-piatti");
+  if (ul) {
+    ul.addEventListener("click", (e) => {
+      const btn = e.target.closest("button[data-act]");
+      if (!btn) return;
+      const id = btn.getAttribute("data-id");
+      const act = btn.getAttribute("data-act");
+      const item = __ricercaPiattiIndex.get(String(id));
+      if (!item) return;
+
+      if (act === "edit")      handleEditAsClient(item.piatto);
+      else if (act === "delete") handleDeleteAsRestaurant(item.piatto);
+    });
+  }
+
+  // Avvio automatico opzionale:
   // window.cercaPiatti();
 });
