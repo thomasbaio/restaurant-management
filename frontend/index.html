@@ -2,7 +2,6 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" >
- <title>Homepage</title>
   <title>Homepage</title>
   <link rel="stylesheet" href="css/style.css" >
   <link rel="icon" type="image/png" href="images/logo.png">
@@ -24,13 +23,18 @@
 
   <!-- Navigazione secondaria -->
   <div id="nav-links" class="link-bar" style="margin-bottom: 20px;">
-    <!-- ⬇️ link client-only -->
-    <a href="ricerca_piatti.html" data-client-only>Search for dishes</a>
+    <!-- ⬇️ ora visibile a TUTTI (rimosso data-client-only) -->
+    <a href="ricerca_piatti.html">Search for dishes</a>
+
+    <!-- resta client-only se vuoi mantenerlo così -->
     <a href="ricerca_ristoranti.html" data-client-only>Search restaurants</a>
 
     <a id="link-order" href="order.html" style="display:none;">Order here</a>
     <a id="link-ordini-ristoratore" href="ordini_ristoratore.html" style="display:none;">Orders received</a>
-    <a id="link-edit" href="edit.html">Edit dish</a>
+
+    <!-- ⬇️ nascosto di default; lo mostriamo SOLO ai clienti da JS -->
+    <a id="link-edit" href="edit.html" style="display:none;">Edit dish</a>
+
     <a id="link-statistiche" href="statistiche_ristoratore.html" style="display:none;">Statistics</a>
   </div>
 
@@ -40,7 +44,7 @@
     <input type="text" id="filter-ingredient" placeholder="e.g. tomato, mozzarella..." />
   </div>
 
-  <!-- Offerte speciali (solo clienti; main.js le nasconde se non cliente, ma aggiungo anche data-client-only) -->
+  <!-- Offerte speciali (solo clienti) -->
   <h2 data-client-only>Personalized offers only</h2>
   <ul id="special-offers" data-client-only>
     <li>Loading...</li>
@@ -78,11 +82,14 @@
         welcome.textContent = `Welcome, ${user.username}`;
 
         if (user.role === "cliente") {
+          // cliente: può ordinare + vede EDIT DISH (come richiesto)
           linkOrder.style.display = "block";
+          linkEdit.style.display = "block";
         } else if (user.role === "ristoratore") {
+          // ristoratore: vede ordini ricevuti e statistiche
           linkRestaurantOrders.style.display = "block";
           linkStatistics.style.display = "block";
-           linkEdit.style.display = "block";  
+          // linkEdit resta nascosto per i ristoratori
         }
 
         linkContainer.innerHTML = `
