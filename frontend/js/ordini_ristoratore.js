@@ -88,7 +88,7 @@ window.onload = async () => {
         <p><strong>Status:</strong> <span id="${statoId}">${ordine.status}</span></p>
         <p><strong>Delivery:</strong> ${ordine.delivery ?? "—"}</p>
         <p><strong>Payment:</strong> ${ordine.payment ?? "—"}</p>
-        <p><strong>Dishes:</strong><br> ${piatti.map(p => `🍽️ ${p}`).join("<br>")}</p>
+        <p><strong>Dishes:</strong><br> ${piatti.map(p => ` ${p}`).join("<br>")}</p>
         ${ordine.status !== "consegnato"
           ? `<button onclick="aggiornaStato('${orderId}', '${ordine.status}', '${statoId}')">Advance status</button>`
           : ""
