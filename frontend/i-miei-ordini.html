@@ -1,31 +1,32 @@
 <!DOCTYPE html>
-<html lang="it">
+<html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <title>I miei ordini</title>
-  <link rel="stylesheet" href="css/style.css">
-  <link rel="icon" type="image/png" href="images/logo.png">
+  <meta charset="UTF-8" />
+  <title>My orders</title>
+  <link rel="stylesheet" href="css/style.css" />
+  <link rel="icon" type="image/png" href="images/logo.png" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
 </head>
 <body>
-  <h1>I miei ordini</h1>
+  <h1>My orders</h1>
 
-  <!-- Riepilogo spese -->
-  <div id="summary" class="box" style="padding:12px;border:1px solid #ddd;border-radius:10px;margin:12px 0;">
-    <p class="muted">Caricamento riepilogo…</p>
+  <div id="summary" class="ordine-box" style="margin-bottom:16px;">
+    <p class="muted">Loading...</p>
   </div>
 
   <div id="noti"></div>
-  <div id="ordini-container">
-    <p>Caricamento…</p>
+
+  <div id="orders-container">
+    <p>Loading...</p>
   </div>
 
-  <p><a href="index.html">Torna alla homepage</a></p>
-  <p><a href="storico_clienti.html">Storico ordini</a></p>
+  <p><a href="index.html">Return to the homepage</a></p>
+  <p><a href="storico_clienti.html">Order history</a></p>
 
   <script src="js/main.js" defer></script>
 
-  <!-- Fallback API_BASE -->
   <script>
+  // ---------- api_base ----------
   (function () {
     if (!window.API_BASE) {
       const isLocal = ["localhost","127.0.0.1"].includes(location.hostname);
@@ -35,13 +36,13 @@
     }
   })();
 
-  // ---------------- helpers base ----------------
-  const mealName  = p => p?.nome ?? p?.strMeal ?? p?.name ?? "Piatto";
+  // ---------------- helpers ----------------
+  const mealName  = p => p?.nome ?? p?.strMeal ?? p?.name ?? "Dish";
   const mealPrice = p => Number(p?.prezzo ?? p?.price ?? 0) || 0;
   const mealId    = p => p?.idmeals ?? p?.idMeal ?? p?.id ?? p?._id;
   const orderId   = o => o?.id ?? o?._id ?? "";
   const fmtMoney  = n => `€${Number(n||0).toFixed(2)}`;
-  const fmtDate   = iso => { try { return new Date(iso).toLocaleString(); } catch { return ""; } };
+  const fmtDate   = iso => { try { return new Date(iso).toLocaleString('en-GB'); } catch { return ""; } };
 
   const CLOSED_STATES = ["ritirato","consegnato","annullato","withdrawn","delivered","canceled","cancelled"];
   const isClosedStatus = s => CLOSED_STATES.includes(String(s||"").toLowerCase());
@@ -49,23 +50,23 @@
   const labelStatus = s => {
     const t = String(s||"").toLowerCase();
     const map = {
-      ordinato: "Ordinato",
-      preparazione: "In preparazione",
-      consegna: "Pronto al ritiro",
-      consegnato: "Consegnato",
-      ritirato: "Ritirato",
-      annullato: "Annullato",
-      withdrawn: "Ritirato",
-      delivered: "Consegnato",
-      canceled: "Annullato",
-      cancelled: "Annullato"
+      ordinato: "Ordered",
+      preparazione: "Preparing",
+      consegna: "Ready for pickup",
+      consegnato: "Delivered",
+      ritirato: "Picked up",
+      annullato: "Canceled",
+      withdrawn: "Picked up",
+      delivered: "Delivered",
+      canceled: "Canceled",
+      cancelled: "Canceled"
     };
-    return map[t] || (s || "Sconosciuto");
+    return map[t] || (s || "Unknown");
   };
 
   const badgeClass = s => `badge ${String(s||"").toLowerCase()}`;
 
-  // --- Catalogo: mappa ID -> {name, price}
+  // --- Build ID -> {nome, prezzo} da /meals
   function buildMealsMap(raw) {
     const map = new Map();
     const arr = Array.isArray(raw) ? raw : [];
@@ -84,152 +85,62 @@
     return map;
   }
 
-  // ------- helpers qty/id -------
-  const getQty = it => Number(it?.qty ?? it?.quantity ?? it?.quantita ?? it?.q ?? 1) || 1;
-  const getItemId = it => it?.mealId ?? it?.idmeal ?? it?.idmeals ?? it?.idMeal ?? it?.id ?? it?._id;
+  // ------- item/id/qty helpers -------
+  const getQty = it =>
+    Number(it?.qty ?? it?.quantity ?? it?.quantita ?? it?.q ?? 1) || 1;
+
+  const getItemId = it =>
+    it?.mealId ?? it?.idmeal ?? it?.idmeals ?? it?.idMeal ?? it?.id ?? it?._id;
+
   const isNoName = s => {
     const t = String(s||"").trim().toLowerCase();
-    return !t || t === "senza nome" || t === "unnamed" || t === "dish" || t === "piatto";
+    return !t || t === "senza nome" || t === "unnamed" || t === "dish";
   };
 
-  // ------- NOVITÀ: alias per prezzi unitari e totali riga -------
-  function firstNumber(...vals) {
-    for (const v of vals) {
-      const n = Number(v);
-      if (Number.isFinite(n)) return n;
-    }
-    return NaN;
-  }
-
-  // restituisce il prezzo unitario “migliore” per un item
-  function getUnitPrice(it, cat) {
-    // alias comuni visti nei progetti: prezzo, price, unitPrice, prezzoUnitario, costo, cost, amount, importo, unit_amount
-    const fromItem = firstNumber(
-      it?.prezzo, it?.price, it?.unitPrice, it?.prezzoUnitario,
-      it?.costo, it?.cost, it?.amount, it?.importo, it?.unit_amount
-    );
-    if (Number.isFinite(fromItem) && fromItem > 0) return fromItem;
-
-    // se l’item ha già il totale riga e la qty, lo ricavo (lineTotal / qty)
-    const qty = getQty(it);
-    const line = getLineTotal(it);
-    if (qty > 0 && Number.isFinite(line) && line > 0) return line / qty;
-
-    // fallback: prezzo dal catalogo
-    const fromCatalog = Number(cat?.price);
-    if (Number.isFinite(fromCatalog) && fromCatalog > 0) return fromCatalog;
-
-    // ultimo fallback: 0
-    return 0;
-  }
-
-  // restituisce il totale riga se presente su item (lineTotal, total, subtotal, importoTotale, ecc.)
-  function getLineTotal(it) {
-    return firstNumber(
-      it?.lineTotal, it?.line_total, it?.total, it?.totale,
-      it?.subtotal, it?.importoTotale, it?.amount_total
-    );
-  }
-
-  // Se l’ordine ha già un totale “fotografato” in backend, usiamolo come prima scelta
-  function getOrderSnapshotTotal(ord) {
-    return firstNumber(
-      ord?.total, ord?.totale, ord?.grandTotal, ord?.amount_total,
-      ord?.subtotal, ord?.importoTotale
-    );
-  }
-
-  // Costruisce la lista HTML + totale ordine (usando alias)
-  function renderItemsAndTotal(ordine, mealsMap) {
+  /**
+   * Ritorno { listHtml, totale } usando:
+   *  - order.items con  fallback a order.meals
+   *  - riempie il nome/prezzo mancante dal catalogo
+   */
+  function renderItemsAndTotal(order, mealsMap) {
     let total = 0;
     let rows = [];
 
-    const pushRow = (name, qty, unitPrice, lineMaybe) => {
-      const line = Number.isFinite(lineMaybe) && lineMaybe > 0 ? lineMaybe : unitPrice * qty;
-      total += line;
-      rows.push(
-        `<li>${name} &times;${qty} — <span class="muted">unit</span> ${fmtMoney(unitPrice)} <strong>→ ${fmtMoney(line)}</strong></li>`
-      );
-    };
-
-    if (Array.isArray(ordine.items) && ordine.items.length) {
-      ordine.items.forEach(it => {
-        const id  = getItemId(it);
-        const cat = id ? mealsMap.get(String(id)) : null;
+    if (Array.isArray(order.items) && order.items.length) {
+      rows = order.items.map(it => {
+        const id      = getItemId(it);
+        const cat     = id ? mealsMap.get(String(id)) : null;
 
         let name = it.name ?? it.nome ?? "";
-        if (isNoName(name)) name = cat?.name || (id ? `Piatto #${id}` : "Piatto");
+        if (isNoName(name)) name = cat?.name || (id ? `Dish #${id}` : "Dish");
 
         const qty   = getQty(it);
-        const unit  = getUnitPrice(it, cat);
-        const lineT = getLineTotal(it);
+        const price = Number(it.prezzo ?? it.price ?? cat?.price ?? 0) || 0;
 
-        pushRow(name, qty, unit, lineT);
+        total += price * qty;
+        return `<li>${name} &times;${qty} — ${fmtMoney(price)} each → ${fmtMoney(price * qty)}</li>`;
       });
-    } else if (Array.isArray(ordine.meals) && ordine.meals.length) {
-      ordine.meals.forEach(m => {
+    } else if (Array.isArray(order.meals) && order.meals.length) {
+      rows = order.meals.map(m => {
         const id  = (typeof m === "object") ? getItemId(m) : m;
         const qty = (typeof m === "object") ? getQty(m) : 1;
         const cat = id != null ? mealsMap.get(String(id)) : null;
 
-        const name  = cat?.name || `Piatto #${id ?? "?"}`;
-        const unit  = getUnitPrice(m, cat);
-        const lineT = getLineTotal(m);
+        const name  = cat?.name || `Dish #${id ?? "?"}`;
+        const price = Number(cat?.price ?? 0) || 0;
 
-        pushRow(name, qty, unit, lineT);
+        total += price * qty;
+        return `<li>${name} &times;${qty} — ${fmtMoney(price)} each → ${fmtMoney(price * qty)}</li>`;
       });
     } else {
-      // nessuna lista → prova a usare il totale “fotografato”
-      const snap = getOrderSnapshotTotal(ordine);
-      if (Number.isFinite(snap) && snap > 0) {
-        total = snap;
-        rows = [`<li class="muted">(totale ordine fornito dal backend)</li>`];
-      } else {
-        total = 0;
-        rows = [`<li class="muted">-</li>`];
-      }
+      rows = [`<li class="muted">-</li>`];
+      total = Number(order.total) || 0;
     }
-
-    // se l’ordine ha un totale fotografato e > 0, prevale sul ricalcolo
-    const snap = getOrderSnapshotTotal(ordine);
-    if (Number.isFinite(snap) && snap > 0) total = snap;
 
     return { listHtml: rows.join(""), total };
   }
 
-  // Solo calcolo del totale (riusa le stesse regole)
-  function computeTotalForOrder(ord, mealsMap) {
-    const snap = getOrderSnapshotTotal(ord);
-    if (Number.isFinite(snap) && snap > 0) return snap;
-    return renderItemsAndTotal(ord, mealsMap).total;
-  }
-
-  // ETA
-  function getETA(ord) {
-    const now = Date.now();
-    const state = String(ord?.status ?? ord?.state ?? "").toLowerCase();
-
-    const readyAtISO = ord.readyAt || ord.etaReadyAt || ord.estimatedReadyAt;
-    if (readyAtISO) {
-      const ra = new Date(readyAtISO).getTime();
-      const rem = Math.max(0, ra - now);
-      return { readyAt: new Date(ra), remainingMs: rem, label: rem === 0 ? "Pronto al ritiro" : minutesLabel(rem) };
-    }
-
-    const mins = Number(ord.prepMinutes || ord.etaMinutes);
-    if (!Number.isNaN(mins) && mins > 0) {
-      const ra = (new Date(ord.createdAt || Date.now())).getTime() + mins*60000;
-      const rem = Math.max(0, ra - now);
-      return { readyAt: new Date(ra), remainingMs: rem, label: rem === 0 ? "Pronto al ritiro" : minutesLabel(rem) };
-    }
-
-    if (state === "consegna") return { readyAt: new Date(), remainingMs: 0, label: "Pronto al ritiro" };
-    const base = (state === "preparazione") ? 10 : 20;
-    const ra = (new Date(ord.createdAt || Date.now())).getTime() + base*60000;
-    const rem = Math.max(0, ra - now);
-    return { readyAt: new Date(ra), remainingMs: rem, label: rem === 0 ? "Pronto al ritiro" : minutesLabel(rem) };
-  }
-
+  // eta helpers
   function minutesLabel(ms) {
     const m = Math.ceil(ms/60000);
     if (m <= 1) return "≈ 1 min";
@@ -238,9 +149,34 @@
     return `≈ ${m} min`;
   }
 
-  function startCountdown(span, ordine) {
+  function getETA(ord) {
+    const now = Date.now();
+    const state = String(ord?.status ?? ord?.state ?? "").toLowerCase();
+
+    const readyAtISO = ord.readyAt || ord.etaReadyAt || ord.estimatedReadyAt;
+    if (readyAtISO) {
+      const ra = new Date(readyAtISO).getTime();
+      const rem = Math.max(0, ra - now);
+      return { readyAt: new Date(ra), remainingMs: rem, label: rem === 0 ? "Ready for pickup" : minutesLabel(rem) };
+    }
+
+    const mins = Number(ord.prepMinutes || ord.etaMinutes);
+    if (!Number.isNaN(mins) && mins > 0) {
+      const ra = (new Date(ord.createdAt || Date.now())).getTime() + mins*60000;
+      const rem = Math.max(0, ra - now);
+      return { readyAt: new Date(ra), remainingMs: rem, label: rem === 0 ? "Ready for pickup" : minutesLabel(rem) };
+    }
+
+    if (state === "consegna") return { readyAt: new Date(), remainingMs: 0, label: "Ready for pickup" };
+    const base = (state === "preparazione") ? 10 : 20;
+    const ra = (new Date(ord.createdAt || Date.now())).getTime() + base*60000;
+    const rem = Math.max(0, ra - now);
+    return { readyAt: new Date(ra), remainingMs: rem, label: rem === 0 ? "Ready for pickup" : minutesLabel(rem) };
+  }
+
+  function startCountdown(span, order) {
     const tick = () => {
-      const eta = getETA(ordine);
+      const eta = getETA(order);
       span.textContent = eta.label;
       span.className = "eta " + (eta.remainingMs === 0 ? "done" : eta.remainingMs <= 10*60000 ? "soon" : "wait");
     };
@@ -251,86 +187,93 @@
     }, 15000);
   }
 
-  document.addEventListener("DOMContentLoaded", initOrdini);
+  document.addEventListener("DOMContentLoaded", initOrders);
 
-  async function initOrdini(){
+  async function initOrders(){
     const user = JSON.parse(localStorage.getItem("loggedUser"));
     if (!user || user.role !== "cliente") {
-      alert("Accesso riservato ai clienti");
+      alert("Access reserved for customers");
       location.href = "login.html";
       return;
     }
 
-    const container = document.getElementById("ordini-container");
+    const container = document.getElementById("orders-container");
     const summary   = document.getElementById("summary");
     const noti      = document.getElementById("noti");
 
     try {
-      // 1) ordini del cliente (tutti)
+      // 1) ordine cliente
       const res = await fetch(`${API_BASE}/orders?` + new URLSearchParams({ username: user.username }), {
         headers: { "Accept": "application/json" }
       });
       if (!res.ok) throw new Error(`Orders HTTP ${res.status}`);
-      const ordini = await res.json();
+      const orders = await res.json();
 
-      // 2) catalogo piatti
+      // 2) piatto  categoria
       const menuRes = await fetch(`${API_BASE}/meals`, { headers: { "Accept": "application/json" }});
       if (!menuRes.ok) throw new Error(`Meals HTTP ${menuRes.status}`);
-      const ristoranti = await menuRes.json();
-      const mealsMap = buildMealsMap(ristoranti);
+      const restaurants = await menuRes.json();
+      const mealsMap = buildMealsMap(restaurants);
 
-      // ——— Riepilogo spese ———
-      const all = Array.isArray(ordini) ? ordini : [];
-      const active = all.filter(o => !isClosedStatus(o?.status ?? o?.state));
-      const totalAll   = all.reduce((s,o)    => s + computeTotalForOrder(o, mealsMap), 0);
-      const totalAct   = active.reduce((s,o) => s + computeTotalForOrder(o, mealsMap), 0);
+      const all = Array.isArray(orders) ? orders : [];
 
+      // --- totale---
+      let totalSpent = 0, activeTotal = 0, activeCount = 0;
+      for (const o of all) {
+        const { total } = renderItemsAndTotal(o, mealsMap);
+        totalSpent += total;
+        const st = o?.status ?? o?.state;
+        if (!isClosedStatus(st)) { activeTotal += total; activeCount++; }
+      }
+      const ordWord = activeCount === 1 ? "active order" : "active orders";
       summary.innerHTML = `
-        <p><strong>Totale speso (tutti gli ordini):</strong> ${fmtMoney(totalAll)}</p>
-        <p><strong>Totale attivo:</strong> ${fmtMoney(totalAct)} — <span class="muted">${active.length} ordini attivi</span></p>
+        <p><strong>Total spent (all orders):</strong> ${fmtMoney(totalSpent)}</p>
+        <p><strong>Active total:</strong> ${fmtMoney(activeTotal)} — ${activeCount} ${ordWord}</p>
       `;
 
-      // ——— Lista ordini attivi ———
+      // --- lista degli ordini attivi ---
+      const active = all.filter(o => !isClosedStatus(o?.status ?? o?.state));
+
       if (active.length === 0) {
         container.innerHTML = `
-          <p>Nessun ordine attivo.</p>
-          <p class="muted">Trovi gli ordini ritirati/annullati nello <a href="storico_clienti.html">storico clienti</a>.</p>`;
+          <p>No active orders.</p>
+          <p class="muted">You can find picked-up/cancelled orders in the <a href="storico_clienti.html">order history</a>.</p>`;
         return;
       }
 
       container.innerHTML = "";
       [...active].sort((a,b) => new Date(b.createdAt||0) - new Date(a.createdAt||0))
-      .forEach(ordine => {
+      .forEach(order => {
         const div = document.createElement("div");
         div.className = "ordine-box";
 
-        const { listHtml, total } = renderItemsAndTotal(ordine, mealsMap);
-        const idOrd = orderId(ordine);
-        const statoRaw = (ordine?.status ?? ordine?.state ?? "Sconosciuto");
-        const statoLbl = labelStatus(statoRaw);
-        const etaInfo  = getETA(ordine);
+        const { listHtml, total } = renderItemsAndTotal(order, mealsMap);
+        const idOrd   = orderId(order);
+        const rawSt   = (order?.status ?? order?.state ?? "Unknown");
+        const stLabel = labelStatus(rawSt);
+        const etaInfo = getETA(order);
 
         div.innerHTML = `
-          <p class="rig"><strong>ID:</strong> ${idOrd || "<span class='muted'>(n/d)</span>"} </p>
-          <p class="rig"><strong>Creato:</strong> ${ordine?.createdAt ? fmtDate(ordine.createdAt) : "<span class='muted'>n/d</span>"}</p>
-          <p class="rig"><strong>Modalità:</strong> Ritiro in negozio</p>
-          <p class="rig"><strong>Stato:</strong> <span class="stato ${badgeClass(statoRaw)}">${statoLbl}</span></p>
-          <p class="rig"><strong>Tempo stimato:</strong> <span class="eta">${etaInfo.label}</span></p>
-          <p class="rig"><strong>Piatti:</strong></p>
+          <p class="rig"><strong>ID:</strong> ${idOrd || "<span class='muted'>(n/a)</span>"} </p>
+          <p class="rig"><strong>Created:</strong> ${order?.createdAt ? fmtDate(order.createdAt) : "<span class='muted'>n/a</span>"}</p>
+          <p class="rig"><strong>Mode:</strong> Pick up in store</p>
+          <p class="rig"><strong>Status:</strong> <span class="stato ${badgeClass(rawSt)}">${stLabel}</span></p>
+          <p class="rig"><strong>Estimated time:</strong> <span class="eta">${etaInfo.label}</span></p>
+          <p class="rig"><strong>Dishes:</strong></p>
           <ul class="dishes">${listHtml}</ul>
-          <p class="rig"><strong>Totale ordine:</strong> ${fmtMoney(total)}</p>
+          <p class="rig"><strong>Order total:</strong> ${fmtMoney(total)}</p>
           <div class="actions"></div>
         `;
 
-        startCountdown(div.querySelector(".eta"), ordine);
+        startCountdown(div.querySelector(".eta"), order);
 
-        // bottone "Ho ritirato l'ordine"
+        // "ho ritirato ordine" bottone
         const actions = div.querySelector(".actions");
-        if (idOrd && !isClosedStatus(statoRaw)) {
+        if (idOrd && !isClosedStatus(rawSt)) {
           const btnPick = document.createElement("button");
-          btnPick.textContent = "Ho ritirato l'ordine";
+          btnPick.textContent = "I picked up the order";
           btnPick.addEventListener("click", async () => {
-            const ok = confirm("Confermi di aver ritirato l'ordine al banco?");
+            const ok = confirm("Are you sure you picked up your order at the counter?");
             if (!ok) return;
             try {
               const putRes = await fetch(`${API_BASE}/orders/${encodeURIComponent(idOrd)}/state`, {
@@ -342,44 +285,31 @@
                 const detail = await putRes.json().catch(()=>({}));
                 throw new Error(`PUT ${putRes.status} ${detail?.error || ""}`);
               }
-
-              // rimuovo la card e aggiorno il riepilogo ricalcolando i totali rimasti
               div.remove();
-
-              const cards = Array.from(container.querySelectorAll(".ordine-box"));
-              const newActiveTotal = cards.reduce((sum, el) => sum + Number(el.dataset.total || 0), 0);
-
-              summary.innerHTML = `
-                <p><strong>Totale speso (tutti gli ordini):</strong> ${fmtMoney(totalAll)}</p>
-                <p><strong>Totale attivo:</strong> ${fmtMoney(newActiveTotal)} — <span class="muted">${cards.length} ordini attivi</span></p>
-              `;
-
-              noti.innerHTML = `<p class="success">Ritiro confermato. L'ordine è nello <a href="storico_clienti.html"><strong>storico clienti</strong></a>.</p>`;
-
+              noti.innerHTML = `<p class="success">Pickup confirmed. The order has been moved to the <a href="storico_clienti.html"><strong>order history</strong></a>.</p>`;
               if (!container.querySelector(".ordine-box")) {
                 container.innerHTML = `
-                  <p>Nessun ordine attivo.</p>
-                  <p class="muted">Trovi gli ordini ritirati nello <a href="storico_clienti.html">storico clienti</a>.</p>`;
+                  <p>No active orders.</p>
+                  <p class="muted">You can find picked-up orders in the <a href="storico_clienti.html">order history</a>.</p>`;
               }
+              // ricarica riepilogo
+              initOrders();
             } catch (err) {
-              console.error("Errore conferma ritiro:", err);
-              alert("Errore nella conferma del ritiro.");
+              console.error("Pickup confirmation error:", err);
+              alert("Error confirming pickup.");
             }
           });
           actions.appendChild(btnPick);
         }
 
-        // salva totale sulla card per aggiornare il riepilogo al volo
-        div.dataset.total = String(total);
         container.appendChild(div);
       });
     } catch (err) {
-      console.error("Errore caricamento ordini:", err);
-      document.getElementById("ordini-container").innerHTML = `
-        <p style="color:#b00">Errore durante il caricamento degli ordini.</p>
-        <details><summary>Dettagli</summary><pre>${String(err)}</pre></details>
-        <p>Verifica che <code>${API_BASE}/orders</code> e <code>${API_BASE}/meals</code> siano raggiungibili.</p>`;
-      document.getElementById("summary").innerHTML = `<p class="err">Impossibile caricare il riepilogo.</p>`;
+      console.error("Error loading orders:", err);
+      document.getElementById("orders-container").innerHTML = `
+        <p style="color:#b00">Error loading orders.</p>
+        <details><summary>Details</summary><pre>${String(err)}</pre></details>
+        <p>Check that <code>${API_BASE}/orders</code> and <code>${API_BASE}/meals</code> are reachable.</p>`;
     }
   }
   </script>
