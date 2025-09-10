@@ -66,42 +66,69 @@
 
   <script src="js/main.js" defer></script>
   <script>
-    window.addEventListener("DOMContentLoaded", () => {
-      const user = JSON.parse(localStorage.getItem("loggedUser"));
-      const linkContainer = document.getElementById("links");
-      const welcome = document.getElementById("welcome");
+  window.addEventListener("DOMContentLoaded", () => {
+    // Leggi in sicurezza l'utente dal localStorage
+    let user = null;
+    try {
+      user = JSON.parse(localStorage.getItem("loggedUser") || "null");
+    } catch (_) { user = null; }
 
-      const linkOrder = document.getElementById("link-order");
-      const linkRestaurantOrders = document.getElementById("link-ordini-ristoratore");
-      const linkStatistics = document.getElementById("link-statistiche");
+    const linkContainer = document.getElementById("links");
+    const welcome = document.getElementById("welcome");
 
-      if (user) {
-        welcome.textContent = `Welcome, ${user.username}`;
+    const linkOrder = document.getElementById("link-order");                       // clienti
+    const linkRestaurantOrders = document.getElementById("link-ordini-ristoratore"); // ristoratori
+    const linkStatistics = document.getElementById("link-statistiche");             // ristoratori
 
-        if (user.role === "cliente") {
-          // cliente: può ordinare + vede EDIT DISH (come richiesto)
-          linkOrder.style.display = "block";
-          linkEdit.style.display = "block";
-        } else if (user.role === "ristoratore") {
-          // ristoratore: vede ordini ricevuti e statistiche
-          linkRestaurantOrders.style.display = "block";
-          linkStatistics.style.display = "block";
-          // linkEdit resta nascosto per i ristoratori
-        }
+    // reset visibilità
+    linkOrder.style.display = "none";
+    linkRestaurantOrders.style.display = "none";
+    linkStatistics.style.display = "none";
 
-        linkContainer.innerHTML = `
-          ${user.role === "ristoratore" ? '<a href="add.html" id="link-add">Add Dish</a> | ' : ''}
-          ${user.role === "cliente" ? '<a href="i-miei-ordini.html">My orders</a> | ' : ''}
-          <a href="edituser.html">Edit Profile</a> |
-          <a href="login.html" onclick="localStorage.removeItem('loggedUser')">Logout</a>
-        `;
-      } else {
-        linkContainer.innerHTML = `
-          <a href="login.html">Log in</a> |
-          <a href="register.html">Register</a>
-        `;
+    if (user && user.username) {
+      welcome.textContent = `Welcome, ${user.username}`;
+
+      const isClient = user.role === "cliente";
+      const isRest   = user.role === "ristoratore";
+
+      if (isClient) {
+        // Mostra link ordine per i clienti
+        linkOrder.style.display = "inline-block";
       }
-    });
-  </script>
+      if (isRest) {
+        // Mostra link ordini ricevuti + statistiche per ristoratori
+        linkRestaurantOrders.style.display = "inline-block";
+        linkStatistics.style.display = "inline-block";
+      }
+
+      // Link dinamici in alto
+      linkContainer.innerHTML = `
+        ${isRest ? '<a href="add.html" id="link-add">Add Dish</a> | ' : ''}
+        ${isClient ? '<a href="i-miei-ordini.html" id="link-miei-ordini">My orders</a> | ' : ''}
+        <a href="edituser.html" id="link-edit-user">Edit Profile</a> |
+        <a href="#" id="link-logout">Logout</a>
+      `;
+
+      // handler logout: pulisce e porta a login
+      const logoutA = document.getElementById("link-logout");
+      if (logoutA) {
+        logoutA.addEventListener("click", (e) => {
+          e.preventDefault();
+          localStorage.removeItem("loggedUser");
+          // (opzionale) svuota carrello/sessioni varie:
+          // localStorage.removeItem("cart");
+          location.href = "login.html";
+        });
+      }
+    } else {
+      welcome.textContent = "";
+      linkContainer.innerHTML = `
+        <a href="login.html">Log in</a> |
+        <a href="register.html">Register</a>
+      `;
+    }
+  });
+</script>
+
 </body>
 </html>
