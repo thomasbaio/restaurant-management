@@ -65,7 +65,7 @@
   </footer>
 
   <script src="js/main.js" defer></script>
-  <script>
+<script>
   window.addEventListener("DOMContentLoaded", () => {
     // Leggi in sicurezza l'utente dal localStorage
     let user = null;
@@ -73,32 +73,34 @@
       user = JSON.parse(localStorage.getItem("loggedUser") || "null");
     } catch (_) { user = null; }
 
+    const noti = document.getElementById("noti");
     const linkContainer = document.getElementById("links");
     const welcome = document.getElementById("welcome");
 
-    const linkOrder = document.getElementById("link-order");                       // clienti
-    const linkRestaurantOrders = document.getElementById("link-ordini-ristoratore"); // ristoratori
-    const linkStatistics = document.getElementById("link-statistiche");             // ristoratori
+    const linkOrder = document.getElementById("link-order");                        // clienti
+    const linkRestaurantOrders = document.getElementById("link-ordini-ristoratore");// ristoratori
+    const linkStatistics = document.getElementById("link-statistiche");              // ristoratori
 
-    // reset visibilità
-    linkOrder.style.display = "none";
-    linkRestaurantOrders.style.display = "none";
-    linkStatistics.style.display = "none";
+    // reset visibilità link secondari
+    [linkOrder, linkRestaurantOrders, linkStatistics].forEach(el => {
+      if (el) el.style.display = "none";
+    });
 
     if (user && user.username) {
+      // 🔒 Utente loggato: nascondi banner
+      if (noti) { noti.innerHTML = ""; noti.style.display = "none"; }
+
       welcome.textContent = `Welcome, ${user.username}`;
 
       const isClient = user.role === "cliente";
       const isRest   = user.role === "ristoratore";
 
-      if (isClient) {
-        // Mostra link ordine per i clienti
+      if (isClient && linkOrder) {
         linkOrder.style.display = "inline-block";
       }
       if (isRest) {
-        // Mostra link ordini ricevuti + statistiche per ristoratori
-        linkRestaurantOrders.style.display = "inline-block";
-        linkStatistics.style.display = "inline-block";
+        if (linkRestaurantOrders) linkRestaurantOrders.style.display = "inline-block";
+        if (linkStatistics) linkStatistics.style.display = "inline-block";
       }
 
       // Link dinamici in alto
@@ -109,18 +111,25 @@
         <a href="#" id="link-logout">Logout</a>
       `;
 
-      // handler logout: pulisce e porta a login
+      // handler logout
       const logoutA = document.getElementById("link-logout");
       if (logoutA) {
         logoutA.addEventListener("click", (e) => {
           e.preventDefault();
           localStorage.removeItem("loggedUser");
-          // (opzionale) svuota carrello/sessioni varie:
-          // localStorage.removeItem("cart");
+          // (opzionale) localStorage.removeItem("cart");
           location.href = "login.html";
         });
       }
     } else {
+      // 🔓 Non loggato: mostra banner + link login/registrazione
+      if (noti) {
+        noti.innerHTML = `Sei libero di sfogliare i menu. 
+          Accedi come cliente per aggiungere piatti al carrello. 
+          <a href="login.html">Vai al login</a>`;
+        noti.style.display = "block";
+      }
+
       welcome.textContent = "";
       linkContainer.innerHTML = `
         <a href="login.html">Log in</a> |
@@ -129,6 +138,7 @@
     }
   });
 </script>
+
 
 </body>
 </html>
