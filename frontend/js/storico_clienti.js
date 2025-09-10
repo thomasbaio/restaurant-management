@@ -24,7 +24,7 @@ const when      = d => { try { return new Date(d).toLocaleString(); } catch { re
 const normId    = o => o?.id ?? o?._id ?? "";
 const normState = o => String(o?.status ?? o?.state ?? o?.stato ?? "ordinato").toLowerCase();
 
-// label inglesi per gli stati
+// etichette in inglese per gli stati
 const labelStatus = s => {
   const t = String(s || "").toLowerCase();
   const map = {
@@ -64,7 +64,7 @@ function buildMealsMap(rawMeals) {
   return map;
 }
 
-// ========= helpers robusti per items/id/qty =========
+// ========= helpers per items/id/qty =========
 const getQty = it => Number(it?.qty ?? it?.quantity ?? it?.quantita ?? it?.q ?? 1) || 1;
 const getItemId = it => it?.mealId ?? it?.idmeal ?? it?.idmeals ?? it?.idMeal ?? it?.id ?? it?._id;
 const getItemNameFromSnapshot = it => (it?.name ?? it?.nome ?? it?.strMeal) || "";
@@ -121,7 +121,7 @@ function getOrderSnapshotTotal(ord) {
   );
 }
 
-// ========= rende l’elenco piatti + totale (robusto) =========
+// ========= RENDER: elenco piatti + totale (FIX con forEach) =========
 function renderItemsAndTotal(order, mealsMap) {
   let total = 0;
   let rows = [];
@@ -136,7 +136,8 @@ function renderItemsAndTotal(order, mealsMap) {
   };
 
   if (Array.isArray(order.items) && order.items.length) {
-    rows = order.items.map((it, idx) => {
+    // ✅ FIX: niente map che riassegna; usiamo forEach e accumuliamo con pushRow
+    order.items.forEach((it, idx) => {
       const id  = getItemId(it) ?? mealsIdsByIndex[idx];
       const cat = id != null ? mealsMap.get(String(id)) : null;
 
@@ -149,8 +150,8 @@ function renderItemsAndTotal(order, mealsMap) {
       const lineT = getLineTotal(it);
 
       pushRow(name, qty, unit, lineT);
-      return ""; // è ignorato: rows viene popolato da pushRow
     });
+
   } else if (Array.isArray(order.meals) && order.meals.length) {
     order.meals.forEach(m => {
       const id  = (typeof m === "object") ? getItemId(m) : m;
@@ -163,6 +164,7 @@ function renderItemsAndTotal(order, mealsMap) {
 
       pushRow(name, qty, unit, lineT);
     });
+
   } else {
     // nessun dettaglio: prova col totale fotografato
     const snap = getOrderSnapshotTotal(order);
@@ -170,11 +172,11 @@ function renderItemsAndTotal(order, mealsMap) {
       total = snap;
       rows = [`<li class="muted">(order total provided by backend)</li>`];
     } else {
-      return { html: "<ul class=\"dishes\"><li class=\"muted\">—</li></ul>", total: Number(order.total) || 0 };
+      return { html: `<ul class="dishes"><li class="muted">—</li></ul>`, total: Number(order.total) || 0 };
     }
   }
 
-  // se l’ordine ha un totale fotografato > 0, prevale sul ricalcolo
+  // se l’ordine ha un totale fotografato > 0, prevale
   const snap = getOrderSnapshotTotal(order);
   if (Number.isFinite(snap) && snap > 0) total = snap;
 
@@ -225,9 +227,9 @@ window.onload = async () => {
         const stato   = normState(o);
         const { html, total } = renderItemsAndTotal(o, mealsMap);
 
-        const created = o.createdAt ? when(o.createdAt) : "n/a";
+        const created  = o.createdAt ? when(o.createdAt) : "n/a";
         const closedAt = o.closedAt || o.deliveredAt || o.ritiratoAt || o.consegnatoAt;
-        const closed  = closedAt ? when(closedAt) : "—";
+        const closed   = closedAt ? when(closedAt) : "—";
         const delivery = "Pickup at restaurant";
 
         // totale ordine: snapshot se presente, altrimenti calcolato
