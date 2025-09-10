@@ -121,7 +121,7 @@ function getOrderSnapshotTotal(ord) {
   );
 }
 
-// ========= RENDER: elenco piatti + totale (FIX con forEach) =========
+// ========= elenco piatti + totale (FIX con forEach) =========
 function renderItemsAndTotal(order, mealsMap) {
   let total = 0;
   let rows = [];
@@ -136,7 +136,7 @@ function renderItemsAndTotal(order, mealsMap) {
   };
 
   if (Array.isArray(order.items) && order.items.length) {
-    // ✅ FIX: niente map che riassegna; usiamo forEach e accumuliamo con pushRow
+    // niente map che riassegna; usiamo forEach e accumuliamo con pushRow
     order.items.forEach((it, idx) => {
       const id  = getItemId(it) ?? mealsIdsByIndex[idx];
       const cat = id != null ? mealsMap.get(String(id)) : null;
@@ -252,7 +252,7 @@ window.onload = async () => {
     render(passati, passatiList);
 
   } catch (err) {
-    console.error("Errore nel caricamento:", err);
+    console.error("Loading error:", err);
     const hint = isLocal
       ? "Make sure the local backend is running at http://localhost:3000."
       : "Make sure the backend on Render is online.";
