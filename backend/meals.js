@@ -1,3 +1,4 @@
+// meals.js
 const express = require("express");
 const router = express.Router();
 
@@ -13,13 +14,13 @@ const Meal = require("./models/meal");
  *   description: Gestione piatti per ristorante (DB con fallback su file)
  */
 
-// --------------------- helpers ---------------------
+/* --------------------------- helpers --------------------------- */
 
 function mongoReady() {
   return mongoose?.connection?.readyState === 1; // 1 = connected
 }
 
-// trova il primo percorso esistente per meals1.json
+// risolve il percorso di meals1.json in modo robusto (env > locale > parent)
 function resolveMealsFile() {
   const candidates = [
     process.env.MEALS_FILE,
@@ -30,7 +31,9 @@ function resolveMealsFile() {
   ].filter(Boolean);
 
   for (const p of candidates) {
-    try { if (fs.existsSync(p)) return p; } catch {}
+    try {
+      if (fs.existsSync(p)) return p;
+    } catch {}
   }
   return candidates[candidates.length - 1] || "meals1.json";
 }
@@ -54,7 +57,6 @@ function writeFileMeals(data, filePath) {
   fs.writeFileSync(filePath, JSON.stringify(out, null, 2), "utf8");
 }
 
-// riconosce “aspetto piatto”
 function looksLikeMeal(o) {
   if (!o || typeof o !== "object") return false;
   return (
@@ -63,16 +65,14 @@ function looksLikeMeal(o) {
   );
 }
 
-// appiattisce sia struttura [{restaurantId, menu:[...]}, ...] sia lista di piatti top-level
+// accetta sia struttura [{restaurantId,menu:[...]}, ...] sia lista flat di piatti
 function flattenFileMeals(data) {
   if (!Array.isArray(data)) return [];
 
-  // caso A: array di piatti top-level
   if (data.length && looksLikeMeal(data[0])) {
-    return data.map(m => ({ ...m }));
+    return data.map((m) => ({ ...m }));
   }
 
-  // caso B: array di ristoranti con menu
   const out = [];
   for (const r of data) {
     const menu = Array.isArray(r?.menu) ? r.menu : [];
@@ -83,11 +83,11 @@ function flattenFileMeals(data) {
   return out;
 }
 
-// ---------- normalizzazione + alias ingredienti ----------
+/* ----------------- normalizzazione ingredienti ----------------- */
 
 function normalizeIngredients(obj) {
   if (Array.isArray(obj?.ingredienti)) {
-    return obj.ingredienti.filter(Boolean).map(x => String(x).trim()).filter(Boolean);
+    return obj.ingredienti.filter(Boolean).map((x) => String(x).trim()).filter(Boolean);
   }
   const list = [];
   for (let i = 1; i <= 20; i++) {
@@ -98,33 +98,33 @@ function normalizeIngredients(obj) {
     }
   }
   if (!list.length && Array.isArray(obj?.ingredients)) {
-    return obj.ingredients.filter(Boolean).map(x => String(x).trim()).filter(Boolean);
+    return obj.ingredients.filter(Boolean).map((x) => String(x).trim()).filter(Boolean);
   }
   return list;
 }
 
-// restituisce un oggetto con ingredienti sempre presenti
 function withIngredients(m) {
   const clone = { ...m };
 
   if (Array.isArray(clone.ingredienti)) {
-    clone.ingredienti = clone.ingredienti.filter(Boolean).map(x => String(x).trim()).filter(Boolean);
-    clone.ingredients  = clone.ingredienti.slice();
-    clone.ingredient   = clone.ingredienti.join(", ");
+    const arr = clone.ingredienti.filter(Boolean).map((x) => String(x).trim()).filter(Boolean);
+    clone.ingredienti = arr;
+    clone.ingredients = arr.slice();
+    clone.ingredient = arr.join(", ");
     return clone;
   }
 
   if (Array.isArray(clone.ingredients)) {
-    const arr = clone.ingredients.filter(Boolean).map(x => String(x).trim()).filter(Boolean);
+    const arr = clone.ingredients.filter(Boolean).map((x) => String(x).trim()).filter(Boolean);
     clone.ingredienti = arr;
-    clone.ingredients  = arr.slice();
-    clone.ingredient   = arr.join(", ");
+    clone.ingredients = arr.slice();
+    clone.ingredient = arr.join(", ");
     return clone;
   }
 
   const list = [];
   for (let i = 1; i <= 20; i++) {
-    const ing  = clone[`strIngredient${i}`];
+    const ing = clone[`strIngredient${i}`];
     const meas = clone[`strMeasure${i}`];
     if (ing && String(ing).trim()) {
       list.push(meas ? `${meas} ${ing}`.trim() : String(ing).trim());
@@ -132,14 +132,13 @@ function withIngredients(m) {
     delete clone[`strIngredient${i}`];
     delete clone[`strMeasure${i}`];
   }
-
   clone.ingredienti = list;
-  clone.ingredients  = list.slice();
-  clone.ingredient   = list.join(", ");
+  clone.ingredients = list.slice();
+  clone.ingredient = list.join(", ");
   return clone;
 }
 
-// ---- utils vari
+/* ------------------------------ utils ------------------------------ */
 
 function isHex24(s) {
   return typeof s === "string" && /^[0-9a-fA-F]{24}$/.test(s);
@@ -148,23 +147,29 @@ function isHex24(s) {
 function pickUpdatableFields(body) {
   const b = body || {};
   const ingrArr = normalizeIngredients(b)
-    .filter(Boolean).map(x => String(x).trim()).filter(Boolean);
+    .filter(Boolean)
+    .map((x) => String(x).trim())
+    .filter(Boolean);
   const ingrStr = ingrArr.join(", ");
 
   const update = {
     ...(b.restaurantId != null ? { restaurantId: b.restaurantId } : {}),
     ...(b.nome || b.name || b.strMeal ? { nome: b.nome || b.name || b.strMeal } : {}),
-    ...(b.tipologia || b.category || b.strCategory ? { tipologia: b.tipologia || b.category || b.strCategory } : {}),
+    ...(b.tipologia || b.category || b.strCategory
+      ? { tipologia: b.tipologia || b.category || b.strCategory }
+      : {}),
     ...(b.prezzo != null ? { prezzo: Number(b.prezzo) } : {}),
     ...(b.foto || b.image || b.strMealThumb ? { foto: b.foto || b.image || b.strMealThumb } : {}),
-    ...(ingrArr.length ? { ingredienti: ingrArr, ingredients: ingrArr.slice(), ingredient: ingrStr } : {}),
+    ...(ingrArr.length
+      ? { ingredienti: ingrArr, ingredients: ingrArr.slice(), ingredient: ingrStr }
+      : {}),
     ...(b.origine ? { origine: b.origine } : {}),
   };
   if (typeof b.isCommon === "boolean") update.isCommon = b.isCommon;
   return update;
 }
 
-// --------------------- ROTTE ----------------------
+/* ------------------------------- ROUTES ------------------------------- */
 
 /**
  * @swagger
@@ -175,25 +180,41 @@ function pickUpdatableFields(body) {
  *     parameters:
  *       - in: query
  *         name: source
- *         schema: { type: string, enum: [all, db, file], default: all }
+ *         description: Sorgente da cui leggere
+ *         schema:
+ *           type: string
+ *           enum: [all, db, file]
+ *           default: all
  *       - in: query
  *         name: dedup
- *         schema: { type: string, enum: [perRestaurant, global, off], default: perRestaurant }
+ *         description: Modalità di deduplica
+ *         schema:
+ *           type: string
+ *           enum: [perRestaurant, global, off]
+ *           default: perRestaurant
  *     responses:
  *       200:
  *         description: Elenco piatti comuni (deduplicati)
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: array
+ *               items:
+ *                 type: object
  */
 router.get("/common-meals", async (req, res) => {
   try {
     const source = String(req.query.source || "all").toLowerCase();
     const dedupMode = String(req.query.dedup || "perRestaurant").toLowerCase();
 
-    // --- file ---
+    // file
     let fileMeals = [];
     const { data, filePath, error, exists } = readFileMeals();
     if (source !== "db") {
       if (error && source === "file") {
-        return res.status(500).json({ error: "Unable to read common dishes file", detail: error });
+        return res
+          .status(500)
+          .json({ error: "Unable to read common dishes file", detail: error });
       }
       fileMeals = flattenFileMeals(data).map(withIngredients);
     }
@@ -201,29 +222,27 @@ router.get("/common-meals", async (req, res) => {
     res.setHeader("X-Meals-File-Exists", String(!!exists));
     res.setHeader("X-Meals-File-Count", String(fileMeals.length));
 
-    // --- db ---
+    // db
     let dbMeals = [];
     if (source !== "file" && mongoReady()) {
-      dbMeals = await Meal
-        .find({ $or: [{ isCommon: true }, { origine: "comune" }] })
-        .lean();
+      dbMeals = await Meal.find({ $or: [{ isCommon: true }, { origine: "comune" }] }).lean();
       dbMeals = dbMeals.map(withIngredients);
       res.setHeader("X-Meals-DB-Count", String(dbMeals.length));
     } else if (source === "db" && !mongoReady()) {
       return res.status(503).json({ error: "Database not connected" });
     }
 
-    // --- unione + dedup ---
+    // merge + dedup
     const keyOf = (m) => {
       const id = m.idmeals ?? m.idMeal ?? m.id ?? m._id;
       if (id != null) return String(id).toLowerCase();
 
       const name = (m.nome || m.name || m.strMeal || "").toLowerCase().trim();
-      const cat  = (m.tipologia || m.category || m.strCategory || "").toLowerCase().trim();
-      const rid  = (m.restaurantId || "").toString().toLowerCase().trim();
+      const cat = (m.tipologia || m.category || m.strCategory || "").toLowerCase().trim();
+      const rid = (m.restaurantId || "").toString().toLowerCase().trim();
 
-      if (dedupMode === "off")     return `${Math.random()}|${name}|${cat}`;
-      if (dedupMode === "global")  return `${name}|${cat}`;
+      if (dedupMode === "off") return `${Math.random()}|${name}|${cat}`;
+      if (dedupMode === "global") return `${name}|${cat}`;
       return rid ? `${rid}|${name}|${cat}` : `${name}|${cat}`;
     };
 
@@ -240,7 +259,9 @@ router.get("/common-meals", async (req, res) => {
     return res.json(merged);
   } catch (err) {
     console.error("Errore /meals/common-meals:", err);
-    return res.status(500).json({ error: "Error in reading common dishes", detail: String(err?.message || err) });
+    return res
+      .status(500)
+      .json({ error: "Error in reading common dishes", detail: String(err?.message || err) });
   }
 });
 
@@ -259,19 +280,22 @@ router.get("/common-meals", async (req, res) => {
  *             required: [restaurantId, nome]
  *             properties:
  *               restaurantId: { oneOf: [{type: string},{type: number}] }
- *               nome: { type: string }
- *               tipologia: { type: string }
+ *               nome: { type: string, description: "Alias supportati: name, strMeal" }
+ *               tipologia: { type: string, description: "Alias: category, strCategory" }
  *               prezzo: { type: number }
- *               foto: { type: string }
+ *               foto: { type: string, description: "Alias: image, strMealThumb" }
  *               ingredients:
  *                 type: array
  *                 items: { type: string }
  *               isCommon: { type: boolean }
  *               origine: { type: string }
  *     responses:
- *       201: { description: Piatto creato }
- *       400: { description: Richiesta non valida }
- *       503: { description: Database non connesso (se richiesto) }
+ *       201:
+ *         description: Piatto creato
+ *       400:
+ *         description: Richiesta non valida
+ *       503:
+ *         description: Database non connesso (se richiesto)
  */
 router.post("/", async (req, res) => {
   try {
@@ -280,8 +304,10 @@ router.post("/", async (req, res) => {
       return res.status(400).json({ error: "RestaurantId missing" });
     }
 
-    const ingr = normalizeIngredients(b);
-    const ingrArr = ingr.filter(Boolean).map(x => String(x).trim()).filter(Boolean);
+    const ingrArr = normalizeIngredients(b)
+      .filter(Boolean)
+      .map((x) => String(x).trim())
+      .filter(Boolean);
     const ingrStr = ingrArr.join(", ");
 
     const newMeal = {
@@ -294,7 +320,7 @@ router.post("/", async (req, res) => {
       ingredients: ingrArr.slice(),
       ingredient: ingrStr,
       origine: b.origine || "personalizzato",
-      isCommon: typeof b.isCommon === "boolean" ? b.isCommon : (b.origine === "comune")
+      isCommon: typeof b.isCommon === "boolean" ? b.isCommon : b.origine === "comune",
     };
 
     for (let i = 1; i <= 20; i++) {
@@ -304,13 +330,11 @@ router.post("/", async (req, res) => {
 
     if (mongoReady()) {
       if (newMeal.idmeals == null) {
-        const maxDoc = await Meal
-          .findOne({ idmeals: { $ne: null } })
+        const maxDoc = await Meal.findOne({ idmeals: { $ne: null } })
           .sort({ idmeals: -1 })
           .select("idmeals")
           .lean()
           .catch(() => null);
-
         const maxId = Number(maxDoc?.idmeals) || 0;
         newMeal.idmeals = maxId + 1;
       }
@@ -320,18 +344,18 @@ router.post("/", async (req, res) => {
       return res.status(201).json(created);
     }
 
-    // ---- fallback su file meals1.json ----
+    // fallback file
     const { data, filePath } = readFileMeals();
     const restaurants = Array.isArray(data) ? data : [];
 
-    let rest = restaurants.find(r => String(r.restaurantId) === String(newMeal.restaurantId));
+    let rest = restaurants.find((r) => String(r.restaurantId) === String(newMeal.restaurantId));
     if (!rest) {
       rest = { restaurantId: newMeal.restaurantId, menu: [] };
       restaurants.push(rest);
     }
     if (!Array.isArray(rest.menu)) rest.menu = [];
 
-    const allMeals = restaurants.flatMap(r => Array.isArray(r.menu) ? r.menu : []);
+    const allMeals = restaurants.flatMap((r) => (Array.isArray(r.menu) ? r.menu : []));
     const maxId = allMeals.reduce((acc, m) => Math.max(acc, Number(m.idmeals || 0)), 0);
     newMeal.idmeals = maxId + 1;
 
@@ -360,8 +384,7 @@ router.post("/", async (req, res) => {
  *       required: true
  *       content:
  *         application/json:
- *           schema:
- *             type: object
+ *           schema: { type: object }
  *     responses:
  *       200: { description: Piatto aggiornato }
  *       404: { description: Piatto non trovato }
@@ -371,23 +394,20 @@ router.put("/:id", async (req, res) => {
     const raw = String(req.params.id);
     const update = pickUpdatableFields(req.body);
 
-    // --- DB ---
+    // DB
     if (mongoReady()) {
-      // _id
       if (isHex24(raw)) {
         const doc = await Meal.findByIdAndUpdate(raw, update, { new: true }).lean();
         if (doc) return res.json(withIngredients(doc));
       }
-      // idmeals numerico
       const idNum = Number(raw);
       if (Number.isFinite(idNum)) {
         const doc = await Meal.findOneAndUpdate({ idmeals: idNum }, update, { new: true }).lean();
         if (doc) return res.json(withIngredients(doc));
       }
-      // se non trovato nel DB, prosegue su file
     }
 
-    // --- file ---
+    // file (solo id numerico)
     const idNum = Number(raw);
     if (!Number.isFinite(idNum)) {
       return res.status(400).json({ error: "Id not valid" });
@@ -398,7 +418,7 @@ router.put("/:id", async (req, res) => {
 
     for (const r of restaurants) {
       if (!Array.isArray(r.menu)) continue;
-      const idx = r.menu.findIndex(m => Number(m.idmeals) === idNum);
+      const idx = r.menu.findIndex((m) => Number(m.idmeals) === idNum);
       if (idx >= 0) {
         const merged = { ...r.menu[idx], ...update, idmeals: idNum };
         r.menu[idx] = withIngredients(merged);
@@ -452,8 +472,8 @@ router.get("/:id", async (req, res) => {
     }
 
     const { data } = readFileMeals();
-    for (const r of (Array.isArray(data) ? data : [])) {
-      const meal = (r.menu || []).find(m => Number(m.idmeals) === idNum);
+    for (const r of Array.isArray(data) ? data : []) {
+      const meal = (r.menu || []).find((m) => Number(m.idmeals) === idNum);
       if (meal) return res.json(withIngredients(meal));
     }
     return res.status(404).json({ error: "Dish not found" });
@@ -482,23 +502,20 @@ router.delete("/:id", async (req, res) => {
   try {
     const raw = String(req.params.id);
 
-    // --- mongodb ---
+    // db
     if (mongoReady()) {
-      // 1) _id objectId
       if (isHex24(raw)) {
         const del = await Meal.deleteOne({ _id: raw });
         if (del.deletedCount > 0) return res.json({ ok: true, deleted: 1 });
       }
-      // 2) idmeals numerico
       const n = Number(raw);
       if (Number.isFinite(n)) {
         const del = await Meal.deleteOne({ idmeals: n });
         if (del.deletedCount > 0) return res.json({ ok: true, deleted: 1 });
       }
-      // se non trovato in DB, continuo col file
     }
 
-    // --- fallback su file: solo id numerico ---
+    // file
     const id = Number(raw);
     if (!Number.isFinite(id)) {
       return res.status(400).json({ error: "Id not valid" });
@@ -510,7 +527,7 @@ router.delete("/:id", async (req, res) => {
     let removed = 0;
     for (const r of restaurants) {
       if (!Array.isArray(r.menu)) continue;
-      const idx = r.menu.findIndex(m => Number(m.idmeals) === id);
+      const idx = r.menu.findIndex((m) => Number(m.idmeals) === id);
       if (idx >= 0) {
         r.menu.splice(idx, 1);
         removed = 1;
@@ -526,7 +543,9 @@ router.delete("/:id", async (req, res) => {
     }
   } catch (err) {
     console.error("DELETE /meals/:id error:", err);
-    return res.status(500).json({ error: "Error during deleting dish", detail: String(err?.message || err) });
+    return res
+      .status(500)
+      .json({ error: "Error during deleting dish", detail: String(err?.message || err) });
   }
 });
 
@@ -564,10 +583,9 @@ router.delete("/:restaurantId/:id", async (req, res) => {
         const del = await Meal.deleteOne({ restaurantId: rid, idmeals: n });
         if (del.deletedCount > 0) return res.json({ ok: true, deleted: 1 });
       }
-      // se non trovato, passo al file
     }
 
-    // fallback file (serve id numerico)
+    // file (id numerico)
     const id = Number(raw);
     if (!Number.isFinite(id)) {
       return res.status(400).json({ error: "Id not valid" });
@@ -575,11 +593,11 @@ router.delete("/:restaurantId/:id", async (req, res) => {
 
     const { data, filePath } = readFileMeals();
     const restaurants = Array.isArray(data) ? data : [];
-    const rest = restaurants.find(r => String(r.restaurantId) === rid);
+    const rest = restaurants.find((r) => String(r.restaurantId) === rid);
     if (!rest || !Array.isArray(rest.menu)) {
       return res.status(404).json({ error: "Restaurant or menu not found" });
     }
-    const idx = rest.menu.findIndex(m => Number(m.idmeals) === id);
+    const idx = rest.menu.findIndex((m) => Number(m.idmeals) === id);
     if (idx < 0) return res.status(404).json({ error: "Dish not found" });
 
     rest.menu.splice(idx, 1);
@@ -587,7 +605,9 @@ router.delete("/:restaurantId/:id", async (req, res) => {
     return res.json({ ok: true, deleted: 1 });
   } catch (err) {
     console.error("DELETE /meals/:restaurantId/:id error:", err);
-    return res.status(500).json({ error: "Error during deleting dish", detail: String(err?.message || err) });
+    return res
+      .status(500)
+      .json({ error: "Error during deleting dish", detail: String(err?.message || err) });
   }
 });
 
@@ -601,21 +621,32 @@ router.delete("/:restaurantId/:id", async (req, res) => {
  *       - in: query
  *         name: restaurantId
  *         schema: { type: string }
+ *         description: Se presente, filtra per ristorante
  *     responses:
  *       200:
  *         description: Array di ristoranti con il rispettivo menu
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: array
+ *               items:
+ *                 type: object
+ *                 properties:
+ *                   restaurantId: { type: string }
+ *                   menu:
+ *                     type: array
+ *                     items: { type: object }
  */
 router.get("/", async (req, res) => {
   try {
     const wantedRid = req.query.restaurantId ? String(req.query.restaurantId) : null;
 
-    // --- db ---
+    // db
     if (mongoReady()) {
       const query = wantedRid ? { restaurantId: wantedRid } : {};
       const docs = await Meal.find(query).lean();
       const meals = docs.map(withIngredients);
 
-      // raggruppo per restaurantId
       const byRid = {};
       for (const m of meals) {
         const rid = String(m.restaurantId || "");
@@ -625,21 +656,17 @@ router.get("/", async (req, res) => {
       return res.json(Object.values(byRid));
     }
 
-    // --- fallback file ---
+    // file
     const { data } = readFileMeals();
 
-    // se è già struttura per ristorante
     if (Array.isArray(data) && data.length && (data[0].menu || data[0].restaurantId)) {
-      const shaped = data.map(r => ({
+      const shaped = data.map((r) => ({
         restaurantId: r.restaurantId ?? r.id ?? r._id ?? "",
-        menu: Array.isArray(r.menu) ? r.menu.map(withIngredients) : []
+        menu: Array.isArray(r.menu) ? r.menu.map(withIngredients) : [],
       }));
-      return res.json(
-        wantedRid ? shaped.filter(r => String(r.restaurantId) === wantedRid) : shaped
-      );
+      return res.json(wantedRid ? shaped.filter((r) => String(r.restaurantId) === wantedRid) : shaped);
     }
 
-    // altrimenti piatti flat → raggruppo
     const flat = flattenFileMeals(data).map(withIngredients);
     const byRid = {};
     for (const m of flat) {
@@ -651,7 +678,9 @@ router.get("/", async (req, res) => {
     return res.json(Object.values(byRid));
   } catch (err) {
     console.error("GET /meals error:", err);
-    res.status(500).json({ error: "Error during the loading of the menu", detail: String(err?.message || err) });
+    res
+      .status(500)
+      .json({ error: "Error during the loading of the menu", detail: String(err?.message || err) });
   }
 });
 
