@@ -1,7 +1,6 @@
 // user.js
 const express = require("express");
 const bcrypt = require("bcrypt");
-const crypto = require("crypto");
 const router = express.Router();
 const User = require("./models/user");
 const Restaurant = require("./models/restaurant");
@@ -42,10 +41,72 @@ function normalizeBody(b = {}) {
     preferenza: b.preferenza ?? "",
   };
 }
+const isObjectId = (id) => /^[a-f0-9]{24}$/i.test(String(id));
 
-function isObjectId(id) {
-  return /^[a-f0-9]{24}$/i.test(String(id));
-}
+/* ================== LISTA & DETTAGLIO ================== */
+
+/**
+ * @swagger
+ * /users:
+ *   get:
+ *     tags: [Users, fetch]
+ *     summary: Lista utenti
+ *     parameters:
+ *       - in: query
+ *         name: role
+ *         schema: { type: string, enum: [cliente, ristoratore] }
+ *       - in: query
+ *         name: q
+ *         schema: { type: string }
+ *         description: filtro su username/email
+ *     responses:
+ *       200:
+ *         description: Elenco utenti
+ */
+router.get("/", async (req, res) => {
+  try {
+    const { role, q } = req.query || {};
+    const and = [];
+    if (role) and.push({ role });
+    if (q) {
+      const rx = new RegExp(String(q), "i");
+      and.push({ $or: [{ username: rx }, { email: rx }] });
+    }
+    const filter = and.length ? { $and: and } : {};
+    const users = await User.find(filter).select("-password").lean();
+    res.json(users);
+  } catch (err) {
+    console.error("GET /users error:", err);
+    res.status(500).json({ message: "Error loading users" });
+  }
+});
+
+/**
+ * @swagger
+ * /users/{id}:
+ *   get:
+ *     tags: [Users]
+ *     summary: Dettaglio utente (legacyId o _id)
+ *     parameters:
+ *       - $ref: '#/components/parameters/IdPath'
+ *     responses:
+ *       200: { description: Ok }
+ *       404: { $ref: '#/components/responses/NotFound' }
+ */
+router.get("/:id", async (req, res) => {
+  try {
+    const param = String(req.params.id);
+    const filter = isObjectId(param) ? { _id: param } : { legacyId: Number(param) };
+    const u = await User.findOne(filter).select("-password").lean();
+    if (!u) return res.status(404).json({ message: "User not found" });
+    res.json(u);
+  } catch (err) {
+    console.error("GET /users/:id error:", err);
+    res.status(500).json({ message: "Error loading user" });
+  }
+});
+
+/* ================== LEGACY REGISTER/LOGIN ================== */
 
 /**
  * @swagger
@@ -54,7 +115,7 @@ function isObjectId(id) {
  *     tags: [Users]
  *     summary: (DEPRECATA) Registrazione legacy via /users/register
  *     deprecated: true
- *     description: Preferisci **POST /register**. Questa rotta resta per compatibilità e ora salva la password con **bcrypt**. Se role = "ristoratore" crea/aggiorna anche un ristorante minimale collegato.
+ *     description: Preferisci **POST /register**. Questa rotta resta per compatibilità e salva la password con **bcrypt**. Se role="ristoratore", crea/aggiorna anche un ristorante minimale.
  *     requestBody:
  *       required: true
  *       content:
@@ -64,10 +125,8 @@ function isObjectId(id) {
  *               - $ref: '#/components/schemas/User'
  *             required: [username, email, password, role]
  *     responses:
- *       201:
- *         description: Utente creato (legacy)
- *       400:
- *         $ref: '#/components/responses/ValidationError'
+ *       201: { description: Utente creato (legacy) }
+ *       400: { $ref: '#/components/responses/ValidationError' }
  *       409:
  *         description: Username o email già registrati
  *         content:
@@ -90,20 +149,16 @@ router.post("/register", async (req, res) => {
     email = String(email).trim().toLowerCase();
     role = String(role).trim();
 
-    // username o email già presenti?
     const dup = await User.findOne({ $or: [{ username }, { email }] }).lean();
     if (dup) return res.status(409).json({ message: "Username o email già registrati" });
 
-    // legacy id numerico come nel vecchio file JSON
     const legacyId = await nextLegacyId();
 
-    // prepara restaurantId solo per ristoratore
     let restaurantId = null;
     if (role === "ristoratore") {
       restaurantId = `r_${username.toLowerCase().replace(/\s+/g, "")}`;
     }
 
-    // hash password (era in chiaro prima)
     const passwordHash = await bcrypt.hash(String(password), 10);
 
     const newUser = await User.create({
@@ -128,7 +183,6 @@ router.post("/register", async (req, res) => {
       restaurantId,
     });
 
-    // se è ristoratore, prova a creare/aggiornare il Restaurant
     if (role === "ristoratore") {
       try {
         const indirizzoObj =
@@ -140,7 +194,7 @@ router.post("/register", async (req, res) => {
           { restaurantId },
           {
             $set: {
-              ownerUserId: newUser._id, // il tuo schema esistente lo usa
+              ownerUserId: newUser._id,
               restaurantId,
               nome: `${username} Ristorante`,
               email,
@@ -252,6 +306,8 @@ router.post("/login", async (req, res) => {
   }
 });
 
+/* ================== UPDATE / DELETE ================== */
+
 /**
  * @swagger
  * /users/{id}:
@@ -273,7 +329,9 @@ router.post("/login", async (req, res) => {
 router.put("/:id", async (req, res) => {
   try {
     const param = String(req.params.id);
-    const filter = isObjectId(param) ? { _id: param } : { legacyId: parseInt(param) };
+    const n = Number(param);
+    const filter = isObjectId(param) ? { _id: param } : Number.isFinite(n) ? { legacyId: n } : null;
+    if (!filter) return res.status(400).json({ message: "id non valido" });
 
     const body = normalizeBody(req.body);
     const updates = { ...body };
@@ -299,6 +357,48 @@ router.put("/:id", async (req, res) => {
 
 /**
  * @swagger
+ * /users/{id}/password:
+ *   put:
+ *     tags: [Users]
+ *     summary: Cambia password (legacyId o _id)
+ *     parameters:
+ *       - $ref: '#/components/parameters/IdPath'
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [password]
+ *             properties:
+ *               password: { type: string, example: "Nu0v@P4ss!" }
+ *     responses:
+ *       204: { description: Password aggiornata }
+ *       404: { $ref: '#/components/responses/NotFound' }
+ */
+router.put("/:id/password", async (req, res) => {
+  try {
+    const param = String(req.params.id);
+    const n = Number(param);
+    const filter = isObjectId(param) ? { _id: param } : Number.isFinite(n) ? { legacyId: n } : null;
+    if (!filter) return res.status(400).json({ message: "id non valido" });
+
+    const { password } = req.body || {};
+    if (!password) return res.status(400).json({ message: "password obbligatoria" });
+
+    const hash = await bcrypt.hash(String(password), 10);
+    const updated = await User.findOneAndUpdate(filter, { $set: { password: hash } }, { new: true });
+    if (!updated) return res.status(404).json({ message: "Utente not found" });
+
+    res.sendStatus(204);
+  } catch (err) {
+    console.error("PUT /users/:id/password error:", err);
+    res.status(500).json({ message: "Error updating password" });
+  }
+});
+
+/**
+ * @swagger
  * /users/{id}:
  *   delete:
  *     tags: [Users]
@@ -313,7 +413,9 @@ router.put("/:id", async (req, res) => {
 router.delete("/:id", async (req, res) => {
   try {
     const param = String(req.params.id);
-    const filter = isObjectId(param) ? { _id: param } : { legacyId: parseInt(param) };
+    const n = Number(param);
+    const filter = isObjectId(param) ? { _id: param } : Number.isFinite(n) ? { legacyId: n } : null;
+    if (!filter) return res.status(400).json({ message: "id non valido" });
 
     const deleted = await User.findOneAndDelete(filter);
     if (!deleted) return res.status(404).json({ message: "Utente not found" });
