@@ -72,9 +72,6 @@
         <div id="cartTotal" style="font-weight:800; font-size:1.3rem;">€0.00</div>
       </div>
       <div style="display:flex; gap:8px;">
-        <!-- rimane "Svuota" per svuotare il carrello; se vuoi toglierlo dimmelo -->
-        <button id="clearCart" class="btn ghost">Svuota</button>
-        <button id="checkout" class="btn primary">Checkout</button>
       </div>
     </footer>
   </aside>
@@ -92,65 +89,83 @@
   <!-- script -->
   <script src="js/main.js" defer></script>
   <script src="js/main.homepage-cart.js" defer></script>
-  <script type="module" src="js/home-cart.js"></script>
+  
 
-  <script>
-    window.addEventListener("DOMContentLoaded", () => {
-      // Leggi in sicurezza l'utente dal localStorage
-      let user = null;
-      try { user = JSON.parse(localStorage.getItem("loggedUser") || "null"); } catch (_) { user = null; }
+ <script>
+  window.addEventListener("DOMContentLoaded", () => {
+    // Leggi in sicurezza l'utente
+    let user = null;
+    try { user = JSON.parse(localStorage.getItem("loggedUser") || "null"); } catch (_) { user = null; }
 
-      const noti = document.getElementById("noti");
-      const linkContainer = document.getElementById("links");
-      const welcome = document.getElementById("welcome");
+    const noti = document.getElementById("noti");
+    const linkContainer = document.getElementById("links");
+    const welcome = document.getElementById("welcome");
 
-      const linkRestaurantOrders = document.getElementById("link-ordini-ristoratore");
-      const linkStatistics = document.getElementById("link-statistiche");
+    const linkRestaurantOrders = document.getElementById("link-ordini-ristoratore");
+    const linkStatistics = document.getElementById("link-statistiche");
 
-      // reset visibilità link secondari
-      [linkRestaurantOrders, linkStatistics].forEach(el => { if (el) el.style.display = "none"; });
+    // === Cart: porta alla pagina cart.html e inizializza badge ===
+    const openCartBtn = document.getElementById("openCartBtn");
+    if (openCartBtn) {
+      openCartBtn.addEventListener("click", (e) => {
+        e.preventDefault();
+        location.href = "cart.html";
+      });
+    }
+    // Badge iniziale
+    const CART_KEY = "cart_home_v2";
+    try {
+      const cart = JSON.parse(localStorage.getItem(CART_KEY) || "[]");
+      const count = cart.reduce((s, it) => s + (Number(it.qty)||0), 0);
+      const badge = document.getElementById("cartBadge");
+      if (badge) badge.textContent = String(count);
+    } catch {}
 
-      if (user && user.username) {
-        if (noti) { noti.innerHTML = ""; noti.style.display = "none"; }
-        welcome.textContent = `Welcome, ${user.username}`;
+    // ======= resto della tua logica utente / link dinamici =======
+    [linkRestaurantOrders, linkStatistics].forEach(el => { if (el) el.style.display = "none"; });
 
-        const isClient = user.role === "cliente";
-        const isRest   = user.role === "ristoratore";
+    if (user && user.username) {
+      if (noti) { noti.innerHTML = ""; noti.style.display = "none"; }
+      welcome.textContent = `Welcome, ${user.username}`;
 
-        if (isRest) {
-          if (linkRestaurantOrders) linkRestaurantOrders.style.display = "inline-block";
-          if (linkStatistics) linkStatistics.style.display = "inline-block";
-        }
+      const isClient = user.role === "cliente";
+      const isRest   = user.role === "ristoratore";
 
-        linkContainer.innerHTML = `
-          ${isRest ? '<a href="add.html" id="link-add">Add Dish</a> | ' : ''}
-          ${isClient ? '<a href="i-miei-ordini.html" id="link-miei-ordini">My orders</a> | ' : ''}
-          <a href="edituser.html" id="link-edit-user">Edit Profile</a> |
-          <a href="#" id="link-logout">Logout</a>
-        `;
-
-        const logoutA = document.getElementById("link-logout");
-        if (logoutA) {
-          logoutA.addEventListener("click", (e) => {
-            e.preventDefault();
-            localStorage.removeItem("loggedUser");
-            location.href = "login.html";
-          });
-        }
-      } else {
-        if (noti) {
-          noti.innerHTML = `Sei libero di sfogliare i menu. 
-            Accedi come cliente per completare il checkout del carrello. 
-            <a href="login.html">Vai al login</a>`;
-          noti.style.display = "block";
-        }
-        welcome.textContent = "";
-        linkContainer.innerHTML = `
-          <a href="login.html">Log in</a> |
-          <a href="register.html">Register</a>
-        `;
+      if (isRest) {
+        if (linkRestaurantOrders) linkRestaurantOrders.style.display = "inline-block";
+        if (linkStatistics) linkStatistics.style.display = "inline-block";
       }
-    });
-  </script>
+
+      linkContainer.innerHTML = `
+        ${isRest ? '<a href="add.html" id="link-add">Add Dish</a> | ' : ''}
+        ${isClient ? '<a href="i-miei-ordini.html" id="link-miei-ordini">My orders</a> | ' : ''}
+        <a href="edituser.html" id="link-edit-user">Edit Profile</a> |
+        <a href="#" id="link-logout">Logout</a>
+      `;
+
+      const logoutA = document.getElementById("link-logout");
+      if (logoutA) {
+        logoutA.addEventListener("click", (e) => {
+          e.preventDefault();
+          localStorage.removeItem("loggedUser");
+          location.href = "login.html";
+        });
+      }
+    } else {
+      if (noti) {
+        noti.innerHTML = `Sei libero di sfogliare i menu. 
+          Accedi come cliente per completare il checkout del carrello. 
+          <a href="login.html">Vai al login</a>`;
+        noti.style.display = "block";
+      }
+      welcome.textContent = "";
+      linkContainer.innerHTML = `
+        <a href="login.html">Log in</a> |
+        <a href="register.html">Register</a>
+      `;
+    }
+  });
+</script>
+
 </body>
 </html>
