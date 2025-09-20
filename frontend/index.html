@@ -1,38 +1,9 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" >
+  <meta charset="UTF-8">
   <title>Homepage</title>
   <link rel="stylesheet" href="css/style.css">
-  <!-- extra stile per il carrello in homepage (puoi toglierlo se incorpori lo stile altrove) -->
-  <link rel="stylesheet" href="css/home-cart.css">
-  <!--<style>
-    /* piccolo fallback se non includi home-cart.css */
-    .shop-wrap {max-width: 1100px; margin: 0 auto; padding: 12px;}
-    .shop-toolbar {display:flex; gap:12px; align-items:center; flex-wrap:wrap; margin: 10px 0 18px;}
-    .products {display:grid; grid-template-columns: repeat(auto-fill,minmax(220px,1fr)); gap:14px;}
-    .card {border:1px solid #ddd; border-radius:14px; overflow:hidden; background:#fff; display:flex; flex-direction:column;}
-    .card img {width:100%; height:160px; object-fit:cover; background:#f6f6f6;}
-    .card .body {padding:10px; display:flex; flex-direction:column; gap:6px; flex:1;}
-    .price {font-weight:700;}
-    .muted {opacity:.8; font-size:.95rem;}
-    .btn {cursor:pointer; border:none; border-radius:10px; padding:8px 10px;}
-    .btn.primary {background:#0ea5e9; color:#fff;}
-    .btn.ghost {background:#f3f4f6;}
-    /* Cart drawer */
-    .cart-toggle {position: fixed; right: 18px; bottom: 18px; z-index: 50;}
-    .cart-toggle .badge {position:absolute; top:-7px; right:-7px; background:#ef4444; color:#fff; border-radius:999px; font-size:.75rem; padding:2px 6px;}
-    .drawer {position: fixed; top:0; right: -420px; width: 380px; height:100%; background:#fff; box-shadow: -8px 0 20px rgba(0,0,0,.08); transition: right .25s ease; z-index: 60; display:flex; flex-direction:column;}
-    .drawer.open {right:0;}
-    .drawer header {padding:14px; border-bottom:1px solid #eee; display:flex; justify-content:space-between; align-items:center;}
-    .drawer main {padding:12px; overflow:auto; flex:1; display:flex; flex-direction:column; gap:10px;}
-    .drawer footer {padding:12px; border-top:1px solid #eee; display:flex; gap:10px; align-items:center; justify-content:space-between;}
-    .line {display:flex; gap:10px; align-items:center;}
-    .line img {width:56px; height:56px; object-fit:cover; border-radius:10px; background:#f6f6f6;}
-    .qty {display:flex; align-items:center; gap:6px;}
-    .qty button {width:28px; height:28px; border-radius:8px; border:1px solid #ddd; background:#fff; cursor:pointer;}
-    .empty {text-align:center; color:#6b7280; padding:20px 0;}
-  </style> -->
   <link rel="icon" type="image/png" href="images/logo.png">
 </head>
 <body>
@@ -54,12 +25,18 @@
   <div id="nav-links" class="link-bar" style="margin-bottom: 20px;">
     <!-- visibile a TUTTI -->
     <a href="ricerca_piatti.html">Search for dishes</a>
-    <!-- puoi lasciarlo client-only -->
+    <!-- può restare client-only -->
     <a href="ricerca_ristoranti.html" data-client-only>Search restaurants</a>
 
-    <!-- 🔥 RIMOSSO: Order here (ora si ordina in homepage)
-    <a id="link-order" href="order.html" style="display:none;">Order here</a>
-    -->
+    <!-- spacer per spingere il carrello a destra -->
+    <span class="spacer"></span>
+
+    <!-- carrello sulla stessa riga dei link -->
+    <button id="openCartBtn" class="btn primary">
+      Cart <span id="cartBadge" class="badge">0</span>
+    </button>
+
+    <!-- link per ristoratore -->
     <a id="link-ordini-ristoratore" href="ordini_ristoratore.html" style="display:none;">Orders received</a>
     <a id="link-statistiche" href="statistiche_ristoratore.html" style="display:none;">Statistics</a>
   </div>
@@ -76,21 +53,11 @@
     <li>Loading...</li>
   </ul>
 
-  <!-- ====== NUOVA SEZIONE: SHOP + CARRELLO ====== -->
-  <section class="shop-wrap" aria-label="Piatti acquistabili">
-    <div class="shop-toolbar">
-      <input id="q" type="search" placeholder="Cerca piatti o ristoranti..." style="flex:1; padding:10px 12px; border-radius:10px; border:1px solid #ddd;">
-      <button id="clearFilters" class="btn ghost">Azzera</button>
-      <button id="openCartBtn" class="btn primary">Apri carrello</button>
-    </div>
-    <div id="products" class="products"></div>
+  <!-- Vista a sezioni per ristorante (cards) -->
+  <section style="margin:24px 0;">
+    <h2 style="margin:0 0 10px;">Restaurant menu</h2>
+    <div id="menu-by-restaurant"></div>
   </section>
-
-  <!-- Bottone flottante carrello -->
-  <button id="cartFab" class="btn primary cart-toggle" aria-label="Apri carrello">
-    Carrello
-    <span id="cartBadge" class="badge">0</span>
-  </button>
 
   <!-- Drawer carrello -->
   <aside id="cartDrawer" class="drawer" aria-hidden="true" aria-label="Carrello">
@@ -105,18 +72,12 @@
         <div id="cartTotal" style="font-weight:800; font-size:1.3rem;">€0.00</div>
       </div>
       <div style="display:flex; gap:8px;">
+        <!-- rimane "Svuota" per svuotare il carrello; se vuoi toglierlo dimmelo -->
         <button id="clearCart" class="btn ghost">Svuota</button>
         <button id="checkout" class="btn primary">Checkout</button>
       </div>
     </footer>
   </aside>
-  <!-- ====== FINE NUOVA SEZIONE ====== -->
-
-  <!-- Vista a sezioni per ristorante (cards) -->
-  <section style="margin:24px 0;">
-    <h2 style="margin:0 0 10px;">Restaurant menu</h2>
-    <div id="menu-by-restaurant"></div>
-  </section>
 
   <!-- footer con loghi tecnologia -->
   <footer class="tech-footer">
@@ -128,49 +89,39 @@
     </div>
   </footer>
 
-  <!-- Il tuo main attuale (offerte, menu-by-restaurant, ecc.) -->
+  <!-- script -->
   <script src="js/main.js" defer></script>
-   <script src="js/main.homepage-cart.js" defer></script>
-
-  <!-- Nuovo modulo per il carrello/ordine in homepage -->
+  <script src="js/main.homepage-cart.js" defer></script>
   <script type="module" src="js/home-cart.js"></script>
 
   <script>
     window.addEventListener("DOMContentLoaded", () => {
       // Leggi in sicurezza l'utente dal localStorage
       let user = null;
-      try {
-        user = JSON.parse(localStorage.getItem("loggedUser") || "null");
-      } catch (_) { user = null; }
+      try { user = JSON.parse(localStorage.getItem("loggedUser") || "null"); } catch (_) { user = null; }
 
       const noti = document.getElementById("noti");
       const linkContainer = document.getElementById("links");
       const welcome = document.getElementById("welcome");
 
-      const linkRestaurantOrders = document.getElementById("link-ordini-ristoratore"); // ristoratori
-      const linkStatistics = document.getElementById("link-statistiche");               // ristoratori
+      const linkRestaurantOrders = document.getElementById("link-ordini-ristoratore");
+      const linkStatistics = document.getElementById("link-statistiche");
 
-      // reset visibilità link secondari che restano condizionati al ruolo
-      [linkRestaurantOrders, linkStatistics].forEach(el => {
-        if (el) el.style.display = "none";
-      });
+      // reset visibilità link secondari
+      [linkRestaurantOrders, linkStatistics].forEach(el => { if (el) el.style.display = "none"; });
 
       if (user && user.username) {
-        // 🔒 Utente loggato: nascondi banner
         if (noti) { noti.innerHTML = ""; noti.style.display = "none"; }
-
         welcome.textContent = `Welcome, ${user.username}`;
 
         const isClient = user.role === "cliente";
         const isRest   = user.role === "ristoratore";
 
-        // (Order here rimosso — ora si ordina da homepage)
         if (isRest) {
           if (linkRestaurantOrders) linkRestaurantOrders.style.display = "inline-block";
           if (linkStatistics) linkStatistics.style.display = "inline-block";
         }
 
-        // Link dinamici in alto
         linkContainer.innerHTML = `
           ${isRest ? '<a href="add.html" id="link-add">Add Dish</a> | ' : ''}
           ${isClient ? '<a href="i-miei-ordini.html" id="link-miei-ordini">My orders</a> | ' : ''}
@@ -178,25 +129,21 @@
           <a href="#" id="link-logout">Logout</a>
         `;
 
-        // handler logout
         const logoutA = document.getElementById("link-logout");
         if (logoutA) {
           logoutA.addEventListener("click", (e) => {
             e.preventDefault();
             localStorage.removeItem("loggedUser");
-            // (opzionale) localStorage.removeItem("cart_home_v2");
             location.href = "login.html";
           });
         }
       } else {
-        // 🔓 Non loggato: mostra banner + link login/registrazione
         if (noti) {
           noti.innerHTML = `Sei libero di sfogliare i menu. 
             Accedi come cliente per completare il checkout del carrello. 
             <a href="login.html">Vai al login</a>`;
           noti.style.display = "block";
         }
-
         welcome.textContent = "";
         linkContainer.innerHTML = `
           <a href="login.html">Log in</a> |
