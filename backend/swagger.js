@@ -1,3 +1,4 @@
+// swagger.js
 const path = require("path");
 const swaggerJSDoc = require("swagger-jsdoc");
 const swaggerUi = require("swagger-ui-express");
@@ -73,7 +74,7 @@ const options = {
           content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } },
         },
         Unauthorized: {
-          description: "Non autorizzato / token mancante",
+          description: "Non autorizzato / credenziali errate o token mancante",
           content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } },
         },
         ValidationError: {
@@ -82,11 +83,13 @@ const options = {
         },
       },
       schemas: {
+        /* ------------ USERS ------------ */
         User: {
           type: "object",
           required: ["username", "role"],
           properties: {
             id: { type: "integer", example: 1 },
+            _id: { type: "string", example: "66f1b3c1a2e4e9a1c9b0d123" },
             username: { type: "string", example: "thomas" },
             email: { type: "string", format: "email", example: "thomas@example.com" },
             password: { type: "string", example: "••••••••" },
@@ -96,20 +99,38 @@ const options = {
             partitaIva: { type: "string", example: "IT12345678901" },
             indirizzo: { type: "string", example: "Via Roma 1" },
             restaurantId: { type: "string", example: "r_o" },
+            preferenza: { type: "string", example: "pizza" },
           },
         },
-        Restaurant: {
+        LoginRequest: {
+          oneOf: [
+            {
+              type: "object",
+              required: ["email", "password"],
+              properties: {
+                email: { type: "string", format: "email", example: "thomas@example.com" },
+                password: { type: "string", example: "••••••••" },
+              },
+            },
+            {
+              type: "object",
+              required: ["username", "password"],
+              properties: {
+                username: { type: "string", example: "thomas" },
+                password: { type: "string", example: "••••••••" },
+              },
+            },
+          ],
+        },
+        LoginResponse: {
           type: "object",
-          required: ["restaurantId", "name"],
           properties: {
-            restaurantId: { type: "string", example: "r_o" },
-            name: { type: "string", example: "Pizzeria Da Mario" },
-            phone: { type: "string", example: "+39 02 1234567" },
-            piva: { type: "string", example: "IT12345678901" },
-            address: { type: "string", example: "Via Torino 22" },
-            place: { type: "string", example: "Milano" },
+            token: { type: "string", example: "eyJhbGciOi..." },
+            user: { $ref: "#/components/schemas/User" },
           },
         },
+
+        /* ------------ MEALS ------------ */
         Meal: {
           type: "object",
           required: ["nome", "prezzo", "restaurantId"],
@@ -162,6 +183,22 @@ const options = {
           },
           additionalProperties: true,
         },
+
+        /* ------------ RESTAURANTS ------------ */
+        Restaurant: {
+          type: "object",
+          required: ["restaurantId", "name"],
+          properties: {
+            restaurantId: { type: "string", example: "r_o" },
+            name: { type: "string", example: "Pizzeria Da Mario" },
+            phone: { type: "string", example: "+39 02 1234567" },
+            piva: { type: "string", example: "IT12345678901" },
+            address: { type: "string", example: "Via Torino 22" },
+            place: { type: "string", example: "Milano" },
+          },
+        },
+
+        /* ------------ ORDERS ------------ */
         OrderItem: {
           type: "object",
           required: ["idmeals", "qty", "price"],
@@ -176,7 +213,7 @@ const options = {
           required: ["userId", "restaurantId", "items", "total", "status"],
           properties: {
             id: { type: "integer", example: 501 },
-            userId: { type: "integer", example: 1 },
+            userId: { type: "string", example: "1" },
             restaurantId: { type: "string", example: "r_o" },
             items: { type: "array", items: { $ref: "#/components/schemas/OrderItem" } },
             total: { type: "number", example: 15.0 },
@@ -192,39 +229,33 @@ const options = {
                 paid: { type: "boolean", example: true },
               },
             },
-            createdAt: { type: "string", format: "date-time", example: "2025-09-09T12:34:56Z" },
+            createdAt: { type: "string", format: "date-time" },
           },
         },
-        LoginRequest: {
-          type: "object",
-          required: ["email", "password"],
-          properties: {
-            email: { type: "string", example: "thomas@example.com" },
-            password: { type: "string", example: "••••••••" },
-          },
-        },
-        LoginResponse: {
-          type: "object",
-          properties: {
-            token: { type: "string", example: "eyJhbGciOi..." },
-            user: { $ref: "#/components/schemas/User" },
-          },
-        },
+
+        /* ------------ ERROR ------------ */
         Error: {
           type: "object",
-          properties: { message: { type: "string", example: "Errore descrittivo" } },
+          properties: {
+            message: { type: "string", example: "Errore descrittivo" },
+            details: { type: "array", items: { type: "string" } },
+          },
         },
       },
     },
-    // security: [{ bearerAuth: [] }], // abilita se quasi tutte le rotte richiedono JWT
+    // security: [{ bearerAuth: [] }], // abilita se la maggior parte delle rotte richiede JWT
   },
 
-  /* --- Scansiona SOLO file di route reali --- */
+  /* --- Scansiona i file di route REALI --- */
   apis: [
-    path.join(__dirname, "meals.js"),          // tuo file
-    path.join(__dirname, "routes/**/*.js"),    // se hai altre route
-    path.join(__dirname, "app.js"),
-    path.join(__dirname, "server.js"),
+    path.join(__dirname, "db.js"),
+    path.join(__dirname, "meals.js"),
+    path.join(__dirname, "order.js"),
+    path.join(__dirname, "restaurant.js"),
+    path.join(__dirname, "user.js"),
+    path.join(__dirname, "login.js"),
+    path.join(__dirname, "register.js"),
+    path.join(__dirname, "routes/**/*.js"),
   ],
 };
 
@@ -237,11 +268,14 @@ function setupSwagger(app) {
     swaggerUi.serve,
     swaggerUi.setup(spec, {
       explorer: true,
-      swaggerOptions: { persistAuthorization: true },
+      swaggerOptions: {
+        persistAuthorization: true,
+        tagsSorter: "alpha",
+        operationsSorter: "alpha",
+      },
     })
   );
   app.get("/api-docs.json", (_req, res) => res.json(spec));
 }
 
 module.exports = { setupSwagger, spec };
-
