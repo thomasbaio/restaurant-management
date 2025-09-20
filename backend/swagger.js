@@ -1,4 +1,3 @@
-// backend/swagger.js
 const path = require("path");
 const swaggerJSDoc = require("swagger-jsdoc");
 const swaggerUi = require("swagger-ui-express");
@@ -38,7 +37,6 @@ const options = {
     ],
     components: {
       securitySchemes: {
-        // abilita il pulsante "Authorize" (JWT)
         bearerAuth: { type: "http", scheme: "bearer", bearerFormat: "JWT" },
       },
       parameters: {
@@ -84,7 +82,6 @@ const options = {
         },
       },
       schemas: {
-        /* -------- Schemi principali -------- */
         User: {
           type: "object",
           required: ["username", "role"],
@@ -113,7 +110,6 @@ const options = {
             place: { type: "string", example: "Milano" },
           },
         },
-        /* ---- Meal normalizzato (match con meals.js) ---- */
         Meal: {
           type: "object",
           required: ["nome", "prezzo", "restaurantId"],
@@ -137,12 +133,16 @@ const options = {
               example: ["pomodoro", "mozzarella", "basilico"],
               readOnly: true,
             },
-            ingredient: { type: "string", description: "Lista ingredienti in stringa", example: "pomodoro, mozzarella, basilico", readOnly: true },
+            ingredient: {
+              type: "string",
+              description: "Lista ingredienti in stringa",
+              example: "pomodoro, mozzarella, basilico",
+              readOnly: true,
+            },
             origine: { type: "string", example: "personalizzato" },
             isCommon: { type: "boolean", example: false },
           },
         },
-        /* per le richieste in input accettiamo anche alias (name/category/image/strMeal...) */
         MealInput: {
           type: "object",
           required: ["restaurantId", "nome"],
@@ -151,11 +151,14 @@ const options = {
             nome: { type: "string", description: "Alias: name, strMeal", example: "Margherita" },
             tipologia: { type: "string", description: "Alias: category, strCategory", example: "pizza" },
             prezzo: { type: "number", example: 7.5 },
-            foto: { type: "string", description: "Alias: image, strMealThumb", example: "https://cdn.example.com/pizza.jpg" },
-            ingredients: { type: "array", items: { type: "string" }, example: ["pomodoro","mozzarella"] },
+            foto: {
+              type: "string",
+              description: "Alias: image, strMealThumb",
+              example: "https://cdn.example.com/pizza.jpg",
+            },
+            ingredients: { type: "array", items: { type: "string" }, example: ["pomodoro", "mozzarella"] },
             isCommon: { type: "boolean", example: false },
             origine: { type: "string", example: "personalizzato" },
-            // eventuali strIngredientX/strMeasureX sono accettati ma non elencati
           },
           additionalProperties: true,
         },
@@ -213,14 +216,13 @@ const options = {
         },
       },
     },
-    // security globale (se la maggior parte delle rotte richiede JWT)
-    // security: [{ bearerAuth: [] }],
+    // security: [{ bearerAuth: [] }], // abilita se quasi tutte le rotte richiedono JWT
   },
 
-  /* --- Scansiona SOLO file di route reali (aggiungi qui quelli che usi) --- */
+  /* --- Scansiona SOLO file di route reali --- */
   apis: [
-    path.join(__dirname, "meals.js"),          // <-- tuo file attuale
-    path.join(__dirname, "routes/**/*.js"),    // se usi una cartella routes
+    path.join(__dirname, "meals.js"),          // tuo file
+    path.join(__dirname, "routes/**/*.js"),    // se hai altre route
     path.join(__dirname, "app.js"),
     path.join(__dirname, "server.js"),
   ],
@@ -242,3 +244,4 @@ function setupSwagger(app) {
 }
 
 module.exports = { setupSwagger, spec };
+

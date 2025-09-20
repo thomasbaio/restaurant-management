@@ -1,5 +1,8 @@
 const express = require("express");
 const fs = require("fs");
+c// order.js
+const express = require("express");
+const fs = require("fs");
 const path = require("path");
 const router = express.Router();
 const Order = require("./models/order");
@@ -39,19 +42,21 @@ function safeReadJSON(file) {
 function inferUserIdFromUsername(username) {
   const data = safeReadJSON(USERS_FILE);
   if (!data || !Array.isArray(data)) return String(username || "");
-  const u = data.find(x => (x.username || "").toLowerCase() === String(username || "").toLowerCase());
-  return (u && (u._id || u.id)) ? String(u._id || u.id) : String(username || "");
+  const u = data.find(
+    (x) => (x.username || "").toLowerCase() === String(username || "").toLowerCase()
+  );
+  return u && (u._id || u.id) ? String(u._id || u.id) : String(username || "");
 }
 
 function flattenFileMeals() {
   const data = safeReadJSON(MEALS_FILE);
   if (!data || !Array.isArray(data)) return [];
-  return data.flatMap(r =>
-    (r.menu || []).map(p => ({
+  return data.flatMap((r) =>
+    (r.menu || []).map((p) => ({
       restaurantId: String(r.restaurantId || r.id || ""),
       id: String(p.idmeals ?? p.id ?? p._id ?? ""),
       nome: p.nome ?? p.strMeal ?? p.name ?? "Senza nome",
-      prezzo: Number(p.prezzo ?? p.price ?? 0) || 0
+      prezzo: Number(p.prezzo ?? p.price ?? 0) || 0,
     }))
   );
 }
@@ -59,11 +64,11 @@ function flattenFileMeals() {
 function inferRestaurantIdFromMeals(mealIds) {
   const meals = flattenFileMeals();
   const set = new Set(mealIds.map(String));
-  const hit = meals.find(m => set.has(m.id));
+  const hit = meals.find((m) => set.has(m.id));
   return hit ? hit.restaurantId : "";
 }
 
-const toStr = v => (v == null ? null : String(v).trim());
+const toStr = (v) => (v == null ? null : String(v).trim());
 
 function extractItemsFromAny(body) {
   const buckets = []
@@ -73,7 +78,7 @@ function extractItemsFromAny(body) {
     .concat(Array.isArray(body.meals) ? body.meals : []);
 
   return buckets
-    .map(x => {
+    .map((x) => {
       if (typeof x === "string" || typeof x === "number") {
         return { mealId: toStr(x), qty: 1 };
       }
@@ -107,13 +112,29 @@ function collapseItems(items) {
 
 function enrichItemsFromFile(items) {
   const catalog = flattenFileMeals();
-  const byId = new Map(catalog.map(m => [m.id, m]));
-  return items.map(it => {
+  const byId = new Map(catalog.map((m) => [m.id, m]));
+  return items.map((it) => {
     const m = byId.get(it.mealId);
     return {
       ...it,
       name: it.name ?? m?.nome ?? "Senza nome",
-      price: it.price != null ? Number(it.price) : (m ? Number(m.prezzo) : 0)
+      price: it.price != null ? Number(it.price) : m ? Number(m.prezzo) : 0,
+    };
+  });
+}
+
+// compat con schema Mongoose: produce anche idmeals numerico se possibile
+function toSchemaItems(items) {
+  return items.map((it) => {
+    const n = Number(it.mealId);
+    const idmeals = Number.isFinite(n) ? n : undefined; // se non numerico, schema può ignorare (o alza errore se required)
+    return {
+      idmeals,
+      qty: Number(it.qty || 1),
+      price: Number(it.price || 0),
+      // campi extra che alcuni client vogliono vedere in risposta
+      name: it.name,
+      mealId: it.mealId,
     };
   });
 }
@@ -133,10 +154,11 @@ function normalizeDelivery(obj) {
   let fulfillment = obj.fulfillment;
 
   if (!delivery && fulfillment) {
-    delivery = fulfillment === "ritiro" ? "asporto" : (fulfillment === "consegna" ? "domicilio" : undefined);
+    delivery =
+      fulfillment === "ritiro" ? "asporto" : fulfillment === "consegna" ? "domicilio" : undefined;
   }
   if (!fulfillment && delivery) {
-    fulfillment = delivery === "asporto" ? "ritiro" : (delivery === "domicilio" ? "consegna" : undefined);
+    fulfillment = delivery === "asporto" ? "ritiro" : delivery === "domicilio" ? "consegna" : undefined;
   }
   return { delivery, fulfillment };
 }
@@ -161,7 +183,8 @@ function normalizeBody(b) {
 
 function normalizePaymentMethod(m) {
   const s = String(m || "carta").toLowerCase().replace(/\s+/g, "_").replace(/-/g, "_");
-  if (["carta", "card", "credit_card", "carta_credito", "carta_di_credito"].includes(s)) return "carta";
+  if (["carta", "card", "creditCard", "credit_card", "carta_credito", "carta_di_credito"].includes(s))
+    return "carta";
   if (["contanti", "cash"].includes(s)) return "contanti";
   if (["online", "paypal", "stripe"].includes(s)) return "online";
   return "carta";
@@ -185,14 +208,45 @@ function validateForCreate(payload) {
   const errors = [];
   if (!payload.username) errors.push("missing username");
   if (!payload.items || !payload.items.length) errors.push("no dish in the order");
-  if (!payload.userId) errors.push("missing userId ");
-  if (!payload.restaurantId) errors.push("missing restaurantId ");
+  if (!payload.userId) errors.push("missing userId");
+  if (!payload.restaurantId) errors.push("missing restaurantId");
   return errors;
 }
 
-// ---------- routers ----------
-
-// post /orders — crea ordine completo con snapshot items
+/**
+ * @swagger
+ * /orders:
+ *   post:
+ *     tags: [Orders]
+ *     summary: Crea un nuovo ordine
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema: { $ref: "#/components/schemas/Order" }
+ *           examples:
+ *             base:
+ *               value:
+ *                 username: "thomas"
+ *                 userId: "1"
+ *                 restaurantId: "r_o"
+ *                 items:
+ *                   - idmeals: 101
+ *                     qty: 2
+ *                     price: 7.5
+ *                 payment: { method: "card", paid: false }
+ *                 delivery: "asporto"
+ *     responses:
+ *       201:
+ *         description: Ordine creato
+ *         content:
+ *           application/json:
+ *             schema: { $ref: "#/components/schemas/Order" }
+ *       400:
+ *         $ref: "#/components/responses/ValidationError"
+ *       500:
+ *         description: Errore interno
+ */
 router.post("/", async (req, res) => {
   try {
     const raw = normalizeBody(req.body);
@@ -201,7 +255,9 @@ router.post("/", async (req, res) => {
     items = collapseItems(items);
     items = enrichItemsFromFile(items);
 
-    const meals = items.map(it => String(it.mealId));
+    const schemaItems = toSchemaItems(items);
+
+    const meals = items.map((it) => String(it.mealId));
     if (!raw.userId) raw.userId = inferUserIdFromUsername(raw.username);
     if (!raw.restaurantId) raw.restaurantId = inferRestaurantIdFromMeals(meals);
 
@@ -211,7 +267,7 @@ router.post("/", async (req, res) => {
     const payment = {
       method,
       paid: typeof rawPayment === "object" ? Boolean(rawPayment.paid) : false,
-      transactionId: typeof rawPayment === "object" ? rawPayment.transactionId : undefined
+      transactionId: typeof rawPayment === "object" ? rawPayment.transactionId : undefined,
     };
 
     const payload = {
@@ -219,32 +275,56 @@ router.post("/", async (req, res) => {
       username: raw.username,
       userId: raw.userId,
       restaurantId: raw.restaurantId,
-      items,
-      meals,
-      total: computeTotal(items),
+      items: schemaItems,     // <-- compat con schema (idmeals/qty/price)
+      meals,                  // elenco id “string” per riferimenti rapidi
+      total: computeTotal(schemaItems),
       status: raw.status,               // campo nuovo
       state: raw.status,                // compat con vecchio codice
       payment,
       delivery: raw.delivery || "asporto",
       fulfillment: raw.fulfillment || (raw.delivery === "domicilio" ? "consegna" : "ritiro"),
       address: raw.address,
-      note: raw.note
+      note: raw.note,
     };
 
     const errors = validateForCreate(payload);
     if (errors.length) {
-      return res.status(400).json({ error: "Payload not valid", details: errors });
+      return res.status(400).json({ message: "Payload non valido", details: errors });
     }
 
     const created = await Order.create(payload);
     return res.status(201).json(created);
   } catch (err) {
     console.error("Errore POST /orders:", err);
-    return res.status(500).json({ error: "Error during create of the order ", detail: String(err?.message || err) });
+    return res
+      .status(500)
+      .json({ message: "Error during create of the order", detail: String(err?.message || err) });
   }
 });
 
-// get /orders — elenco (filtri opzionali)
+/**
+ * @swagger
+ * /orders:
+ *   get:
+ *     tags: [Orders, fetch]
+ *     summary: Elenco ordini (filtri opzionali)
+ *     parameters:
+ *       - in: query
+ *         name: username
+ *         schema: { type: string }
+ *       - in: query
+ *         name: restaurantId
+ *         schema: { type: string }
+ *       - in: query
+ *         name: status
+ *         schema: { type: string, enum: [ordinato, preparazione, consegna, consegnato, ritirato, annullato] }
+ *       - in: query
+ *         name: state
+ *         schema: { type: string, enum: [ordinato, preparazione, consegna, consegnato, ritirato, annullato] }
+ *     responses:
+ *       200:
+ *         description: Elenco ordini
+ */
 router.get("/", async (req, res) => {
   try {
     const { username, restaurantId, status, state } = req.query;
@@ -259,7 +339,32 @@ router.get("/", async (req, res) => {
     return res.json(orders);
   } catch (err) {
     console.error("Error GET /orders:", err);
-    return res.status(500).json({ error: "Error order recovery" });
+    return res.status(500).json({ message: "Error order recovery" });
+  }
+});
+
+/**
+ * @swagger
+ * /orders/{id}:
+ *   get:
+ *     tags: [Orders]
+ *     summary: Dettaglio ordine (accetta id incrementale o _id Mongo)
+ *     parameters:
+ *       - $ref: '#/components/parameters/IdPath'
+ *     responses:
+ *       200:
+ *         description: Ok
+ *       404:
+ *         $ref: '#/components/responses/NotFound'
+ */
+router.get("/:id", async (req, res) => {
+  try {
+    const order = await findOrderByAnyId(req.params.id);
+    if (!order) return res.status(404).json({ message: "Order not found" });
+    res.json(order);
+  } catch (err) {
+    console.error("Error GET /orders/:id:", err);
+    res.status(500).json({ message: "Error loading order" });
   }
 });
 
@@ -269,23 +374,23 @@ async function updateOrderStateGeneric(idParam, incomingBody, res) {
   const clienteConfermaRitiro = incomingBody?.clienteConfermaRitiro;
 
   if (!VALID_STATES.includes(desired)) {
-    return res.status(400).json({ error: `Status not valid: ${desired}` });
+    return res.status(400).json({ message: `Status not valid: ${desired}` });
   }
 
   const order = await findOrderByAnyId(idParam);
-  if (!order) return res.status(404).json({ error: "Order not found" });
+  if (!order) return res.status(404).json({ message: "Order not found" });
 
   const current = order.status || order.state || "ordinato";
   const allowedNext = NEXT_ALLOWED[current] || [];
   if (current !== desired && !allowedNext.includes(desired)) {
     return res.status(422).json({
-      error: `Transizione non valida da "${current}" a "${desired}"`,
-      allowedNext
+      message: `Transizione non valida da "${current}" a "${desired}"`,
+      allowedNext,
     });
   }
 
   order.status = desired;
-  order.state  = desired;
+  order.state = desired;
 
   if (typeof clienteConfermaRitiro !== "undefined") {
     order.clienteConfermaRitiro = Boolean(clienteConfermaRitiro);
@@ -293,7 +398,7 @@ async function updateOrderStateGeneric(idParam, incomingBody, res) {
 
   const s = desired.toLowerCase();
   if (s === "consegnato" && !order.deliveredAt) order.deliveredAt = new Date();
-  if (s === "ritirato"   && !order.ritiratoAt)  order.ritiratoAt  = new Date();
+  if (s === "ritirato" && !order.ritiratoAt) order.ritiratoAt = new Date();
   if (s === "ritirato") order.ritiroConfermato = true;
   if (FINAL_STATES.has(s)) order.closedAt = order.closedAt || new Date();
 
@@ -301,23 +406,73 @@ async function updateOrderStateGeneric(idParam, incomingBody, res) {
   return res.json(order);
 }
 
-// PUT /orders/:id — aggiorna stato (compat con vecchio body)
+/**
+ * @swagger
+ * /orders/{id}:
+ *   put:
+ *     tags: [Orders]
+ *     summary: Aggiorna stato ordine (accetta body con {status} o {state} o {newState})
+ *     parameters:
+ *       - $ref: '#/components/parameters/IdPath'
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               status:
+ *                 type: string
+ *                 enum: [ordinato, preparazione, consegna, consegnato, ritirato, annullato]
+ *               clienteConfermaRitiro: { type: boolean }
+ *     responses:
+ *       200: { description: Stato aggiornato }
+ *       400: { $ref: '#/components/responses/ValidationError' }
+ *       404: { $ref: '#/components/responses/NotFound' }
+ *       422:
+ *         description: Transizione di stato non valida
+ */
 router.put("/:id", async (req, res) => {
   try {
     await updateOrderStateGeneric(req.params.id, req.body, res);
   } catch (err) {
     console.error("Errore PUT /orders/:id:", err);
-    return res.status(500).json({ error: "Errore aggiornamento ordine", detail: String(err?.message || err) });
+    return res
+      .status(500)
+      .json({ message: "Errore aggiornamento ordine", detail: String(err?.message || err) });
   }
 });
 
-// PUT /orders/:id/state — alias (accetta { newState })
+/**
+ * @swagger
+ * /orders/{id}/state:
+ *   put:
+ *     tags: [Orders]
+ *     summary: Alias per aggiornare lo stato ordine
+ *     parameters:
+ *       - $ref: '#/components/parameters/IdPath'
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               newState:
+ *                 type: string
+ *                 enum: [ordinato, preparazione, consegna, consegnato, ritirato, annullato]
+ *     responses:
+ *       200: { description: Stato aggiornato }
+ *       404: { $ref: '#/components/responses/NotFound' }
+ */
 router.put("/:id/state", async (req, res) => {
   try {
     await updateOrderStateGeneric(req.params.id, req.body, res);
   } catch (err) {
     console.error("Errore PUT /orders/:id/state:", err);
-    return res.status(500).json({ error: "Errore aggiornamento ordine", detail: String(err?.message || err) });
+    return res
+      .status(500)
+      .json({ message: "Errore aggiornamento ordine", detail: String(err?.message || err) });
   }
 });
 
