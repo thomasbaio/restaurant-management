@@ -1,4 +1,4 @@
-// user.js
+// users.js
 const express = require("express");
 const bcrypt = require("bcrypt");
 const router = express.Router();
@@ -11,6 +11,8 @@ const Restaurant = require("./models/restaurant");
  *   name: Users
  *   description: Gestione utenti (lista, dettaglio, update, delete, cambio password).
  */
+
+/* ================== UTILS ================== */
 
 // normalizza i campi tra vecchi e nuovi nomi
 function normalizeBody(b = {}) {
@@ -32,15 +34,14 @@ function normalizeBody(b = {}) {
     preferenza: b.preferenza ?? "",
   };
 }
-const isObjectId = (id) => /^[a-f0-9]{24}$/i.test(String(id));
 
-/* ================== LISTA & DETTAGLIO ================== */
+/* ================== ROUTES ================== */
 
 /**
  * @swagger
  * /users:
  *   get:
- *     tags: [Users, fetch]
+ *     tags: [Users]
  *     summary: Lista utenti
  *     parameters:
  *       - in: query
@@ -74,21 +75,66 @@ router.get("/", async (req, res) => {
 
 /**
  * @swagger
+ * /users/restaurants:
+ *   get:
+ *     tags: [Users]
+ *     summary: Lista ristoratori (compat)
+ *     responses:
+ *       200:
+ *         description: Elenco ristoranti/ristoratori
+ */
+router.get("/restaurants", async (_req, res) => {
+  try {
+    // preferisci la collezione Ristoranti se presente
+    const restaurants = await Restaurant.find().lean();
+    if (restaurants?.length) {
+      const out = restaurants.map((r) => ({
+        nome: r.nome ?? r.name ?? "",
+        location: r.luogo || r.location || "",
+        telefono: r.telefono || r.phone || "",
+        partitaIVA: r.partitaIva || r.vat || "",
+        restaurantId: r.restaurantId ?? r.id ?? r._id ?? null,
+      }));
+      return res.json(out);
+    }
+
+    // fallback: utenti con role="ristoratore"
+    const users = await User.find({ role: "ristoratore" }).lean();
+    const out = users.map((u) => ({
+      nome: `${u.username} Ristorante`,
+      location: u.luogo || u.location || "",
+      telefono: u.telefono || u.phone || "",
+      partitaIVA: u.partitaIva || u.vat || "",
+      restaurantId: u.restaurantId ?? u.legacyId ?? u._id ?? null,
+    }));
+    res.json(out);
+  } catch (err) {
+    console.error("Error GET /users/restaurants:", err);
+    res.status(500).json({ message: "Error in restaurateur recovery" });
+  }
+});
+
+/**
+ * @swagger
  * /users/{id}:
  *   get:
  *     tags: [Users]
- *     summary: Dettaglio utente (legacyId o _id)
+ *     summary: Dettaglio utente (legacyId numerico o _id ObjectId)
  *     parameters:
- *       - $ref: '#/components/parameters/IdPath'
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { oneOf: [{ type: string, pattern: "^[a-fA-F0-9]{24}$" }, { type: string, pattern: "^\\d+$" }] }
  *     responses:
  *       200: { description: Ok }
- *       404: { $ref: '#/components/responses/NotFound' }
+ *       404: { description: Not Found }
  */
-router.get("/:id", async (req, res) => {
+router.get("/:id([a-fA-F0-9]{24}|\\d+)", async (req, res) => {
   try {
     const param = String(req.params.id);
-    const n = Number(param);
-    const filter = isObjectId(param) ? { _id: param } : Number.isFinite(n) ? { legacyId: n } : null;
+    const isObjectId = /^[a-f0-9]{24}$/i.test(param);
+    const isNumeric = /^\d+$/.test(param);
+    const filter = isObjectId ? { _id: param } : isNumeric ? { legacyId: Number(param) } : null;
     if (!filter) return res.status(400).json({ message: "id non valido" });
 
     const u = await User.findOne(filter).select("-password").lean();
@@ -100,8 +146,6 @@ router.get("/:id", async (req, res) => {
   }
 });
 
-/* ================== UPDATE / DELETE ================== */
-
 /**
  * @swagger
  * /users/{id}:
@@ -109,7 +153,10 @@ router.get("/:id", async (req, res) => {
  *     tags: [Users]
  *     summary: Aggiorna profilo/ristoratore (legacyId o _id)
  *     parameters:
- *       - $ref: '#/components/parameters/IdPath'
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { oneOf: [{ type: string, pattern: "^[a-fA-F0-9]{24}$" }, { type: string, pattern: "^\\d+$" }] }
  *     requestBody:
  *       required: true
  *       content:
@@ -117,15 +164,13 @@ router.get("/:id", async (req, res) => {
  *           schema: { $ref: '#/components/schemas/User' }
  *     responses:
  *       200: { description: Utente aggiornato }
- *       404: { $ref: '#/components/responses/NotFound' }
- *       500: { description: Errore interno }
+ *       404: { description: Not Found }
  */
-router.put("/:id", async (req, res) => {
+router.put("/:id([a-fA-F0-9]{24}|\\d+)", async (req, res) => {
   try {
     const param = String(req.params.id);
-    const n = Number(param);
-    const filter = isObjectId(param) ? { _id: param } : Number.isFinite(n) ? { legacyId: n } : null;
-    if (!filter) return res.status(400).json({ message: "id non valido" });
+    const isObjectId = /^[a-f0-9]{24}$/i.test(param);
+    const filter = isObjectId ? { _id: param } : { legacyId: Number(param) };
 
     const body = normalizeBody(req.body);
     const updates = { ...body };
@@ -133,9 +178,9 @@ router.put("/:id", async (req, res) => {
     // non permettere di cambiare campi chiave direttamente:
     delete updates._id;
     delete updates.legacyId;
-    delete updates.username; // rimuovi se vuoi permettere cambio username
-    delete updates.role;     // rimuovi se vuoi permettere cambio ruolo
-    delete updates.password; // per cambio password usa l'endpoint dedicato
+    delete updates.username; // togli se vuoi permetterlo
+    delete updates.role;     // togli se vuoi permetterlo
+    delete updates.password; // cambia via endpoint dedicato
 
     const updated = await User.findOneAndUpdate(filter, { $set: updates }, { new: true })
       .select("-password")
@@ -156,7 +201,10 @@ router.put("/:id", async (req, res) => {
  *     tags: [Users]
  *     summary: Cambia password (legacyId o _id)
  *     parameters:
- *       - $ref: '#/components/parameters/IdPath'
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { oneOf: [{ type: string, pattern: "^[a-fA-F0-9]{24}$" }, { type: string, pattern: "^\\d+$" }] }
  *     requestBody:
  *       required: true
  *       content:
@@ -168,14 +216,13 @@ router.put("/:id", async (req, res) => {
  *               password: { type: string, example: "Nu0v@P4ss!" }
  *     responses:
  *       204: { description: Password aggiornata }
- *       404: { $ref: '#/components/responses/NotFound' }
+ *       404: { description: Not Found }
  */
-router.put("/:id/password", async (req, res) => {
+router.put("/:id([a-fA-F0-9]{24}|\\d+)/password", async (req, res) => {
   try {
     const param = String(req.params.id);
-    const n = Number(param);
-    const filter = isObjectId(param) ? { _id: param } : Number.isFinite(n) ? { legacyId: n } : null;
-    if (!filter) return res.status(400).json({ message: "id non valido" });
+    const isObjectId = /^[a-f0-9]{24}$/i.test(param);
+    const filter = isObjectId ? { _id: param } : { legacyId: Number(param) };
 
     const { password } = req.body || {};
     if (!password) return res.status(400).json({ message: "password obbligatoria" });
@@ -198,18 +245,19 @@ router.put("/:id/password", async (req, res) => {
  *     tags: [Users]
  *     summary: Cancella account (legacyId o _id)
  *     parameters:
- *       - $ref: '#/components/parameters/IdPath'
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { oneOf: [{ type: string, pattern: "^[a-fA-F0-9]{24}$" }, { type: string, pattern: "^\\d+$" }] }
  *     responses:
  *       204: { description: Cancellato }
- *       404: { $ref: '#/components/responses/NotFound' }
- *       500: { description: Errore interno }
+ *       404: { description: Not Found }
  */
-router.delete("/:id", async (req, res) => {
+router.delete("/:id([a-fA-F0-9]{24}|\\d+)", async (req, res) => {
   try {
     const param = String(req.params.id);
-    const n = Number(param);
-    const filter = isObjectId(param) ? { _id: param } : Number.isFinite(n) ? { legacyId: n } : null;
-    if (!filter) return res.status(400).json({ message: "id non valido" });
+    const isObjectId = /^[a-f0-9]{24}$/i.test(param);
+    const filter = isObjectId ? { _id: param } : { legacyId: Number(param) };
 
     const deleted = await User.findOneAndDelete(filter);
     if (!deleted) return res.status(404).json({ message: "Utente not found" });
@@ -221,46 +269,6 @@ router.delete("/:id", async (req, res) => {
   }
 });
 
-/**
- * @swagger
- * /users/restaurants:
- *   get:
- *     tags: [Users, fetch]
- *     summary: Lista ristoratori (compat)
- *     responses:
- *       200:
- *         description: Elenco ristoranti/ristoratori
- */
-router.get("/restaurants", async (req, res) => {
-  try {
-    // preferisci la tabella ristoranti dedicata (più completa)
-    const restaurants = await Restaurant.find().lean();
-    if (restaurants.length) {
-      const out = restaurants.map((r) => ({
-        nome: r.nome,
-        location: r.luogo || "",
-        telefono: r.telefono || "",
-        partitaIVA: r.partitaIva || "",
-        restaurantId: r.restaurantId,
-      }));
-      return res.json(out);
-    }
-
-    // fallback: dagli utenti con role="ristoratore"
-    const users = await User.find({ role: "ristoratore" }).lean();
-    const out = users.map((u) => ({
-      nome: `${u.username} Ristorante`,
-      location: u.luogo || "",
-      telefono: u.telefono || "",
-      partitaIVA: u.partitaIva || "",
-      restaurantId: u.restaurantId || null,
-    }));
-    res.json(out);
-  } catch (err) {
-    console.error("Error GET /users/restaurants:", err);
-    res.status(500).json({ message: "Error in restaurateur recovery" });
-  }
-});
-
 module.exports = router;
+
 
