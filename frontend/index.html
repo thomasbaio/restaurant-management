@@ -28,12 +28,12 @@
     <!-- può restare client-only -->
     <a href="ricerca_ristoranti.html" data-client-only>Search restaurants</a>
 
-    <!-- spacer per spingere il carrello a destra -->
+    <!-- spacer per spingere i link a destra -->
     <span class="spacer"></span>
 
-    <!-- carrello sulla stessa riga dei link -->
-    <button id="openCartBtn" class="btn primary">
-      Cart <span id="cartBadge" class="badge">0</span>
+    <!-- ORDERS sulla stessa riga dei link (niente badge) -->
+    <button id="openOrdersBtn" class="btn primary">
+      Orders
     </button>
 
     <!-- link per ristoratore -->
@@ -41,11 +41,7 @@
     <a id="link-statistiche" href="statistiche_ristoratore.html" style="display:none;">Statistics</a>
   </div>
 
-  <!-- Filtro ingredienti (client-only) -->
-  <div id="filter-container" data-client-only style="margin-bottom: 20px;">
-    <label for="filter-ingredient"><strong>Filter by ingredient:</strong></label>
-    <input type="text" id="filter-ingredient" placeholder="e.g. tomato, mozzarella..." />
-  </div>
+  <!-- (RIMOSSO) Drawer carrello -->
 
   <!-- Offerte speciali (solo clienti) -->
   <h2 data-client-only>Personalized offers only</h2>
@@ -59,23 +55,6 @@
     <div id="menu-by-restaurant"></div>
   </section>
 
-  <!-- Drawer carrello -->
-  <aside id="cartDrawer" class="drawer" aria-hidden="true" aria-label="Carrello">
-    <header>
-      <strong>Il tuo carrello</strong>
-      <button id="closeCart" class="btn ghost">Chiudi</button>
-    </header>
-    <main id="cartLines"></main>
-    <footer>
-      <div>
-        <div style="font-size:.9rem; color:#6b7280;">Totale</div>
-        <div id="cartTotal" style="font-weight:800; font-size:1.3rem;">€0.00</div>
-      </div>
-      <div style="display:flex; gap:8px;">
-      </div>
-    </footer>
-  </aside>
-
   <!-- footer con loghi tecnologia -->
   <footer class="tech-footer">
     <p style="margin:0 0 50px;">Powered by</p>
@@ -88,10 +67,9 @@
 
   <!-- script -->
   <script src="js/main.js" defer></script>
-  <script src="js/main.homepage-cart.js" defer></script>
-  
+  <!-- (RIMOSSO) <script src="js/main.homepage-cart.js" defer></script> -->
 
- <script>
+  <script>
   window.addEventListener("DOMContentLoaded", () => {
     // Leggi in sicurezza l'utente
     let user = null;
@@ -104,24 +82,17 @@
     const linkRestaurantOrders = document.getElementById("link-ordini-ristoratore");
     const linkStatistics = document.getElementById("link-statistiche");
 
-    // === Cart: porta alla pagina cart.html e inizializza badge ===
-    const openCartBtn = document.getElementById("openCartBtn");
-    if (openCartBtn) {
-      openCartBtn.addEventListener("click", (e) => {
+    // === Orders: porta alla pagina ordini cliente ===
+    const openOrdersBtn = document.getElementById("openOrdersBtn");
+    if (openOrdersBtn) {
+      openOrdersBtn.addEventListener("click", (e) => {
         e.preventDefault();
-        location.href = "cart.html";
+        // pagina ordini cliente (già presente tra i link dinamici come "My orders")
+        location.href = "i-miei-ordini.html";
       });
     }
-    // Badge iniziale
-    const CART_KEY = "cart_home_v2";
-    try {
-      const cart = JSON.parse(localStorage.getItem(CART_KEY) || "[]");
-      const count = cart.reduce((s, it) => s + (Number(it.qty)||0), 0);
-      const badge = document.getElementById("cartBadge");
-      if (badge) badge.textContent = String(count);
-    } catch {}
 
-    // ======= resto della tua logica utente / link dinamici =======
+    // ======= logica utente / link dinamici =======
     [linkRestaurantOrders, linkStatistics].forEach(el => { if (el) el.style.display = "none"; });
 
     if (user && user.username) {
@@ -153,8 +124,8 @@
       }
     } else {
       if (noti) {
-        noti.innerHTML = `Sei libero di sfogliare i menu. 
-          Accedi come cliente per completare il checkout del carrello. 
+        noti.innerHTML = `Sei libero di sfogliare i menu.
+          Accedi come cliente per effettuare ordini.
           <a href="login.html">Vai al login</a>`;
         noti.style.display = "block";
       }
@@ -165,7 +136,7 @@
       `;
     }
   });
-</script>
+  </script>
 
 </body>
 </html>
