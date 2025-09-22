@@ -22,13 +22,42 @@ function updateBadge(cart = readCart()) {
   b.textContent = String(totQty);
 }
 
+// parser robusto per stringhe-prezzo: "€10", "10,00", "1.234,56", "EUR 12.5", ecc.
+function parsePriceLike(v) {
+  if (v == null) return NaN;
+  if (typeof v === "number") return v;
+  if (typeof v !== "string") return NaN;
+
+  let s = v.trim();
+  if (!s) return NaN;
+
+  // tieni solo cifre, virgole, punti e segno
+  s = s.replace(/[^\d.,-]/g, "");
+
+  const hasComma = s.includes(",");
+  const hasDot   = s.includes(".");
+
+  if (hasComma && hasDot) {
+    // "1.234,56" -> "1234,56" -> "1234.56"
+    s = s.replace(/\./g, "").replace(",", ".");
+  } else if (hasComma && !hasDot) {
+    // "10,50" -> "10.50"
+    s = s.replace(",", ".");
+  }
+  const n = Number(s);
+  return Number.isFinite(n) ? n : NaN;
+}
+
 function sanitizeCart(cart) {
-  // qty >=1 e price numerico
-  return (cart || []).map(it => ({
-    ...it,
-    qty: Math.max(1, Number(it.qty || 0)),
-    price: Number(it.price || 0),
-  }));
+  // qty >=1; price numerico (interpretando eventuali stringhe)
+  return (cart || []).map(it => {
+    const parsed = parsePriceLike(it.price);
+    return {
+      ...it,
+      qty: Math.max(1, Number(it.qty || 0)),
+      price: Number.isFinite(parsed) ? parsed : 0
+    };
+  });
 }
 
 function renderCart() {
@@ -62,7 +91,9 @@ function renderCart() {
            onerror="this.src='images/placeholder-dish.jpg'">
       <div>
         <div class="cart-name">${it.name || "Piatto"}</div>
-        <div class="cart-meta">${it.restaurantName || ""}</div>
+        <div class="cart-meta">
+          ${it.category ? (it.category + " — ") : ""}${it.restaurantName || ""}
+        </div>
       </div>
 
       <div class="cart-qty">
@@ -107,8 +138,8 @@ async function checkout() {
   if (!cart.length) return alert("Il carrello è vuoto.");
 
   const payload = {
-    items: cart.map(({ id, name, price, qty, restaurantId, restaurantName }) =>
-      ({ id, name, price, qty, restaurantId, restaurantName })
+    items: cart.map(({ id, name, price, qty, restaurantId, restaurantName /*, image, category */ }) =>
+      ({ id, name, price, qty, restaurantId, restaurantName /*, image, category */ })
     ),
     total: cart.reduce((s, it) => s + (Number(it.price) * Number(it.qty)), 0),
     when: new Date().toISOString(),
