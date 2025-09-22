@@ -4,7 +4,7 @@
 
   const CART_KEY = "cart_home_v2";
 
-  /* ============ helpers cart ============ */
+  /* ===== cart ===== */
   function readCart() {
     try { return JSON.parse(localStorage.getItem(CART_KEY) || "[]"); }
     catch { return []; }
@@ -21,33 +21,9 @@
     const count = cart.reduce((s, it) => s + (Number(it.qty) || 0), 0);
     badge.textContent = String(count);
   }
-  const money = (n) => `€${Number(n || 0).toFixed(2)}`;
-  const parseMoney = (txt) => {
-    const n = Number(String(txt).replace(/[^\d.,-]/g, "").replace(",", "."));
-    return Number.isFinite(n) ? n : 0;
-  };
 
-  /* ============ pricing & fields ============ */
-  const PRICE_BY_CATEGORY = {
-    Dessert: 4.5, Breakfast: 5.0, Starter: 6.0, Side: 4.0, Miscellaneous: 7.0,
-    Vegetarian: 8.0, Vegan: 8.5, Pasta: 9.5, Chicken: 10.5, Pork: 11.0,
-    Beef: 12.0, Lamb: 13.0, Seafood: 14.0
-  };
-  const fallbackPrice = (cat) => {
-    if (!cat) return 8.9;
-    const key = String(cat).toLowerCase();
-    const hit = Object.keys(PRICE_BY_CATEGORY).find(k => k.toLowerCase() === key);
-    return hit ? PRICE_BY_CATEGORY[hit] : 8.9;
-  };
-
-  function mealCategory(m)   { return m?.tipologia ?? m?.category ?? m?.strCategory ?? ""; }
-  function mealName(m)       { return m?.name ?? m?.nome ?? m?.strMeal ?? "Dish"; }
-  function mealPrice(m) {
-    const v = [m?.prezzo, m?.price, m?.cost, m?.strPrice].find(x => x != null);
-    const n = Number(v);
-    return Number.isFinite(n) ? n : 0;
-  }
-
+  /* ===== helpers ===== */
+  function money(n) { return `€${Number(n || 0).toFixed(2)}`; }
   function isValidImgPath(s) {
     if (typeof s !== "string") return false;
     const t = s.trim();
@@ -55,7 +31,8 @@
     return /^https?:\/\//i.test(t) || t.startsWith("//") || t.startsWith("/");
   }
   function firstImage(p) {
-    const src = p || {}, raw = src._raw || src.raw || {};
+    const src = p || {};
+    const raw = src._raw || src.raw || {};
     const candidates = [
       src.immagine, src.foto, src.strMealThumb, src.image, src.thumb, src.picture, src.img,
       raw.immagine, raw.foto, raw.strMealThumb, raw.image, raw.thumb, raw.picture, raw.img,
@@ -74,13 +51,35 @@
     }
     return out;
   }
+  function mealName(m) {
+    return m?.name ?? m?.nome ?? m?.strMeal ?? "Untitled dish";
+  }
+  function mealPrice(m) {
+    const candidates = [m?.prezzo, m?.price, m?.cost];
+    const v = candidates.find(v => v !== undefined && v !== null);
+    const n = Number(v);
+    return Number.isFinite(n) ? n : 0;
+  }
+  function mealCategory(m) {
+    return m?.tipologia ?? m?.category ?? m?.strCategory ?? "";
+  }
 
-  /* ============ state ============ */
+  // Prezzi di fallback per categorie TheMealDB / tue
+  const PRICE_BY_CATEGORY = {
+    Dessert: 4.5, Breakfast: 5.0, Starter: 6.0, Side: 4.0, Miscellaneous: 7.0,
+    Vegetarian: 8.0, Vegan: 8.5, Pasta: 9.5, Chicken: 10.5, Pork: 11.0,
+    Beef: 12.0, Lamb: 13.0, Seafood: 14.0, Fish: 13.0
+  };
+  function fallbackPrice(cat) {
+    if (!cat) return 8.9;
+    const key = String(cat).toLowerCase();
+    const hit = Object.keys(PRICE_BY_CATEGORY).find(k => k.toLowerCase() === key);
+    return hit ? PRICE_BY_CATEGORY[hit] : 8.9;
+  }
+
+  /* ===== data ===== */
   const container = document.getElementById("menu-by-restaurant");
   const filterInput = document.getElementById("filter-ingredient");
-  let RAW = [];
-  let FLAT = [];
-  const MAP = new Map(); // key -> normalized item for cart
 
   async function apiGet(path) {
     const ctrl = new AbortController();
@@ -92,6 +91,9 @@
     } finally { clearTimeout(t); }
   }
 
+  let RAW = [];
+  let FLAT = [];
+
   function flatten(data) {
     const out = [];
     (data || []).forEach(r => {
@@ -102,13 +104,35 @@
     return out;
   }
 
-  /* ============ render ============ */
-  function makeAddBtn(key) {
+  function makeAddBtn(payload) {
     const btn = document.createElement("button");
-    btn.className = "btn primary add-to-cart";
-    btn.type = "button";
+    btn.className = "btn primary";
     btn.textContent = "Add to cart";
-    btn.dataset.key = key;
+    // dataset sicuri
+    btn.dataset.id = payload.id;
+    btn.dataset.name = payload.name;
+    btn.dataset.price = String(payload.price);
+    btn.dataset.rid = String(payload.rid ?? "");
+    btn.dataset.rname = payload.rname;
+    btn.dataset.category = payload.category || "";
+    btn.dataset.image = payload.image || "";
+
+    btn.addEventListener("click", () => {
+      addToCart({
+        id: btn.dataset.id,
+        name: btn.dataset.name,
+        price: btn.dataset.price,
+        rid: btn.dataset.rid,
+        rname: btn.dataset.rname,
+        category: btn.dataset.category,
+        image: btn.dataset.image,
+      });
+      btn.disabled = true;
+      const old = btn.textContent;
+      btn.textContent = "Added!";
+      setTimeout(() => { btn.disabled = false; btn.textContent = old; }, 900);
+    });
+
     return btn;
   }
 
@@ -118,7 +142,6 @@
 
     const needle = (filterInput?.value || "").trim().toLowerCase();
     const byRest = new Map();
-
     for (const row of FLAT) {
       const ings = extractIngredients(row.m).map(s => s.toLowerCase());
       if (needle && !ings.some(x => x.includes(needle))) continue;
@@ -136,7 +159,6 @@
       const rname = info.rname;
       const section = document.createElement("div");
       section.className = "ristorante-section";
-      section.dataset.restaurantId = String(info.rid ?? "");
 
       const h = document.createElement("h3");
       h.className = "ristorante-title";
@@ -147,24 +169,20 @@
       grid.className = "cards";
 
       items.forEach(({ rid, rname, m }) => {
-        const rawId = m.idmeals ?? m.idMeal ?? m.id ?? m._id;
-        const id    = (rawId != null) ? String(rawId) : `${rid || "x"}::${mealName(m)}`;
-        const name  = mealName(m);
-        const cat   = mealCategory(m);
-        const img   = firstImage(m);
+        const idRaw = m.idmeals ?? m.id ?? m._id ?? m.idMeal;
+        const name = mealName(m);
+        const cat  = mealCategory(m);
+        const img  = firstImage(m);
 
-        // prezzo = valore reale se presente, altrimenti per categoria
-        const priceVal = mealPrice(m);
-        const price    = (Number.isFinite(priceVal) && priceVal > 0) ? priceVal : fallbackPrice(cat);
+        // prezzo reale o fallback per categoria
+        const priceReal = mealPrice(m);
+        const price = (Number(priceReal) > 0) ? Number(priceReal) : fallbackPrice(cat);
 
-        // memorizza oggetto NORMALIZZATO usato sia dal click che dal carrello
-        const key = `${id}|${rid ?? ""}`;
-        MAP.set(key, { id, name, price, image: img, category: cat, rid, rname });
+        // se manca un id, usa fallback stabile
+        const id = (idRaw !== undefined && idRaw !== null) ? String(idRaw) : `${rid || "x"}:${name}`;
 
-        // --- Card UI
         const card = document.createElement("article");
         card.className = "card dish";
-        card.dataset.key = key;
 
         const imgtag = document.createElement("img");
         imgtag.className = "dish-img";
@@ -187,12 +205,18 @@
           ingBox.appendChild(chip);
         }
         const ings = extractIngredients(m);
-        ings.forEach(x => {
-          const chip = document.createElement("span");
-          chip.className = "chip";
-          chip.textContent = x;
-          ingBox.appendChild(chip);
-        });
+        if (ings.length) {
+          ings.forEach(x => {
+            const chip = document.createElement("span");
+            chip.className = "chip";
+            chip.textContent = x;
+            ingBox.appendChild(chip);
+          });
+        } else if (!cat) {
+          const em = document.createElement("em");
+          em.textContent = "No ingredients";
+          ingBox.appendChild(em);
+        }
 
         const foot = document.createElement("div");
         foot.className = "dish-foot";
@@ -201,13 +225,17 @@
         priceSpan.className = "dish-price";
         priceSpan.textContent = money(price);
 
-        const btn = makeAddBtn(key);
+        const btn = makeAddBtn({
+          id, name, price, rid, rname, category: cat, image: img
+        });
 
         foot.appendChild(priceSpan);
         foot.appendChild(btn);
+
         body.appendChild(title);
         body.appendChild(ingBox);
         body.appendChild(foot);
+
         card.appendChild(imgtag);
         card.appendChild(body);
         grid.appendChild(card);
@@ -218,49 +246,49 @@
     }
   }
 
-  /* ============ click (delegazione) ============ */
-  if (container) {
-    container.addEventListener("click", (e) => {
-      const btn = e.target.closest(".add-to-cart");
-      if (!btn) return;
-      e.preventDefault();
+  function addToCart({ id, name, price, rid, rname, category, image }) {
+    const cart = readCart();
+    if (!id) {
+      console.warn("[CART] id mancante, non aggiungo", { id, name, price, rid, rname });
+      alert("Impossibile aggiungere il piatto: ID mancante.");
+      return;
+    }
 
-      const key = btn.dataset.key || btn.closest(".card.dish")?.dataset.key || "";
-      const info = MAP.get(key);
-      if (!info) return console.warn("[CART] key non trovata");
+    // prezzo definitivo (se vuoto/0 usa fallback per categoria)
+    let effPrice = Number(price);
+    if (!Number.isFinite(effPrice) || effPrice <= 0) {
+      effPrice = fallbackPrice(category);
+    }
 
-      // salva anche image/category
-      const cart = readCart();
-      const idx = cart.findIndex(x => String(x.id) === String(info.id));
-      if (idx >= 0) cart[idx].qty = (Number(cart[idx].qty) || 0) + 1;
-      else cart.push({
-        id: info.id,
-        name: info.name,
-        price: info.price,
-        image: info.image,
-        category: info.category,
+    const idx = cart.findIndex(it => String(it.id) === String(id));
+    if (idx >= 0) {
+      cart[idx].qty = (Number(cart[idx].qty) || 0) + 1;
+    } else {
+      cart.push({
+        id: String(id),
+        name: String(name || ""),
+        price: effPrice,
         qty: 1,
-        restaurantId: info.rid ?? null,
-        restaurantName: info.rname || ""
+        restaurantId: rid ?? null,
+        restaurantName: String(rname || ""),
+        category: category || "",
+        image: image || ""
       });
-      saveCart(cart);
-
-      btn.disabled = true;
-      const old = btn.textContent;
-      btn.textContent = "Added!";
-      setTimeout(() => { btn.disabled = false; btn.textContent = old || "Add to cart"; }, 900);
-    });
+    }
+    saveCart(cart);
   }
 
-  if (filterInput) filterInput.addEventListener("input", render);
+  if (filterInput) {
+    filterInput.addEventListener("input", render);
+  }
 
-  /* ============ boot ============ */
   async function boot() {
     updateBadge();
     try {
-      RAW = await apiGet("/meals");
+      const data = await apiGet("/meals"); // array di ristoranti
+      RAW = data;
       FLAT = flatten(RAW);
-      console.log("[MEALS] caricati:", FLAT.length, "piatti");
+      console.log("[MEALS] caricati:", FLAT);
       render();
     } catch (err) {
       console.error("[MEALS] errore caricamento:", err);
@@ -269,4 +297,5 @@
   }
   window.addEventListener("DOMContentLoaded", boot);
 })();
+
 
