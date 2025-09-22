@@ -45,26 +45,22 @@
     }
   };
 
-  /* ============= helpers UI / data ============= */
-  function money(n) { return `€${Number(n || 0).toFixed(2)}`; }
-  function parseMoney(txt) {
-    const n = Number(String(txt).replace(/[^\d.,-]/g, "").replace(",", "."));
+  /* ================= helpers ================= */
+  const money = n => `€${Number(n || 0).toFixed(2)}`;
+  const parseMoney = t => {
+    const n = Number(String(t).replace(/[^\d.,-]/g, "").replace(",", "."));
     return Number.isFinite(n) ? n : 0;
-  }
-  function isValidImgPath(s) {
-    if (typeof s !== "string") return false;
-    const t = s.trim();
-    if (!t || t === "-" || t === "#") return false;
-    return /^https?:\/\//i.test(t) || t.startsWith("//") || t.startsWith("/");
-  }
+  };
+  const isValidImg = s => typeof s === "string" && !!s.trim() &&
+    (/^https?:\/\//i.test(s) || s.startsWith("//") || s.startsWith("/"));
+
   function firstImage(p) {
-    const src = p || {};
-    const raw = src._raw || src.raw || {};
-    const candidates = [
+    const src = p || {}, raw = src._raw || src.raw || {};
+    const cands = [
       src.immagine, src.foto, src.strMealThumb, src.image, src.thumb, src.picture, src.img,
       raw.immagine, raw.foto, raw.strMealThumb, raw.image, raw.thumb, raw.picture, raw.img,
     ];
-    for (const u of candidates) if (isValidImgPath(u)) return u;
+    for (const u of cands) if (isValidImg(u)) return u;
     return "images/placeholder.png";
   }
   function extractIngredients(p) {
@@ -78,20 +74,19 @@
     }
     return out;
   }
-  function mealName(m) { return m?.name ?? m?.nome ?? m?.strMeal ?? "Untitled dish"; }
-  function mealPrice(m) {
-    const candidates = [m?.prezzo, m?.price, m?.cost, m?.strPrice];
-    const v = candidates.find(v => v !== undefined && v !== null);
+  const mealName  = m => m?.name ?? m?.nome ?? m?.strMeal ?? "Untitled dish";
+  const mealPrice = m => {
+    const v = [m?.prezzo, m?.price, m?.cost, m?.strPrice].find(x => x != null);
     const n = Number(v);
     return Number.isFinite(n) ? n : 0;
-  }
+  };
 
-  /* ============= stato e fetch ============= */
-  const container   = document.getElementById("menu-by-restaurant");
+  /* ================= state ================= */
+  const container = document.getElementById("menu-by-restaurant");
   const filterInput = document.getElementById("filter-ingredient");
   let RAW = [];
-  let FLAT = [];   // [{ r, rid, rname, m }]
-  let MEAL_BY_KEY = new Map(); // chiave -> oggetto piatto (per recupero certo al click)
+  let FLAT = [];           // [{ r, rid, rname, m }]
+  const MAP = new Map();   // key -> { id, name, price, rid, rname }
 
   async function apiGet(path) {
     const ctrl = new AbortController();
@@ -102,8 +97,7 @@
       return await res.json();
     } finally { clearTimeout(t); }
   }
-
-  function flatten(data) {
+  const flatten = (data) => {
     const out = [];
     (data || []).forEach(r => {
       const rid = r.restaurantId ?? r.id ?? r._id ?? r.legacyId ?? null;
@@ -111,15 +105,15 @@
       (r.menu || []).forEach(m => out.push({ r, rid, rname, m }));
     });
     return out;
-  }
+  };
 
-  /* ============= render ============= */
-  function makeAddBtn(payload) {
+  /* ================= render ================= */
+  function makeAddBtn(key) {
     const btn = document.createElement("button");
     btn.className = "btn primary add-to-cart";
-    btn.type = "button";
+    btn.type = "button";           // impedisce submit accidentali
     btn.textContent = "Add to cart";
-    btn.dataset.key = payload.key;      // 👈 usiamo una chiave sicura invece di vari dataset sparsi
+    btn.dataset.key = key;         // usiamo UNA chiave sicura
     return btn;
   }
 
@@ -164,12 +158,10 @@
         const img   = firstImage(m);
         const ings  = extractIngredients(m);
 
-        // chiave stabile (serve anche se manca l'id)
-        const id = (rawId !== undefined && rawId !== null) ? String(rawId) : `${rid || "x"}::${name}`;
+        // key stabile (anche se manca l'id)
+        const id  = (rawId != null) ? String(rawId) : `${rid || "x"}::${name}`;
         const key = `${id}|${rid ?? ""}`;
-
-        // mappa per recupero sicuro al click
-        MEAL_BY_KEY.set(key, { id, rid, rname, name, price });
+        MAP.set(key, { id, name, price, rid, rname });
 
         const card = document.createElement("article");
         card.className = "card dish";
@@ -209,7 +201,7 @@
         priceSpan.className = "dish-price";
         priceSpan.textContent = money(price);
 
-        const btn = makeAddBtn({ key });
+        const btn = makeAddBtn(key);
 
         foot.appendChild(priceSpan);
         foot.appendChild(btn);
@@ -226,40 +218,22 @@
     }
   }
 
-  /* ============= delega click ============= */
+  /* ================= click handlers (tripla rete) ================= */
+  // A) Delegazione sul container ufficiale
   if (container) {
     container.addEventListener("click", (e) => {
       const btn = e.target.closest(".add-to-cart");
       if (!btn) return;
+      e.preventDefault(); e.stopPropagation();
 
-      // ricava la chiave dal bottone o dalla card
-      let key = btn.dataset.key || "";
-      if (!key) {
-        const card = btn.closest(".card.dish");
-        key = card?.dataset.key || "";
-      }
-      if (!key) {
-        console.warn("[CART] key mancante sul bottone");
+      let key = btn.dataset.key || btn.closest(".card.dish")?.dataset.key || "";
+      const info = MAP.get(key);
+      if (!info) {
+        console.warn("[CART] key mancante o non trovata");
         return;
       }
+      Cart.add(info);
 
-      // prendi i dati sicuri dalla mappa
-      const info = MEAL_BY_KEY.get(key);
-      if (!info) {
-        // fallback dal DOM (non dovrebbe servire, ma per sicurezza)
-        const card = btn.closest(".card.dish");
-        const name  = card?.querySelector(".dish-title")?.textContent?.trim() || "";
-        const price = parseMoney(card?.querySelector(".dish-price")?.textContent || "");
-        const section = btn.closest(".ristorante-section");
-        const rname = section?.querySelector(".ristorante-title")?.textContent?.trim() || "";
-        const rid   = section?.dataset.restaurantId || "";
-        const id    = (card?.dataset.id) || "";
-        Cart.add({ id, name, price, rid, rname });
-      } else {
-        Cart.add(info);
-      }
-
-      // feedback
       btn.disabled = true;
       const old = btn.textContent;
       btn.textContent = "Added!";
@@ -267,29 +241,76 @@
     });
   }
 
-  /* ============= filtro ============= */
-  if (filterInput) filterInput.addEventListener("input", render);
+  // B) Attacco diretto (nel raro caso il DOM venga mosso fuori dal container)
+  document.addEventListener("click", (e) => {
+    const btn = e.target.closest(".add-to-cart");
+    if (!btn) return;
+    if (btn.closest("#menu-by-restaurant")) return; // già gestito sopra
+    e.preventDefault(); e.stopPropagation();
 
-  /* ============= boot ============= */
+    const key = btn.dataset.key || btn.closest(".card.dish")?.dataset.key || "";
+    const info = MAP.get(key);
+    if (!info) return console.warn("[CART] (doc) key non mappata");
+    Cart.add(info);
+  }, true);
+
+  // C) Rete di sicurezza: qualunque button/link con testo “Add to cart”
+  document.addEventListener("click", (e) => {
+    const el = e.target.closest("button, a");
+    if (!el) return;
+    const txt = (el.textContent || "").trim().toLowerCase();
+    if (!txt || !/add\s*to\s*cart/.test(txt)) return;
+    if (el.classList.contains("add-to-cart")) return; // già gestito
+
+    e.preventDefault(); e.stopPropagation();
+    // pesca dal contesto visivo
+    const card = el.closest(".card.dish");
+    const name = card?.querySelector(".dish-title")?.textContent?.trim() || "";
+    const price = parseMoney(card?.querySelector(".dish-price")?.textContent || "");
+    const section = el.closest(".ristorante-section");
+    const rname = section?.querySelector(".ristorante-title")?.textContent?.trim() || "";
+    const rid   = section?.dataset.restaurantId || "";
+    const id    = card?.dataset.id || "";
+    Cart.add({ id, name, price, rid, rname });
+  }, true);
+
+  /* ================= filtro ================= */
+  const onFilter = () => render();
+  if (filterInput) filterInput.addEventListener("input", onFilter);
+
+  /* ================= boot ================= */
   async function boot() {
-    Cart.updateBadge(); // badge iniziale
+    Cart.updateBadge();
     try {
-      RAW = await apiGet("/meals");
-      FLAT = flatten(RAW);
-      window.__MEALS_ALL__ = FLAT.map(x => x.m); // utile per debug
+      RAW  = await apiGet("/meals");
+      FLAT = (Array.isArray(RAW) ? RAW : []);
+      FLAT = (FLAT.length ? FLAT : []); // hard guard
+      FLAT = FLAT.flatMap(r => {
+        const rid = r.restaurantId ?? r.id ?? r._id ?? r.legacyId ?? null;
+        const rname = r.nome ?? r.name ?? r.restaurantName ?? `Restaurant ${rid ?? ""}`.trim();
+        return (r.menu || []).map(m => ({ r, rid, rname, m }));
+      });
+      window.__MEALS_ALL__ = FLAT.map(x => x.m); // debug
       console.log("[MEALS] caricati:", FLAT);
       render();
     } catch (err) {
       console.error("[MEALS] errore caricamento:", err);
-      if (container) container.innerHTML = `<div class="error">Errore nel caricare i piatti.</div>`;
+      const c = document.getElementById("menu-by-restaurant");
+      if (c) c.innerHTML = `<div class="error">Errore nel caricare i piatti.</div>`;
     }
   }
   window.addEventListener("DOMContentLoaded", boot);
 
-  // utilità per debug
+  /* ================= debug veloci ================= */
   window.__cart = {
     read: () => Cart.read(),
-    clear: () => { localStorage.removeItem(CART_KEY); Cart.updateBadge([]); console.log("[CART] cleared"); }
+    clear: () => { localStorage.removeItem(CART_KEY); Cart.updateBadge([]); console.log("[CART] cleared"); },
+    addFirst: () => {                   // aggiunge il primo piatto visibile
+      const first = MAP.values().next().value;
+      if (!first) return console.warn("Nessun piatto in MAP");
+      Cart.add(first);
+    }
   };
 })();
+;
 
