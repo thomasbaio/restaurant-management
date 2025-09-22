@@ -32,8 +32,9 @@
       const cart = this.read();
       const safeId = this.ensureId({ id, rid, name });
 
-      // prezzo definitivo (no fallback a 8.90 se abbiamo un valore valido)
-      const effPrice = Number.isFinite(Number(price)) && Number(price) > 0 ? Number(price) : 8.9;
+      // usa il parser robusto anche qui
+      const parsed = parsePriceLike(price);
+      const effPrice = (Number.isFinite(parsed) && parsed > 0) ? parsed : 8.9;
 
       const i = cart.findIndex(x => String(x.id) === String(safeId));
       if (i >= 0) {
@@ -62,40 +63,48 @@
     if (v == null) return NaN;
     if (typeof v === "number") return v;
     if (typeof v !== "string") return NaN;
-
     let s = v.trim();
     if (!s) return NaN;
-
-    // tieni solo cifre, virgole, punti e segno
-    s = s.replace(/[^\d.,-]/g, "");
-
+    s = s.replace(/[^\d.,-]/g, ""); // tieni solo numeri, , . e -
     const hasComma = s.includes(",");
     const hasDot   = s.includes(".");
-
     if (hasComma && hasDot) {
-      // caso "1.234,56" -> remove "." (migliaia), "," -> "."
       s = s.replace(/\./g, "").replace(",", ".");
     } else if (hasComma && !hasDot) {
-      // "10,50" -> "10.50"
       s = s.replace(",", ".");
-    } else {
-      // "10.50" o "1050" -> lascia così
     }
-
     const n = Number(s);
     return Number.isFinite(n) ? n : NaN;
   }
 
-  const isValidImg = s => typeof s === "string" && !!s.trim() &&
-    (/^https?:\/\//i.test(s) || s.startsWith("//") || s.startsWith("/"));
+  // accetta anche path relativi tipo "images/..." o "./img/..."
+  const isValidImg = s => {
+    if (typeof s !== "string") return false;
+    const t = s.trim();
+    if (!t || t === "-" || t === "#") return false;
+    if (/^https?:\/\//i.test(t) || t.startsWith("//") || t.startsWith("/")) return true;
+    // relative file path con estensione immagine
+    if (/^(?:\.{0,2}\/)?[^?#]+\.(?:png|jpe?g|webp|gif|avif|svg)$/i.test(t)) return true;
+    return false;
+  };
 
   function firstImage(p) {
     const src = p || {}, raw = src._raw || src.raw || {};
-    const cands = [
+    const fixed = [
       src.immagine, src.foto, src.strMealThumb, src.image, src.thumb, src.picture, src.img,
       raw.immagine, raw.foto, raw.strMealThumb, raw.image, raw.thumb, raw.picture, raw.img,
     ];
-    for (const u of cands) if (isValidImg(u)) return u;
+    for (const u of fixed) if (isValidImg(u)) return u;
+
+    // scan generico su tutte le proprietà stringa
+    for (const [k, v] of Object.entries(src)) {
+      if (typeof v === "string" && isValidImg(v)) return v;
+      if (typeof v === "string" && /\.(png|jpe?g|webp|gif|avif|svg)(\?|#|$)/i.test(v)) return v;
+    }
+    for (const [k, v] of Object.entries(raw)) {
+      if (typeof v === "string" && isValidImg(v)) return v;
+      if (typeof v === "string" && /\.(png|jpe?g|webp|gif|avif|svg)(\?|#|$)/i.test(v)) return v;
+    }
     return "images/placeholder.png";
   }
 
@@ -114,21 +123,41 @@
   const mealName     = m => m?.name ?? m?.nome ?? m?.strMeal ?? "Untitled dish";
   const mealCategory = m => m?.tipologia ?? m?.category ?? m?.strCategory ?? "";
 
-  // usa parsePriceLike su più possibili campi
-  const mealPrice = m => {
-    const candidates = [m?.prezzo, m?.price, m?.cost, m?.strPrice, m?.costo, m?.priceEUR, m?.prezzoEuro];
+  // usa parsePriceLike su molte possibili chiavi + deep scan di chiavi che "sembrano" prezzo
+  const mealPrice = (m) => {
+    const raw = m?._raw || m?.raw || {};
+    const candidates = [
+      m?.prezzo, m?.price, m?.cost, m?.strPrice, m?.costo, m?.priceEUR, m?.prezzoEuro,
+      raw?.prezzo, raw?.price, raw?.cost, raw?.strPrice, raw?.costo
+    ];
     for (const v of candidates) {
       const n = parsePriceLike(v);
       if (Number.isFinite(n) && n > 0) return n;
     }
-    return NaN; // importante: così distinguiamo tra "nessun prezzo" e "0"
+    // deep scan: trova una chiave che contenga 'price', 'prezz', 'cost', 'amount'
+    const scanObj = (obj) => {
+      for (const [k, v] of Object.entries(obj || {})) {
+        if (v == null) continue;
+        if (typeof v === "number" && v > 0 && /(price|prezz|costo|cost|amount|val)/i.test(k)) return v;
+        if (typeof v === "string" && /(price|prezz|costo|cost|amount|val)/i.test(k)) {
+          const n = parsePriceLike(v);
+          if (Number.isFinite(n) && n > 0) return n;
+        }
+      }
+      return NaN;
+    };
+    const n1 = scanObj(m);
+    if (Number.isFinite(n1) && n1 > 0) return n1;
+    const n2 = scanObj(raw);
+    if (Number.isFinite(n2) && n2 > 0) return n2;
+
+    return NaN; // così sappiamo che non esiste un prezzo valido
   };
 
   /* ================= state ================= */
   const container = document.getElementById("menu-by-restaurant");
   const filterInput = document.getElementById("filter-ingredient");
-  let RAW = [];
-  let FLAT = [];           // [{ r, rid, rname, m }]
+  let FLAT = [];           // [{ rid, rname, m }]
   const MAP = new Map();   // key -> { id, name, price, rid, rname, image, category }
 
   async function apiGet(path) {
@@ -146,7 +175,7 @@
     (data || []).forEach(r => {
       const rid = r.restaurantId ?? r.id ?? r._id ?? r.legacyId ?? null;
       const rname = r.nome ?? r.name ?? r.restaurantName ?? `Restaurant ${rid ?? ""}`.trim();
-      (r.menu || []).forEach(m => out.push({ r, rid, rname, m }));
+      (r.menu || []).forEach(m => out.push({ rid, rname, m }));
     });
     return out;
   };
@@ -155,9 +184,9 @@
   function makeAddBtn(key) {
     const btn = document.createElement("button");
     btn.className = "btn primary add-to-cart";
-    btn.type = "button";           // impedisce submit accidentali
+    btn.type = "button";
     btn.textContent = "Add to cart";
-    btn.dataset.key = key;         // usiamo UNA chiave sicura
+    btn.dataset.key = key;
     return btn;
   }
 
@@ -201,7 +230,7 @@
         const img   = firstImage(m);
         const cat   = mealCategory(m);
 
-        // prezzo: se presente (anche come stringa "€10" o "10,00") lo prendiamo, altrimenti fallback
+        // prezzo reale (parsing robusto) o fallback
         const pReal = mealPrice(m);
         const price = (Number.isFinite(pReal) && pReal > 0) ? pReal : 8.9;
 
@@ -215,6 +244,7 @@
         const card = document.createElement("article");
         card.className = "card dish";
         card.dataset.key = key;
+        card.dataset.id = id; // utile per la rete di sicurezza
 
         const imgtag = document.createElement("img");
         imgtag.className = "dish-img";
@@ -275,7 +305,6 @@
   }
 
   /* ================= click handlers (tripla rete) ================= */
-  // A) Delegazione sul container ufficiale
   if (container) {
     container.addEventListener("click", (e) => {
       const btn = e.target.closest(".add-to-cart");
@@ -297,11 +326,11 @@
     });
   }
 
-  // B) Attacco diretto (nel raro caso il DOM venga mosso fuori dal container)
+  // attacco diretto fuori container
   document.addEventListener("click", (e) => {
     const btn = e.target.closest(".add-to-cart");
     if (!btn) return;
-    if (btn.closest("#menu-by-restaurant")) return; // già gestito sopra
+    if (btn.closest("#menu-by-restaurant")) return;
     e.preventDefault(); e.stopPropagation();
 
     const key = btn.dataset.key || btn.closest(".card.dish")?.dataset.key || "";
@@ -310,17 +339,16 @@
     Cart.add(info);
   }, true);
 
-  // C) Rete di sicurezza: qualunque button/link con testo “Add to cart”
+  // rete di sicurezza testuale
   document.addEventListener("click", (e) => {
     const el = e.target.closest("button, a");
     if (!el) return;
     const txt = (el.textContent || "").trim().toLowerCase();
     if (!txt || !/add\s*to\s*cart/.test(txt)) return;
-    if (el.classList.contains("add-to-cart")) return; // già gestito
+    if (el.classList.contains("add-to-cart")) return;
 
     e.preventDefault(); e.stopPropagation();
 
-    // prova prima con la chiave della card
     const card = el.closest(".card.dish");
     const key  = card?.dataset.key || "";
     if (key && MAP.has(key)) {
@@ -347,13 +375,8 @@
   async function boot() {
     Cart.updateBadge();
     try {
-      RAW  = await apiGet("/meals");
-      FLAT = (Array.isArray(RAW) ? RAW : []);
-      FLAT = FLAT.flatMap(r => {
-        const rid = r.restaurantId ?? r.id ?? r._id ?? r.legacyId ?? null;
-        const rname = r.nome ?? r.name ?? r.restaurantName ?? `Restaurant ${rid ?? ""}`.trim();
-        return (r.menu || []).map(m => ({ r, rid, rname, m }));
-      });
+      const data = await apiGet("/meals");
+      FLAT = flatten(data);
       window.__MEALS_ALL__ = FLAT.map(x => x.m); // debug
       console.log("[MEALS] caricati:", FLAT.length);
       render();
@@ -376,4 +399,5 @@
     }
   };
 })();
+
 
