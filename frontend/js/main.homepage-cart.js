@@ -1,66 +1,66 @@
 (() => {
-  /* ================= base ================= */
   const isLocal = ["localhost", "127.0.0.1"].includes(location.hostname);
   const API_BASE = isLocal ? "http://localhost:3000" : location.origin;
 
-  /* ================= cart ================= */
   const CART_KEY = "cart_home_v2";
 
-  const Cart = {
-    read() {
-      try { return JSON.parse(localStorage.getItem(CART_KEY) || "[]"); }
-      catch { return []; }
-    },
-    write(arr) {
-      localStorage.setItem(CART_KEY, JSON.stringify(arr));
-      this.updateBadge(arr);
-      console.log("[CART] salvato:", arr);
-    },
-    updateBadge(arr = this.read()) {
-      const b = document.getElementById("cartBadge");
-      if (!b) return;
-      const n = arr.reduce((s, x) => s + (Number(x.qty) || 0), 0);
-      b.textContent = String(n);
-    },
-    ensureId({ id, rid, name }) {
-      if (id) return String(id);
-      const base = `${rid || "r"}::${name || "dish"}`;
-      let h = 0; for (let i = 0; i < base.length; i++) h = (h * 31 + base.charCodeAt(i)) >>> 0;
-      return `gen_${h}`;
-    },
-    add({ id, name, price, rid, rname }) {
-      const cart = this.read();
-      const safeId = this.ensureId({ id, rid, name });
-      const i = cart.findIndex(x => String(x.id) === String(safeId));
-      if (i >= 0) cart[i].qty = (Number(cart[i].qty) || 0) + 1;
-      else cart.push({
-        id: String(safeId),
-        name: String(name || ""),
-        price: Number(price) || 0,
-        qty: 1,
-        restaurantId: rid ?? null,
-        restaurantName: String(rname || "")
-      });
-      this.write(cart);
-    }
-  };
-
-  /* ================= helpers ================= */
-  const money = n => `€${Number(n || 0).toFixed(2)}`;
-  const parseMoney = t => {
-    const n = Number(String(t).replace(/[^\d.,-]/g, "").replace(",", "."));
+  /* ============ helpers cart ============ */
+  function readCart() {
+    try { return JSON.parse(localStorage.getItem(CART_KEY) || "[]"); }
+    catch { return []; }
+  }
+  function saveCart(cart) {
+    localStorage.setItem(CART_KEY, JSON.stringify(cart));
+    updateBadge();
+    console.log("[CART] salvato:", cart);
+  }
+  function updateBadge() {
+    const badge = document.getElementById("cartBadge");
+    if (!badge) return;
+    const cart = readCart();
+    const count = cart.reduce((s, it) => s + (Number(it.qty) || 0), 0);
+    badge.textContent = String(count);
+  }
+  const money = (n) => `€${Number(n || 0).toFixed(2)}`;
+  const parseMoney = (txt) => {
+    const n = Number(String(txt).replace(/[^\d.,-]/g, "").replace(",", "."));
     return Number.isFinite(n) ? n : 0;
   };
-  const isValidImg = s => typeof s === "string" && !!s.trim() &&
-    (/^https?:\/\//i.test(s) || s.startsWith("//") || s.startsWith("/"));
 
+  /* ============ pricing & fields ============ */
+  const PRICE_BY_CATEGORY = {
+    Dessert: 4.5, Breakfast: 5.0, Starter: 6.0, Side: 4.0, Miscellaneous: 7.0,
+    Vegetarian: 8.0, Vegan: 8.5, Pasta: 9.5, Chicken: 10.5, Pork: 11.0,
+    Beef: 12.0, Lamb: 13.0, Seafood: 14.0
+  };
+  const fallbackPrice = (cat) => {
+    if (!cat) return 8.9;
+    const key = String(cat).toLowerCase();
+    const hit = Object.keys(PRICE_BY_CATEGORY).find(k => k.toLowerCase() === key);
+    return hit ? PRICE_BY_CATEGORY[hit] : 8.9;
+  };
+
+  function mealCategory(m)   { return m?.tipologia ?? m?.category ?? m?.strCategory ?? ""; }
+  function mealName(m)       { return m?.name ?? m?.nome ?? m?.strMeal ?? "Dish"; }
+  function mealPrice(m) {
+    const v = [m?.prezzo, m?.price, m?.cost, m?.strPrice].find(x => x != null);
+    const n = Number(v);
+    return Number.isFinite(n) ? n : 0;
+  }
+
+  function isValidImgPath(s) {
+    if (typeof s !== "string") return false;
+    const t = s.trim();
+    if (!t || t === "-" || t === "#") return false;
+    return /^https?:\/\//i.test(t) || t.startsWith("//") || t.startsWith("/");
+  }
   function firstImage(p) {
     const src = p || {}, raw = src._raw || src.raw || {};
-    const cands = [
+    const candidates = [
       src.immagine, src.foto, src.strMealThumb, src.image, src.thumb, src.picture, src.img,
       raw.immagine, raw.foto, raw.strMealThumb, raw.image, raw.thumb, raw.picture, raw.img,
     ];
-    for (const u of cands) if (isValidImg(u)) return u;
+    for (const u of candidates) if (isValidImgPath(u)) return u;
     return "images/placeholder.png";
   }
   function extractIngredients(p) {
@@ -74,19 +74,13 @@
     }
     return out;
   }
-  const mealName  = m => m?.name ?? m?.nome ?? m?.strMeal ?? "Untitled dish";
-  const mealPrice = m => {
-    const v = [m?.prezzo, m?.price, m?.cost, m?.strPrice].find(x => x != null);
-    const n = Number(v);
-    return Number.isFinite(n) ? n : 0;
-  };
 
-  /* ================= state ================= */
+  /* ============ state ============ */
   const container = document.getElementById("menu-by-restaurant");
   const filterInput = document.getElementById("filter-ingredient");
   let RAW = [];
-  let FLAT = [];           // [{ r, rid, rname, m }]
-  const MAP = new Map();   // key -> { id, name, price, rid, rname }
+  let FLAT = [];
+  const MAP = new Map(); // key -> normalized item for cart
 
   async function apiGet(path) {
     const ctrl = new AbortController();
@@ -97,7 +91,8 @@
       return await res.json();
     } finally { clearTimeout(t); }
   }
-  const flatten = (data) => {
+
+  function flatten(data) {
     const out = [];
     (data || []).forEach(r => {
       const rid = r.restaurantId ?? r.id ?? r._id ?? r.legacyId ?? null;
@@ -105,15 +100,15 @@
       (r.menu || []).forEach(m => out.push({ r, rid, rname, m }));
     });
     return out;
-  };
+  }
 
-  /* ================= render ================= */
+  /* ============ render ============ */
   function makeAddBtn(key) {
     const btn = document.createElement("button");
     btn.className = "btn primary add-to-cart";
-    btn.type = "button";           // impedisce submit accidentali
+    btn.type = "button";
     btn.textContent = "Add to cart";
-    btn.dataset.key = key;         // usiamo UNA chiave sicura
+    btn.dataset.key = key;
     return btn;
   }
 
@@ -153,16 +148,20 @@
 
       items.forEach(({ rid, rname, m }) => {
         const rawId = m.idmeals ?? m.idMeal ?? m.id ?? m._id;
+        const id    = (rawId != null) ? String(rawId) : `${rid || "x"}::${mealName(m)}`;
         const name  = mealName(m);
-        const price = mealPrice(m);
+        const cat   = mealCategory(m);
         const img   = firstImage(m);
-        const ings  = extractIngredients(m);
 
-        // key stabile (anche se manca l'id)
-        const id  = (rawId != null) ? String(rawId) : `${rid || "x"}::${name}`;
+        // prezzo = valore reale se presente, altrimenti per categoria
+        const priceVal = mealPrice(m);
+        const price    = (Number.isFinite(priceVal) && priceVal > 0) ? priceVal : fallbackPrice(cat);
+
+        // memorizza oggetto NORMALIZZATO usato sia dal click che dal carrello
         const key = `${id}|${rid ?? ""}`;
-        MAP.set(key, { id, name, price, rid, rname });
+        MAP.set(key, { id, name, price, image: img, category: cat, rid, rname });
 
+        // --- Card UI
         const card = document.createElement("article");
         card.className = "card dish";
         card.dataset.key = key;
@@ -181,18 +180,19 @@
 
         const ingBox = document.createElement("div");
         ingBox.className = "dish-ings";
-        if (ings.length) {
-          ings.forEach(x => {
-            const chip = document.createElement("span");
-            chip.className = "chip";
-            chip.textContent = x;
-            ingBox.appendChild(chip);
-          });
-        } else {
-          const em = document.createElement("em");
-          em.textContent = "No ingredients";
-          ingBox.appendChild(em);
+        if (cat) {
+          const chip = document.createElement("span");
+          chip.className = "chip";
+          chip.textContent = cat;
+          ingBox.appendChild(chip);
         }
+        const ings = extractIngredients(m);
+        ings.forEach(x => {
+          const chip = document.createElement("span");
+          chip.className = "chip";
+          chip.textContent = x;
+          ingBox.appendChild(chip);
+        });
 
         const foot = document.createElement("div");
         foot.className = "dish-foot";
@@ -218,21 +218,32 @@
     }
   }
 
-  /* ================= click handlers (tripla rete) ================= */
-  // A) Delegazione sul container ufficiale
+  /* ============ click (delegazione) ============ */
   if (container) {
     container.addEventListener("click", (e) => {
       const btn = e.target.closest(".add-to-cart");
       if (!btn) return;
-      e.preventDefault(); e.stopPropagation();
+      e.preventDefault();
 
-      let key = btn.dataset.key || btn.closest(".card.dish")?.dataset.key || "";
+      const key = btn.dataset.key || btn.closest(".card.dish")?.dataset.key || "";
       const info = MAP.get(key);
-      if (!info) {
-        console.warn("[CART] key mancante o non trovata");
-        return;
-      }
-      Cart.add(info);
+      if (!info) return console.warn("[CART] key non trovata");
+
+      // salva anche image/category
+      const cart = readCart();
+      const idx = cart.findIndex(x => String(x.id) === String(info.id));
+      if (idx >= 0) cart[idx].qty = (Number(cart[idx].qty) || 0) + 1;
+      else cart.push({
+        id: info.id,
+        name: info.name,
+        price: info.price,
+        image: info.image,
+        category: info.category,
+        qty: 1,
+        restaurantId: info.rid ?? null,
+        restaurantName: info.rname || ""
+      });
+      saveCart(cart);
 
       btn.disabled = true;
       const old = btn.textContent;
@@ -241,76 +252,21 @@
     });
   }
 
-  // B) Attacco diretto (nel raro caso il DOM venga mosso fuori dal container)
-  document.addEventListener("click", (e) => {
-    const btn = e.target.closest(".add-to-cart");
-    if (!btn) return;
-    if (btn.closest("#menu-by-restaurant")) return; // già gestito sopra
-    e.preventDefault(); e.stopPropagation();
+  if (filterInput) filterInput.addEventListener("input", render);
 
-    const key = btn.dataset.key || btn.closest(".card.dish")?.dataset.key || "";
-    const info = MAP.get(key);
-    if (!info) return console.warn("[CART] (doc) key non mappata");
-    Cart.add(info);
-  }, true);
-
-  // C) Rete di sicurezza: qualunque button/link con testo “Add to cart”
-  document.addEventListener("click", (e) => {
-    const el = e.target.closest("button, a");
-    if (!el) return;
-    const txt = (el.textContent || "").trim().toLowerCase();
-    if (!txt || !/add\s*to\s*cart/.test(txt)) return;
-    if (el.classList.contains("add-to-cart")) return; // già gestito
-
-    e.preventDefault(); e.stopPropagation();
-    // pesca dal contesto visivo
-    const card = el.closest(".card.dish");
-    const name = card?.querySelector(".dish-title")?.textContent?.trim() || "";
-    const price = parseMoney(card?.querySelector(".dish-price")?.textContent || "");
-    const section = el.closest(".ristorante-section");
-    const rname = section?.querySelector(".ristorante-title")?.textContent?.trim() || "";
-    const rid   = section?.dataset.restaurantId || "";
-    const id    = card?.dataset.id || "";
-    Cart.add({ id, name, price, rid, rname });
-  }, true);
-
-  /* ================= filtro ================= */
-  const onFilter = () => render();
-  if (filterInput) filterInput.addEventListener("input", onFilter);
-
-  /* ================= boot ================= */
+  /* ============ boot ============ */
   async function boot() {
-    Cart.updateBadge();
+    updateBadge();
     try {
-      RAW  = await apiGet("/meals");
-      FLAT = (Array.isArray(RAW) ? RAW : []);
-      FLAT = (FLAT.length ? FLAT : []); // hard guard
-      FLAT = FLAT.flatMap(r => {
-        const rid = r.restaurantId ?? r.id ?? r._id ?? r.legacyId ?? null;
-        const rname = r.nome ?? r.name ?? r.restaurantName ?? `Restaurant ${rid ?? ""}`.trim();
-        return (r.menu || []).map(m => ({ r, rid, rname, m }));
-      });
-      window.__MEALS_ALL__ = FLAT.map(x => x.m); // debug
-      console.log("[MEALS] caricati:", FLAT);
+      RAW = await apiGet("/meals");
+      FLAT = flatten(RAW);
+      console.log("[MEALS] caricati:", FLAT.length, "piatti");
       render();
     } catch (err) {
       console.error("[MEALS] errore caricamento:", err);
-      const c = document.getElementById("menu-by-restaurant");
-      if (c) c.innerHTML = `<div class="error">Errore nel caricare i piatti.</div>`;
+      if (container) container.innerHTML = `<div class="error">Errore nel caricare i piatti.</div>`;
     }
   }
   window.addEventListener("DOMContentLoaded", boot);
-
-  /* ================= debug veloci ================= */
-  window.__cart = {
-    read: () => Cart.read(),
-    clear: () => { localStorage.removeItem(CART_KEY); Cart.updateBadge([]); console.log("[CART] cleared"); },
-    addFirst: () => {                   // aggiunge il primo piatto visibile
-      const first = MAP.values().next().value;
-      if (!first) return console.warn("Nessun piatto in MAP");
-      Cart.add(first);
-    }
-  };
 })();
-;
 
