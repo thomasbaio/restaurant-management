@@ -32,8 +32,8 @@
       const cart = this.read();
       const safeId = this.ensureId({ id, rid, name });
 
-      // fallback prezzo (se 0/NaN)
-      const effPrice = (Number(price) > 0) ? Number(price) : 8.9;
+      // prezzo definitivo (no fallback a 8.90 se abbiamo un valore valido)
+      const effPrice = Number.isFinite(Number(price)) && Number(price) > 0 ? Number(price) : 8.9;
 
       const i = cart.findIndex(x => String(x.id) === String(safeId));
       if (i >= 0) {
@@ -56,10 +56,36 @@
 
   /* ================= helpers ================= */
   const money = n => `€${Number(n || 0).toFixed(2)}`;
-  const parseMoney = t => {
-    const n = Number(String(t).replace(/[^\d.,-]/g, "").replace(",", "."));
-    return Number.isFinite(n) ? n : 0;
-  };
+
+  // parser robusto per stringhe prezzo: "€10", "10,00", "1.234,56", "EUR 12.5", ...
+  function parsePriceLike(v) {
+    if (v == null) return NaN;
+    if (typeof v === "number") return v;
+    if (typeof v !== "string") return NaN;
+
+    let s = v.trim();
+    if (!s) return NaN;
+
+    // tieni solo cifre, virgole, punti e segno
+    s = s.replace(/[^\d.,-]/g, "");
+
+    const hasComma = s.includes(",");
+    const hasDot   = s.includes(".");
+
+    if (hasComma && hasDot) {
+      // caso "1.234,56" -> remove "." (migliaia), "," -> "."
+      s = s.replace(/\./g, "").replace(",", ".");
+    } else if (hasComma && !hasDot) {
+      // "10,50" -> "10.50"
+      s = s.replace(",", ".");
+    } else {
+      // "10.50" o "1050" -> lascia così
+    }
+
+    const n = Number(s);
+    return Number.isFinite(n) ? n : NaN;
+  }
+
   const isValidImg = s => typeof s === "string" && !!s.trim() &&
     (/^https?:\/\//i.test(s) || s.startsWith("//") || s.startsWith("/"));
 
@@ -72,6 +98,7 @@
     for (const u of cands) if (isValidImg(u)) return u;
     return "images/placeholder.png";
   }
+
   function extractIngredients(p) {
     if (!p) return [];
     if (Array.isArray(p.ingredients)) return p.ingredients.filter(Boolean);
@@ -83,13 +110,19 @@
     }
     return out;
   }
-  const mealName  = m => m?.name ?? m?.nome ?? m?.strMeal ?? "Untitled dish";
-  const mealPrice = m => {
-    const v = [m?.prezzo, m?.price, m?.cost, m?.strPrice].find(x => x != null);
-    const n = Number(v);
-    return Number.isFinite(n) ? n : 0;
-  };
+
+  const mealName     = m => m?.name ?? m?.nome ?? m?.strMeal ?? "Untitled dish";
   const mealCategory = m => m?.tipologia ?? m?.category ?? m?.strCategory ?? "";
+
+  // usa parsePriceLike su più possibili campi
+  const mealPrice = m => {
+    const candidates = [m?.prezzo, m?.price, m?.cost, m?.strPrice, m?.costo, m?.priceEUR, m?.prezzoEuro];
+    for (const v of candidates) {
+      const n = parsePriceLike(v);
+      if (Number.isFinite(n) && n > 0) return n;
+    }
+    return NaN; // importante: così distinguiamo tra "nessun prezzo" e "0"
+  };
 
   /* ================= state ================= */
   const container = document.getElementById("menu-by-restaurant");
@@ -107,6 +140,7 @@
       return await res.json();
     } finally { clearTimeout(t); }
   }
+
   const flatten = (data) => {
     const out = [];
     (data || []).forEach(r => {
@@ -167,15 +201,15 @@
         const img   = firstImage(m);
         const cat   = mealCategory(m);
 
-        // prezzo reale o fallback
+        // prezzo: se presente (anche come stringa "€10" o "10,00") lo prendiamo, altrimenti fallback
         const pReal = mealPrice(m);
-        const price = (Number(pReal) > 0) ? Number(pReal) : 8.9;
+        const price = (Number.isFinite(pReal) && pReal > 0) ? pReal : 8.9;
 
         // key stabile (anche se manca l'id)
         const id  = (rawId != null) ? String(rawId) : `${rid || "x"}::${name}`;
         const key = `${id}|${rid ?? ""}`;
 
-        // mappa completa: include image/category per il carrello
+        // salviamo TUTTO ciò che serve al carrello
         MAP.set(key, { id, name, price, rid, rname, image: img, category: cat });
 
         const card = document.createElement("article");
@@ -248,7 +282,7 @@
       if (!btn) return;
       e.preventDefault(); e.stopPropagation();
 
-      let key = btn.dataset.key || btn.closest(".card.dish")?.dataset.key || "";
+      const key = btn.dataset.key || btn.closest(".card.dish")?.dataset.key || "";
       const info = MAP.get(key);
       if (!info) {
         console.warn("[CART] key mancante o non trovata");
@@ -285,6 +319,7 @@
     if (el.classList.contains("add-to-cart")) return; // già gestito
 
     e.preventDefault(); e.stopPropagation();
+
     // prova prima con la chiave della card
     const card = el.closest(".card.dish");
     const key  = card?.dataset.key || "";
@@ -292,9 +327,11 @@
       Cart.add(MAP.get(key));
       return;
     }
+
     // fallback DOM puro
-    const name = card?.querySelector(".dish-title")?.textContent?.trim() || "";
-    const price = parseMoney(card?.querySelector(".dish-price")?.textContent || "");
+    const name  = card?.querySelector(".dish-title")?.textContent?.trim() || "";
+    const pTxt  = card?.querySelector(".dish-price")?.textContent || "";
+    const price = parsePriceLike(pTxt);
     const image = card?.querySelector(".dish-img")?.src || "";
     const section = el.closest(".ristorante-section");
     const rname = section?.querySelector(".ristorante-title")?.textContent?.trim() || "";
@@ -304,8 +341,7 @@
   }, true);
 
   /* ================= filtro ================= */
-  const onFilter = () => render();
-  if (filterInput) filterInput.addEventListener("input", onFilter);
+  if (filterInput) filterInput.addEventListener("input", render);
 
   /* ================= boot ================= */
   async function boot() {
@@ -313,14 +349,13 @@
     try {
       RAW  = await apiGet("/meals");
       FLAT = (Array.isArray(RAW) ? RAW : []);
-      FLAT = (FLAT.length ? FLAT : []); // hard guard
       FLAT = FLAT.flatMap(r => {
         const rid = r.restaurantId ?? r.id ?? r._id ?? r.legacyId ?? null;
         const rname = r.nome ?? r.name ?? r.restaurantName ?? `Restaurant ${rid ?? ""}`.trim();
         return (r.menu || []).map(m => ({ r, rid, rname, m }));
       });
       window.__MEALS_ALL__ = FLAT.map(x => x.m); // debug
-      console.log("[MEALS] caricati:", FLAT);
+      console.log("[MEALS] caricati:", FLAT.length);
       render();
     } catch (err) {
       console.error("[MEALS] errore caricamento:", err);
@@ -334,10 +369,11 @@
   window.__cart = {
     read: () => Cart.read(),
     clear: () => { localStorage.removeItem(CART_KEY); Cart.updateBadge([]); console.log("[CART] cleared"); },
-    addFirst: () => {                   // aggiunge il primo piatto visibile
+    addFirst: () => {
       const first = MAP.values().next().value;
       if (!first) return console.warn("Nessun piatto in MAP");
       Cart.add(first);
     }
   };
 })();
+
