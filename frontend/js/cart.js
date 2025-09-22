@@ -1,4 +1,4 @@
-// cart.js — pagina carrello (rimozione singolo con 'x' e svuota tutto)
+// cart.js — pagina carrello (qty +/- , rimuovi singolo, svuota tutto, badge in sync)
 
 const isLocal = location.hostname === "localhost" || location.hostname === "127.0.0.1";
 const API_BASE = isLocal ? "http://localhost:3000" : location.origin;
@@ -7,16 +7,37 @@ const CART_KEY = "cart_home_v2";
 const money = n => `€${Number(n || 0).toFixed(2)}`;
 
 function readCart() {
-  try { return JSON.parse(localStorage.getItem(CART_KEY) || "[]"); } catch { return []; }
+  try { return JSON.parse(localStorage.getItem(CART_KEY) || "[]"); }
+  catch { return []; }
 }
 function writeCart(cart) {
   localStorage.setItem(CART_KEY, JSON.stringify(cart));
+  updateBadge(cart);
+}
+
+function updateBadge(cart = readCart()) {
+  const b = document.getElementById("cartBadge");
+  if (!b) return;
+  const totQty = cart.reduce((s, it) => s + (Number(it.qty) || 0), 0);
+  b.textContent = String(totQty);
+}
+
+function sanitizeCart(cart) {
+  // qty >=1 e price numerico
+  return (cart || []).map(it => ({
+    ...it,
+    qty: Math.max(1, Number(it.qty || 0)),
+    price: Number(it.price || 0),
+  }));
 }
 
 function renderCart() {
   const list = document.getElementById("cartList");
   const totalEl = document.getElementById("cartTotal");
-  const cart = readCart();
+  if (!list || !totalEl) return;
+
+  let cart = sanitizeCart(readCart());
+  writeCart(cart); // assicura badge + tipi coerenti
 
   list.innerHTML = "";
   let tot = 0;
@@ -31,13 +52,14 @@ function renderCart() {
   }
 
   for (const it of cart) {
-    const lineTot = Number(it.price || 0) * Number(it.qty || 0);
+    const lineTot = Number(it.price) * Number(it.qty);
     tot += lineTot;
 
     const row = document.createElement("div");
     row.className = "cart-row";
     row.innerHTML = `
-      <img class="cart-img" alt="" src="${it.image || "images/placeholder-dish.jpg"}" onerror="this.src='images/placeholder-dish.jpg'">
+      <img class="cart-img" alt="" src="${it.image || "images/placeholder-dish.jpg"}"
+           onerror="this.src='images/placeholder-dish.jpg'">
       <div>
         <div class="cart-name">${it.name || "Piatto"}</div>
         <div class="cart-meta">${it.restaurantName || ""}</div>
@@ -57,19 +79,20 @@ function renderCart() {
 
     // qty +/-
     row.querySelector("[data-inc]").onclick = () => {
-      it.qty = Number(it.qty || 0) + 1;
+      it.qty = (Number(it.qty) || 0) + 1;
       writeCart(cart);
       renderCart();
     };
     row.querySelector("[data-dec]").onclick = () => {
-      it.qty = Math.max(1, Number(it.qty || 0) - 1);
+      it.qty = Math.max(1, (Number(it.qty) || 0) - 1);
       writeCart(cart);
       renderCart();
     };
+
     // rimuovi singolo
     row.querySelector("[data-remove]").onclick = () => {
-      const newCart = readCart().filter(x => x.id !== it.id);
-      writeCart(newCart);
+      cart = readCart().filter(x => String(x.id) !== String(it.id));
+      writeCart(cart);
       renderCart();
     };
 
@@ -80,18 +103,22 @@ function renderCart() {
 }
 
 async function checkout() {
-  const cart = readCart();
+  const cart = sanitizeCart(readCart());
   if (!cart.length) return alert("Il carrello è vuoto.");
+
   const payload = {
-    items: cart.map(({id,name,price,qty,restaurantId,restaurantName}) => ({ id, name, price, qty, restaurantId, restaurantName })),
-    total: cart.reduce((s,it)=>s + (Number(it.price||0) * Number(it.qty||0)), 0),
+    items: cart.map(({ id, name, price, qty, restaurantId, restaurantName }) =>
+      ({ id, name, price, qty, restaurantId, restaurantName })
+    ),
+    total: cart.reduce((s, it) => s + (Number(it.price) * Number(it.qty)), 0),
     when: new Date().toISOString(),
     source: "cart-page"
   };
+
   try {
     const res = await fetch(`${API_BASE}/orders`, {
       method: "POST",
-      headers: { "Content-Type":"application/json" },
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload),
       mode: "cors"
     });
@@ -107,12 +134,24 @@ async function checkout() {
 }
 
 window.addEventListener("DOMContentLoaded", () => {
-  document.getElementById("clearCart").onclick = () => {
-    if (confirm("Svuotare tutto il carrello?")) {
-      writeCart([]);
-      renderCart();
-    }
-  };
-  document.getElementById("checkout").onclick = checkout;
+  const clearBtn = document.getElementById("clearCart");
+  if (clearBtn) {
+    clearBtn.onclick = () => {
+      if (confirm("Svuotare tutto il carrello?")) {
+        writeCart([]);
+        renderCart();
+      }
+    };
+  }
+  const checkoutBtn = document.getElementById("checkout");
+  if (checkoutBtn) checkoutBtn.onclick = checkout;
+
   renderCart();
+  updateBadge();
+
+  // se la Home aggiunge articoli mentre questa pagina è aperta
+  window.addEventListener("storage", (ev) => {
+    if (ev.key === CART_KEY) renderCart();
+  });
 });
+
