@@ -28,19 +28,28 @@
       let h = 0; for (let i = 0; i < base.length; i++) h = (h * 31 + base.charCodeAt(i)) >>> 0;
       return `gen_${h}`;
     },
-    add({ id, name, price, rid, rname }) {
+    add({ id, name, price, rid, rname, image, category }) {
       const cart = this.read();
       const safeId = this.ensureId({ id, rid, name });
+
+      // fallback prezzo (se 0/NaN)
+      const effPrice = (Number(price) > 0) ? Number(price) : 8.9;
+
       const i = cart.findIndex(x => String(x.id) === String(safeId));
-      if (i >= 0) cart[i].qty = (Number(cart[i].qty) || 0) + 1;
-      else cart.push({
-        id: String(safeId),
-        name: String(name || ""),
-        price: Number(price) || 0,
-        qty: 1,
-        restaurantId: rid ?? null,
-        restaurantName: String(rname || "")
-      });
+      if (i >= 0) {
+        cart[i].qty = (Number(cart[i].qty) || 0) + 1;
+      } else {
+        cart.push({
+          id: String(safeId),
+          name: String(name || ""),
+          price: effPrice,
+          qty: 1,
+          restaurantId: rid ?? null,
+          restaurantName: String(rname || ""),
+          image: image || "",
+          category: category || ""
+        });
+      }
       this.write(cart);
     }
   };
@@ -80,13 +89,14 @@
     const n = Number(v);
     return Number.isFinite(n) ? n : 0;
   };
+  const mealCategory = m => m?.tipologia ?? m?.category ?? m?.strCategory ?? "";
 
   /* ================= state ================= */
   const container = document.getElementById("menu-by-restaurant");
   const filterInput = document.getElementById("filter-ingredient");
   let RAW = [];
   let FLAT = [];           // [{ r, rid, rname, m }]
-  const MAP = new Map();   // key -> { id, name, price, rid, rname }
+  const MAP = new Map();   // key -> { id, name, price, rid, rname, image, category }
 
   async function apiGet(path) {
     const ctrl = new AbortController();
@@ -154,14 +164,19 @@
       items.forEach(({ rid, rname, m }) => {
         const rawId = m.idmeals ?? m.idMeal ?? m.id ?? m._id;
         const name  = mealName(m);
-        const price = mealPrice(m);
         const img   = firstImage(m);
-        const ings  = extractIngredients(m);
+        const cat   = mealCategory(m);
+
+        // prezzo reale o fallback
+        const pReal = mealPrice(m);
+        const price = (Number(pReal) > 0) ? Number(pReal) : 8.9;
 
         // key stabile (anche se manca l'id)
         const id  = (rawId != null) ? String(rawId) : `${rid || "x"}::${name}`;
         const key = `${id}|${rid ?? ""}`;
-        MAP.set(key, { id, name, price, rid, rname });
+
+        // mappa completa: include image/category per il carrello
+        MAP.set(key, { id, name, price, rid, rname, image: img, category: cat });
 
         const card = document.createElement("article");
         card.className = "card dish";
@@ -181,6 +196,13 @@
 
         const ingBox = document.createElement("div");
         ingBox.className = "dish-ings";
+        if (cat) {
+          const chip = document.createElement("span");
+          chip.className = "chip";
+          chip.textContent = cat;
+          ingBox.appendChild(chip);
+        }
+        const ings = extractIngredients(m);
         if (ings.length) {
           ings.forEach(x => {
             const chip = document.createElement("span");
@@ -188,7 +210,7 @@
             chip.textContent = x;
             ingBox.appendChild(chip);
           });
-        } else {
+        } else if (!cat) {
           const em = document.createElement("em");
           em.textContent = "No ingredients";
           ingBox.appendChild(em);
@@ -263,15 +285,22 @@
     if (el.classList.contains("add-to-cart")) return; // già gestito
 
     e.preventDefault(); e.stopPropagation();
-    // pesca dal contesto visivo
+    // prova prima con la chiave della card
     const card = el.closest(".card.dish");
+    const key  = card?.dataset.key || "";
+    if (key && MAP.has(key)) {
+      Cart.add(MAP.get(key));
+      return;
+    }
+    // fallback DOM puro
     const name = card?.querySelector(".dish-title")?.textContent?.trim() || "";
     const price = parseMoney(card?.querySelector(".dish-price")?.textContent || "");
+    const image = card?.querySelector(".dish-img")?.src || "";
     const section = el.closest(".ristorante-section");
     const rname = section?.querySelector(".ristorante-title")?.textContent?.trim() || "";
     const rid   = section?.dataset.restaurantId || "";
     const id    = card?.dataset.id || "";
-    Cart.add({ id, name, price, rid, rname });
+    Cart.add({ id, name, price, rid, rname, image });
   }, true);
 
   /* ================= filtro ================= */
