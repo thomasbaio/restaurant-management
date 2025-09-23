@@ -1,38 +1,167 @@
-// users.js
+//// users.js
 const express = require("express");
 const bcrypt = require("bcrypt");
 const router = express.Router();
+
 const User = require("./models/user");
-const Restaurant = require("./models/restaurant");
+const Restaurant = require("./models/restaurant"); // usato solo per /users/restaurants
 
 /**
  * @swagger
  * tags:
  *   name: Users
- *   description: Gestione utenti (lista, dettaglio, update, delete, cambio password).
+ *   description: Gestione utenti (registrazione, login, lista, dettaglio, update, delete, cambio password).
  */
 
-// utils
+// ---------- utils ----------
 function normalizeBody(b = {}) {
   return {
-    username: b.username,
-    email: b.email,
-    password: b.password,
-    role: b.role,
-    telefono: b.telefono ?? b.phone ?? "",
-    luogo: b.luogo ?? b.location ?? "",
-    partitaIva: b.partitaIva ?? b.vat ?? "",
-    indirizzo: b.indirizzo ?? b.address ?? "",
-    nome: b.nome ?? "",
-    cognome: b.cognome ?? "",
-    pagamento: b.pagamento ?? "",
-    preferenza: b.preferenza ?? "",
+    username:   (b.username ?? "").trim(),
+    email:      (b.email ?? "").trim(),
+    password:    b.password ?? "",
+    role:        b.role === "ristoratore" ? "ristoratore" : "cliente",
+
+    // alias accettati
+    telefono:    b.telefono ?? b.phone ?? "",
+    luogo:       b.luogo ?? b.location ?? "",
+    partitaIva:  b.partitaIva ?? b.vat ?? "",
+    indirizzo:   b.indirizzo ?? b.address ?? "",
+
+    // altri campi
+    nome:        b.nome ?? "",
+    cognome:     b.cognome ?? "",
+    pagamento:   b.pagamento ?? "",
+    preferenza:  b.preferenza ?? "",
+
+    restaurantName: b.restaurantName ?? "",
   };
 }
-const isObjectId = (id) => /^[a-f0-9]{24}$/i.test(String(id));
+
+const isObjectId  = (id) => /^[a-f0-9]{24}$/i.test(String(id));
 const isNumericId = (id) => /^\d+$/.test(String(id));
 
-/* -------- LISTA -------- */
+async function nextLegacyId() {
+  const last = await User.findOne({ legacyId: { $ne: null } })
+    .sort({ legacyId: -1 })
+    .select("legacyId")
+    .lean();
+  return (last?.legacyId || 0) + 1;
+}
+
+function sanitize(u) {
+  if (!u) return u;
+  const { password, __v, ...rest } = u;
+  return rest;
+}
+
+// =====================================================
+//                    REGISTRAZIONE
+// =====================================================
+/**
+ * @swagger
+ * /users/register:
+ *   post:
+ *     tags: [Users]
+ *     summary: Registra un nuovo utente (cliente o ristoratore)
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *     responses:
+ *       201:
+ *         description: Utente creato
+ *       409:
+ *         description: Username o email già in uso
+ */
+router.post("/register", async (req, res) => {
+  try {
+    const b = normalizeBody(req.body);
+    if (!b.username || !b.email || !b.password) {
+      return res.status(400).json({ message: "username, email e password sono obbligatori" });
+    }
+
+    // Unicità
+    const exists = await User.findOne({
+      $or: [{ username: b.username }, { email: b.email }]
+    }).lean();
+    if (exists) return res.status(409).json({ message: "Username o email già usati" });
+
+    // Hash password (se non sembra già hashata)
+    let hashed = b.password;
+    if (!/^\$2[aby]\$/.test(hashed)) {
+      hashed = await bcrypt.hash(String(b.password), 10);
+    }
+
+    const legacyId = await nextLegacyId();
+
+    const created = await User.create({
+      ...b,
+      password: hashed,
+      legacyId,
+    });
+
+    return res.status(201).json(sanitize(created.toObject()));
+  } catch (err) {
+    console.error("POST /users/register error:", err);
+    res.status(500).json({ message: err.message || "Errore server" });
+  }
+});
+
+// Compat: alcuni frontend usano POST /users per creare
+router.post("/", (req, res) => {
+  req.url = "/register";
+  router.handle(req, res);
+});
+
+// =====================================================
+//                         LOGIN
+// =====================================================
+/**
+ * @swagger
+ * /users/login:
+ *   post:
+ *     tags: [Users]
+ *     summary: Effettua il login (bcrypt compat o password in chiaro)
+ */
+router.post("/login", async (req, res) => {
+  try {
+    const { username, email, password } = req.body || {};
+    if (!password || (!username && !email)) {
+      return res.status(400).json({ message: "username/email e password sono obbligatori" });
+    }
+
+    const user = await User.findOne(
+      username ? { username } : { email }
+    ).lean();
+
+    if (!user) return res.status(401).json({ message: "Credenziali non valide" });
+
+    const stored = String(user.password || "");
+
+    let ok = false;
+    if (/^\$2[aby]\$/.test(stored)) {
+      // hash bcrypt
+      ok = await bcrypt.compare(String(password), stored);
+    } else {
+      // fallback legacy plain text
+      ok = stored === String(password);
+    }
+
+    if (!ok) return res.status(401).json({ message: "Credenziali non valide" });
+
+    // (qui potresti generare un JWT, per ora ritorno l'utente senza password)
+    return res.json(sanitize(user));
+  } catch (err) {
+    console.error("POST /users/login error:", err);
+    res.status(500).json({ message: "Errore server" });
+  }
+});
+
+// =====================================================
+//                         LISTA
+// =====================================================
 router.get("/", async (req, res) => {
   try {
     const { role, q } = req.query || {};
@@ -51,7 +180,9 @@ router.get("/", async (req, res) => {
   }
 });
 
-/* -------- /users/restaurants PRIMA delle :id -------- */
+// =====================================================
+//     /users/restaurants (prima delle rotte con :id)
+// =====================================================
 router.get("/restaurants", async (_req, res) => {
   try {
     const restaurants = await Restaurant.find().lean();
@@ -68,7 +199,7 @@ router.get("/restaurants", async (_req, res) => {
 
     const users = await User.find({ role: "ristoratore" }).lean();
     const out = users.map((u) => ({
-      nome: `${u.username} Ristorante`,
+      nome: u.restaurantName || `${u.username} Ristorante`,
       location: u.luogo || u.location || "",
       telefono: u.telefono || u.phone || "",
       partitaIVA: u.partitaIva || u.vat || "",
@@ -81,7 +212,9 @@ router.get("/restaurants", async (_req, res) => {
   }
 });
 
-/* -------- DETTAGLIO -------- */
+// =====================================================
+//                        DETTAGLIO
+// =====================================================
 router.get("/:id", async (req, res) => {
   try {
     const param = String(req.params.id);
@@ -101,7 +234,9 @@ router.get("/:id", async (req, res) => {
   }
 });
 
-/* -------- UPDATE -------- */
+// =====================================================
+//                        UPDATE
+// =====================================================
 router.put("/:id", async (req, res) => {
   try {
     const param = String(req.params.id);
@@ -115,9 +250,9 @@ router.put("/:id", async (req, res) => {
     const updates = { ...normalizeBody(req.body) };
     delete updates._id;
     delete updates.legacyId;
-    delete updates.username;
-    delete updates.role;
-    delete updates.password;
+    delete updates.username; // non permetto cambio username
+    delete updates.role;     // cambia ruolo via endpoint dedicato, se mai
+    delete updates.password; // password via endpoint dedicato
 
     const updated = await User.findOneAndUpdate(filter, { $set: updates }, { new: true })
       .select("-password")
@@ -130,7 +265,9 @@ router.put("/:id", async (req, res) => {
   }
 });
 
-/* -------- CHANGE PASSWORD -------- */
+// =====================================================
+//                   CAMBIO PASSWORD
+// =====================================================
 router.put("/:id/password", async (req, res) => {
   try {
     const param = String(req.params.id);
@@ -155,7 +292,9 @@ router.put("/:id/password", async (req, res) => {
   }
 });
 
-/* -------- DELETE -------- */
+// =====================================================
+//                         DELETE
+// =====================================================
 router.delete("/:id", async (req, res) => {
   try {
     const param = String(req.params.id);
@@ -176,6 +315,3 @@ router.delete("/:id", async (req, res) => {
 });
 
 module.exports = router;
-
-
-
