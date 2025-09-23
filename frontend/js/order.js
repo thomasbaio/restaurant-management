@@ -1,4 +1,4 @@
-// js/order.js — single dish + builder multi-piatto con "Add to the order"
+// js/order.js — single dish + builder multi-piatto con "Add to the order" (riepilogo include bozza)
 (() => {
   "use strict";
 
@@ -56,6 +56,22 @@
     }
     setDraft(draft);
     return true;
+  }
+
+  // Unisce righe con stesso dishId sommando le qty (usata dal riepilogo)
+  function mergeItemsByDishId(items) {
+    const by = new Map();
+    for (const it of (items || [])) {
+      const id = String(it.dishId);
+      const prev = by.get(id);
+      const qty  = Number(it.qty) || 0;
+      if (prev) {
+        by.set(id, { ...prev, qty: (Number(prev.qty) || 0) + qty });
+      } else {
+        by.set(id, { ...it, qty });
+      }
+    }
+    return [...by.values()];
   }
 
   /* -------- helpers UI/DOM -------- */
@@ -166,7 +182,7 @@
     return found;
   }
 
-  /* =================== NUOVO: ordine singolo =================== */
+  /* =================== SINGOLO PIATTO =================== */
   let currentMeal = null;
   let qty = 1;
   const FEES = 0;
@@ -194,7 +210,7 @@
       qty = v; qtyInput.value = String(v); renderSummary();
     });
 
-    // ↪ pulsante "Add to the order" (dinamico)
+    // ↪ pulsante "Add to the order"
     const form = qs("#order-form");
     if (form && !qs("#btn-add-to-draft")) {
       const addBtn = document.createElement("button");
@@ -203,20 +219,64 @@
       addBtn.textContent = "Add to the order";
       addBtn.style.marginRight = "8px";
       addBtn.addEventListener("click", onAddToDraftAndBackHome);
-      // inserisco prima del pulsante submit
       form.insertBefore(addBtn, form.querySelector('button[type="submit"]') || null);
     }
   }
 
+  // Riepilogo: include bozza (stesso ristorante) + piatto corrente
   function renderSummary() {
     const sum = qs("#summary");
-    if (!sum || !currentMeal) return;
-    const sub = currentMeal.price * qty;
-    sum.innerHTML = `<div class="line"><span>${currentMeal.name} × ${qty}</span><span>${fmt(sub)}</span></div>`;
+    if (!sum) return;
+
+    const draft = getDraft();
+    const sameRestaurantDraft =
+      draft && draft.items && currentMeal &&
+      String(draft.restaurantId || "") === String(currentMeal.restaurantId || "");
+
+    let lines = [];
+    let subtotal = 0;
+
+    if (sameRestaurantDraft) {
+      // bozza + piatto corrente, con merge su dishId
+      const merged = mergeItemsByDishId([
+        ...draft.items,
+        {
+          dishId: String(currentMeal.id),
+          name: currentMeal.name,
+          price: Number(currentMeal.price),
+          qty,
+          restaurantId: currentMeal.restaurantId || "",
+          imageUrl: pickImageURL(currentMeal)
+        }
+      ]);
+
+      merged.forEach(it => {
+        const lineTot = Number(it.price) * Number(it.qty);
+        subtotal += lineTot;
+        lines.push(
+          `<div class="line"><span>${it.name} × ${it.qty}</span><span>€${lineTot.toFixed(2)}</span></div>`
+        );
+      });
+    } else {
+      // bozza di altro ristorante: avviso + solo piatto corrente
+      if (draft && draft.items && draft.items.length) {
+        lines.push(`<div class="muted">You have an in-progress order for another restaurant. It won't be included.</div>`);
+      }
+      if (currentMeal) {
+        const curTot = Number(currentMeal.price) * Number(qty);
+        subtotal += curTot;
+        lines.push(
+          `<div class="line"><span>${currentMeal.name} × ${qty}</span><span>€${curTot.toFixed(2)}</span></div>`
+        );
+      }
+    }
+
+    sum.innerHTML = lines.join("") || "";
+
     const s = qs("#subtotal"), f = qs("#fees"), t = qs("#total");
-    if (s) s.textContent = fmt(sub);
-    if (f) f.textContent = fmt(FEES);
-    if (t) t.textContent = fmt(sub + FEES);
+    if (s) s.textContent = `€${subtotal.toFixed(2)}`;
+    if (f) f.textContent = `€0.00`;
+    if (t) t.textContent = `€${subtotal.toFixed(2)}`;
   }
 
   function onAddToDraftAndBackHome() {
@@ -230,9 +290,8 @@
       imageUrl: pickImageURL(currentMeal)
     };
     const ok = addItemToDraft(item);
-    if (!ok) return; // utente ha annullato il replace
-    // torna alla home per continuare ad aggiungere piatti
-    location.href = "index.html";
+    if (!ok) return;
+    location.href = "index.html"; // torna al menu per aggiungere altro
   }
 
   async function submitSingleOrder(e) {
@@ -242,6 +301,7 @@
     const delivery = fd.get("delivery") || "pickup";
     const payment  = fd.get("payment")  || "carta_credito";
 
+    // NB: come da opzione 2, l'invio include SOLO il piatto corrente
     const item = {
       dishId: String(currentMeal.id),
       name: currentMeal.name,
@@ -268,7 +328,7 @@
         method:"POST", headers:{ "Content-Type":"application/json" }, body: JSON.stringify(body)
       });
       if (!res.ok) throw new Error(await res.text().catch(()=>res.statusText));
-      // ordine inviato: svuoto bozza se appartiene allo stesso ristorante
+      // se la bozza è dello stesso ristorante, la pulisco
       const d = getDraft();
       if (d && d.restaurantId === body.restaurantId) clearDraft();
       alert("Order placed successfully!");
@@ -474,7 +534,7 @@
       try {
         currentMeal = await loadMealById(dishId, rid);
         renderDish();
-        renderSummary();
+        renderSummary(); // riepilogo che include bozza
         qs("#order-form")?.addEventListener("submit", submitSingleOrder);
       } catch (e) {
         console.error(e);
@@ -497,7 +557,7 @@
           return;
         }
         renderBuilderList(listEl, groups);
-        hydrateBuilderFromDraft(listEl);        // ⬅️ precompila quantità dalla bozza
+        hydrateBuilderFromDraft(listEl);
 
         listEl.addEventListener("input", (e) => {
           if (e.target && e.target.classList.contains("qty")) {
