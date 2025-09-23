@@ -84,28 +84,23 @@ function firstNumber(...vals) {
   return NaN;
 }
 
-// migliore prezzo unitario per un item
 function getUnitPrice(it, cat) {
-  // alias comuni
   const fromItem = firstNumber(
     it?.prezzo, it?.price, it?.unitPrice, it?.prezzoUnitario,
     it?.costo, it?.cost, it?.amount, it?.importo, it?.unit_amount
   );
   if (Number.isFinite(fromItem) && fromItem > 0) return fromItem;
 
-  // se esiste totale riga → unit = totale/qty
   const qty = getQty(it);
   const line = getLineTotal(it);
   if (qty > 0 && Number.isFinite(line) && line > 0) return line / qty;
 
-  // fallback catalogo
   const fromCatalog = Number(cat?.prezzo);
   if (Number.isFinite(fromCatalog) && fromCatalog > 0) return fromCatalog;
 
   return 0;
 }
 
-// totale riga su item
 function getLineTotal(it) {
   return firstNumber(
     it?.lineTotal, it?.line_total, it?.total, it?.totale,
@@ -113,7 +108,6 @@ function getLineTotal(it) {
   );
 }
 
-// totale “fotografato” sull’ordine (se presente)
 function getOrderSnapshotTotal(ord) {
   return firstNumber(
     ord?.total, ord?.totale, ord?.grandTotal, ord?.amount_total,
@@ -121,7 +115,7 @@ function getOrderSnapshotTotal(ord) {
   );
 }
 
-// ========= elenco piatti + totale (FIX con forEach) =========
+// ========= elenco piatti + totale =========
 function renderItemsAndTotal(order, mealsMap) {
   let total = 0;
   let rows = [];
@@ -136,7 +130,6 @@ function renderItemsAndTotal(order, mealsMap) {
   };
 
   if (Array.isArray(order.items) && order.items.length) {
-    // niente map che riassegna; usiamo forEach e accumuliamo con pushRow
     order.items.forEach((it, idx) => {
       const id  = getItemId(it) ?? mealsIdsByIndex[idx];
       const cat = id != null ? mealsMap.get(String(id)) : null;
@@ -166,7 +159,6 @@ function renderItemsAndTotal(order, mealsMap) {
     });
 
   } else {
-    // nessun dettaglio: prova col totale fotografato
     const snap = getOrderSnapshotTotal(order);
     if (Number.isFinite(snap) && snap > 0) {
       total = snap;
@@ -176,16 +168,53 @@ function renderItemsAndTotal(order, mealsMap) {
     }
   }
 
-  // se l’ordine ha un totale fotografato > 0, prevale
   const snap = getOrderSnapshotTotal(order);
   if (Number.isFinite(snap) && snap > 0) total = snap;
 
   return { html: `<ul class="dishes">${rows.join("")}</ul>`, total };
 }
 
-// ========= bootstrap pagina =========
+/* ============ Fallback anti-404 per ORDERS ============ */
+/* Prova vari endpoint e normalizza in ARRAY di ordini */
+async function fetchOrdersWithFallback(username) {
+  const qs = username ? `?username=${encodeURIComponent(username)}` : "";
+  const candidates = [
+    `/orders${qs}`,                 // quello attuale
+    `/api/orders${qs}`,             // con prefisso /api
+    `/api/v1/orders${qs}`,          // con versione
+    username ? `/orders/user/${encodeURIComponent(username)}` : null, // RESTful
+    `/order${qs}`                   // variante singolare
+  ].filter(Boolean);
+
+  let lastErr = null;
+  for (const path of candidates) {
+    try {
+      const data = await apiGet(path);
+
+      // Possibili forme: [], {orders:[]}, {active:[], completed:[]}
+      if (Array.isArray(data)) return data;
+
+      if (data && typeof data === "object") {
+        if (Array.isArray(data.orders)) return data.orders;
+        if (Array.isArray(data.active) || Array.isArray(data.completed)) {
+          const active = Array.isArray(data.active) ? data.active : [];
+          const completed = Array.isArray(data.completed) ? data.completed : [];
+          return [...active, ...completed];
+        }
+      }
+      // Se risponde ma non è nel formato atteso, prova il prossimo
+      lastErr = new Error(`Unexpected payload from ${path}`);
+    } catch (e) {
+      lastErr = e;
+    }
+  }
+  throw lastErr || new Error("No compatible /orders endpoint found");
+}
+
+/* ============ bootstrap pagina ============ */
 window.onload = async () => {
-  const user = JSON.parse(localStorage.getItem("loggedUser"));
+  let user = null;
+  try { user = JSON.parse(localStorage.getItem("loggedUser") || "null"); } catch {}
   if (!user || user.role !== "cliente") {
     alert("Access reserved for customers");
     window.location.href = "login.html";
@@ -199,13 +228,13 @@ window.onload = async () => {
   passatiList.innerHTML = "<li>Loading orders...</li>";
 
   try {
-    const [orders, mealsRaw] = await Promise.all([
-      apiGet(`/orders?username=${encodeURIComponent(user.username)}`),
+    const [ordersArr, mealsRaw] = await Promise.all([
+      fetchOrdersWithFallback(user.username),
       apiGet(`/meals`)
     ]);
 
     const mealsMap   = buildMealsMap(mealsRaw);
-    const safeOrders = Array.isArray(orders) ? orders : [];
+    const safeOrders = Array.isArray(ordersArr) ? ordersArr : [];
 
     if (safeOrders.length === 0) {
       attiviList.innerHTML = "<li>No orders.</li>";
@@ -232,7 +261,6 @@ window.onload = async () => {
         const closed   = closedAt ? when(closedAt) : "—";
         const delivery = "Pickup at restaurant";
 
-        // totale ordine: snapshot se presente, altrimenti calcolato
         const orderTotal = Number(getOrderSnapshotTotal(o)) || total;
 
         return `
