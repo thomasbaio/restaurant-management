@@ -1,4 +1,4 @@
-// js/order.js — single dish (con dishId) + order builder multi-piatto (senza dishId)
+// js/order.js — single dish + builder multi-piatto con "Add to the order"
 (() => {
   "use strict";
 
@@ -15,7 +15,50 @@
   const DEFAULT_API_BASE = isLocal ? "http://localhost:3000" : location.origin;
   const API_BASE = localStorage.getItem("API_BASE") || DEFAULT_API_BASE;
 
-  /* -------- helpers -------- */
+  /* -------- draft (bozza d’ordine) -------- */
+  const DRAFT_KEY = "order_draft_v1";
+  const getDraft = () => {
+    try { return JSON.parse(localStorage.getItem(DRAFT_KEY) || "null"); }
+    catch { return null; }
+  };
+  const setDraft = (d) => localStorage.setItem(DRAFT_KEY, JSON.stringify(d || null));
+  const clearDraft = () => localStorage.removeItem(DRAFT_KEY);
+
+  function addItemToDraft(item) {
+    let draft = getDraft();
+    if (!draft) {
+      draft = {
+        userId: user._id || user.id || user.username || "",
+        restaurantId: item.restaurantId || "",
+        items: [],
+        createdAt: new Date().toISOString()
+      };
+    }
+    // vincolo: un solo ristorante per bozza
+    if (draft.restaurantId && item.restaurantId && draft.restaurantId !== item.restaurantId) {
+      const ok = confirm("Your current order contains dishes from another restaurant. Replace it with this one?");
+      if (!ok) return false;
+      draft = {
+        userId: draft.userId,
+        restaurantId: item.restaurantId || "",
+        items: [],
+        createdAt: new Date().toISOString()
+      };
+    }
+    if (!draft.restaurantId) draft.restaurantId = item.restaurantId || "";
+
+    // merge quantità se stesso piatto
+    const idx = draft.items.findIndex(x => String(x.dishId) === String(item.dishId));
+    if (idx >= 0) {
+      draft.items[idx].qty = Number(draft.items[idx].qty || 0) + Number(item.qty || 0);
+    } else {
+      draft.items.push(item);
+    }
+    setDraft(draft);
+    return true;
+  }
+
+  /* -------- helpers UI/DOM -------- */
   const qs  = (s) => document.querySelector(s);
   const qsa = (s) => Array.from(document.querySelectorAll(s));
   const fmt = (n) => `€${(Number(n || 0)).toFixed(2)}`;
@@ -23,17 +66,13 @@
 
   function isValidImgPath(s) {
     if (typeof s !== "string") return false;
-    const t = s.trim();
-    if (!t || t === "#" || t === "-") return false;
+    const t = s.trim(); if (!t || t === "#" || t === "-") return false;
     return /^https?:\/\//i.test(t) || t.startsWith("//") || t.startsWith("/");
   }
   function firstImage(p) {
-    const src = p || {};
-    const raw = src.raw || {};
+    const src = p || {}, raw = src.raw || {};
     const cands = [
-      // normalizzato
       src.immagine, src.foto, src.strMealThumb, src.image, src.thumb, src.picture, src.img,
-      // originale (raw)
       raw.immagine, raw.foto, raw.strMealThumb, raw.image, raw.thumb, raw.picture, raw.img,
     ];
     for (let u of cands) {
@@ -70,9 +109,7 @@
         if (!map.has(key)) map.set(key, url);
       });
       return map;
-    } catch {
-      return new Map();
-    }
+    } catch { return new Map(); }
   }
   function ensureImageFallback(meal, imgMap) {
     if (!meal) return meal;
@@ -90,15 +127,12 @@
     const name = raw.nome ?? raw.strMeal ?? raw.name ?? "No name";
     const category = raw.tipologia ?? raw.category ?? raw.strCategory ?? "";
     let price = raw.prezzo ?? raw.price ?? 0;
-    if (typeof price === "string") {
-      const n = Number(price.replace(",", "."));
-      price = Number.isFinite(n) ? n : 0;
-    }
+    if (typeof price === "string") { const n = Number(price.replace(",", ".")); price = Number.isFinite(n) ? n : 0; }
     const restaurantId = raw.restaurantId ?? restaurantIdFallback ?? "";
     const ingredients = Array.isArray(raw.ingredients) ? raw.ingredients.filter(Boolean) : [];
     const description = raw.descrizione ?? raw.description ?? raw.strInstructions ?? "";
-    const immagine = firstImage(raw); // porta in alto l'immagine se già disponibile
-    return { id, name, price: Number(price), category, restaurantId, ingredients, description, immagine, raw };
+    const immagine = firstImage(raw);
+    return { id, name, price:Number(price), category, restaurantId, ingredients, description, immagine, raw };
   }
 
   async function fetchMeals() {
@@ -114,21 +148,18 @@
   async function loadMealById(dishId, restaurantIdHint) {
     const [data, imgMap] = await Promise.all([fetchMeals(), buildFileImageMap()]);
     let list = [];
-
-    if (Array.isArray(data) && data.some((r) => Array.isArray(r.menu))) {
+    if (Array.isArray(data) && data.some(r => Array.isArray(r.menu))) {
       for (const r of data) {
         const rid = r.restaurantId ?? r.idRestaurant ?? r.id ?? r._id ?? "";
-        for (const m of r.menu || []) list.push(normalizeMeal(m, rid));
+        for (const m of (r.menu || [])) list.push(normalizeMeal(m, rid));
       }
     } else if (Array.isArray(data)) {
-      list = data.map((m) => normalizeMeal(m));
+      list = data.map(m => normalizeMeal(m));
     }
-
     const found =
-      list.find((x) => String(x.id) === String(dishId)) ||
-      list.find((x) => String(x.raw?.idmeals) === String(dishId)) ||
-      list.find((x) => String(x.raw?._id) === String(dishId));
-
+      list.find(x => String(x.id) === String(dishId)) ||
+      list.find(x => String(x.raw?.idmeals) === String(dishId)) ||
+      list.find(x => String(x.raw?._id) === String(dishId));
     if (!found) throw new Error("Dish not found");
     ensureImageFallback(found, imgMap);
     if (restaurantIdHint && !found.restaurantId) found.restaurantId = String(restaurantIdHint);
@@ -157,14 +188,24 @@
         </label>
       </div>
     `;
-
     const qtyInput = qs("#qty");
     qtyInput?.addEventListener("input", () => {
       const v = Math.max(1, Math.min(99, Number(qtyInput.value || 1)));
-      qty = v;
-      qtyInput.value = String(v);
-      renderSummary();
+      qty = v; qtyInput.value = String(v); renderSummary();
     });
+
+    // ↪ pulsante "Add to the order" (dinamico)
+    const form = qs("#order-form");
+    if (form && !qs("#btn-add-to-draft")) {
+      const addBtn = document.createElement("button");
+      addBtn.id = "btn-add-to-draft";
+      addBtn.type = "button";
+      addBtn.textContent = "Add to the order";
+      addBtn.style.marginRight = "8px";
+      addBtn.addEventListener("click", onAddToDraftAndBackHome);
+      // inserisco prima del pulsante submit
+      form.insertBefore(addBtn, form.querySelector('button[type="submit"]') || null);
+    }
   }
 
   function renderSummary() {
@@ -176,6 +217,22 @@
     if (s) s.textContent = fmt(sub);
     if (f) f.textContent = fmt(FEES);
     if (t) t.textContent = fmt(sub + FEES);
+  }
+
+  function onAddToDraftAndBackHome() {
+    if (!currentMeal) return;
+    const item = {
+      dishId: String(currentMeal.id),
+      name: currentMeal.name,
+      price: Number(currentMeal.price),
+      qty,
+      restaurantId: currentMeal.restaurantId || "",
+      imageUrl: pickImageURL(currentMeal)
+    };
+    const ok = addItemToDraft(item);
+    if (!ok) return; // utente ha annullato il replace
+    // torna alla home per continuare ad aggiungere piatti
+    location.href = "index.html";
   }
 
   async function submitSingleOrder(e) {
@@ -211,6 +268,9 @@
         method:"POST", headers:{ "Content-Type":"application/json" }, body: JSON.stringify(body)
       });
       if (!res.ok) throw new Error(await res.text().catch(()=>res.statusText));
+      // ordine inviato: svuoto bozza se appartiene allo stesso ristorante
+      const d = getDraft();
+      if (d && d.restaurantId === body.restaurantId) clearDraft();
       alert("Order placed successfully!");
       location.href = "i-miei-ordini.html";
     } catch (err) {
@@ -218,6 +278,7 @@
       const key="orders_local_fallback";
       const arr=JSON.parse(localStorage.getItem(key)||"[]"); arr.push(body);
       localStorage.setItem(key, JSON.stringify(arr));
+      clearDraft();
       alert("Order saved locally (offline mode).");
       location.href = "i-miei-ordini.html";
     }
@@ -249,8 +310,7 @@
             <label class="muted" style="display:flex;align-items:center;gap:6px;">
               Qty
               <input type="number" class="qty" data-id="${m.id}" data-price="${m.price}"
-                     data-rid="${m.restaurantId}" min="0" max="99" step="1" value="0"
-                     style="width:70px">
+                     data-rid="${m.restaurantId}" min="0" max="99" step="1" value="0" style="width:70px">
             </label>
           </div>`;
         sect.appendChild(row);
@@ -270,7 +330,6 @@
     });
     const totalEl = qs("#total");
     if (totalEl) totalEl.textContent = `Total: ${fmt(total)}`;
-    // Mostra un piccolo riepilogo nella sezione "Order summary" se esiste
     const sumBox = qs("#summary");
     if (sumBox) {
       const lines = [];
@@ -292,10 +351,22 @@
     }
   }
 
+  function hydrateBuilderFromDraft(container) {
+    const draft = getDraft();
+    if (!draft || !Array.isArray(draft.items) || !draft.items.length) return;
+    draft.items.forEach(it => {
+      const inp = container.querySelector(`input.qty[data-id="${CSS.escape(String(it.dishId))}"]`);
+      if (inp) {
+        const prev = Number(inp.value || 0);
+        inp.value = String(prev + Number(it.qty || 0));
+      }
+    });
+    recomputeBuilderTotal(container);
+  }
+
   async function buildGroupsForBuilder() {
     const [data, imgMap] = await Promise.all([fetchMeals(), buildFileImageMap()]);
     const groupsMap = new Map(); // rid -> { name, items[] }
-
     function ensure(rid, name) {
       const k = String(rid || "");
       if (!groupsMap.has(k)) {
@@ -305,13 +376,12 @@
       }
       return groupsMap.get(k);
     }
-
-    if (Array.isArray(data) && data.some((r) => Array.isArray(r.menu))) {
+    if (Array.isArray(data) && data.some(r => Array.isArray(r.menu))) {
       for (const r of data) {
         const rid = r.restaurantId ?? r.idRestaurant ?? r.id ?? r._id ?? "";
         const rname = r.nome ?? r.name ?? r.restaurantName ?? "";
         const g = ensure(rid, rname);
-        for (const m of r.menu || []) {
+        for (const m of (r.menu || [])) {
           const nm = normalizeMeal(m, rid);
           ensureImageFallback(nm, imgMap);
           g.items.push(nm);
@@ -325,8 +395,7 @@
         g.items.push(nm);
       }
     }
-
-    return Array.from(groupsMap.values()).filter((g) => g.items.length);
+    return Array.from(groupsMap.values()).filter(g => g.items.length);
   }
 
   async function submitBuilderOrder(e, container) {
@@ -357,7 +426,6 @@
       alert("Select at least one dish (set Qty > 0).");
       return;
     }
-
     if (restaurantId === "__MIXED__") {
       alert("Please select dishes from a single restaurant.");
       return;
@@ -382,6 +450,7 @@
         method:"POST", headers:{ "Content-Type":"application/json" }, body: JSON.stringify(body)
       });
       if (!res.ok) throw new Error(await res.text().catch(()=>res.statusText));
+      clearDraft(); // ordine confermato → pulisco bozza
       alert("Order placed successfully!");
       location.href = "i-miei-ordini.html";
     } catch (err) {
@@ -389,6 +458,7 @@
       const key="orders_local_fallback";
       const arr=JSON.parse(localStorage.getItem(key)||"[]"); arr.push(body);
       localStorage.setItem(key, JSON.stringify(arr));
+      clearDraft();
       alert("Order saved locally (offline mode).");
       location.href = "i-miei-ordini.html";
     }
@@ -427,8 +497,8 @@
           return;
         }
         renderBuilderList(listEl, groups);
+        hydrateBuilderFromDraft(listEl);        // ⬅️ precompila quantità dalla bozza
 
-        // ricalcolo totale al cambio quantità
         listEl.addEventListener("input", (e) => {
           if (e.target && e.target.classList.contains("qty")) {
             const v = Math.max(0, Math.min(99, Number(e.target.value || 0)));

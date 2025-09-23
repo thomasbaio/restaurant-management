@@ -1,31 +1,38 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
+  <meta charset="UTF-8" />
   <title>Order dish</title>
-  <link rel="stylesheet" href="css/style.css">
-  <link rel="icon" type="image/png" href="images/logo.png">
+  <link rel="stylesheet" href="css/style.css" />
+  <link rel="icon" type="image/png" href="images/logo.png" />
 </head>
 <body>
   <p><a href="index.html">← Return to the homepage</a></p>
+
   <div class="order-wrap">
     <h1>Order</h1>
 
-    <!-- Riepilogo piatto -->
+    <!-- Modalità SINGOLO PIATTO (usata quando c'è ?dishId=...) -->
     <section id="dish" class="dish-card" aria-live="polite">
       <!-- filled by JS -->
     </section>
 
+    <!-- Modalità BUILDER (usata quando NON c'è dishId): l’elenco piatti viene iniettato qui -->
+    <h3 id="builder-heading">Add dishes</h3>
+    <div id="meals-list">
+      <!-- filled by JS -->
+    </div>
+
     <form id="order-form">
       <h3>Delivery method</h3>
       <label>
-        <input type="radio" name="delivery" value="pickup" checked>
+        <input type="radio" name="delivery" value="pickup" checked />
         Pick up at the restaurant
       </label>
 
       <h3>Payment method</h3>
-      <label><input type="radio" name="payment" value="carta_credito" checked> Credit card</label><br>
-      <label><input type="radio" name="payment" value="prepagata"> Prepaid card</label>
+      <label><input type="radio" name="payment" value="carta_credito" checked /> Credit card</label><br />
+      <label><input type="radio" name="payment" value="prepagata" /> Prepaid card</label>
 
       <h3>Order summary</h3>
       <div id="summary"><!-- filled by JS --></div>
@@ -34,11 +41,11 @@
       <div class="line"><span class="muted">Fees</span> <span id="fees">€0.00</span></div>
       <div class="line total"><span>Total</span> <span id="total">€0.00</span></div>
 
+      <!-- In modalità singolo piatto, l’order.js inserisce qui anche il pulsante "Add to the order" -->
       <button type="submit" style="margin-top:14px;">Confirm order</button>
     </form>
   </div>
 
-  <!-- JS separato -->
   <script src="js/order.js" defer></script>
 </body>
 </html>
