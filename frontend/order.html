@@ -2,37 +2,43 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title> Order dishes </title>
+  <title>Order dish</title>
   <link rel="stylesheet" href="css/style.css">
   <link rel="icon" type="image/png" href="images/logo.png">
 </head>
 <body>
-  <p><a href="index.html"> Return to the homepage </a></p>
-  <h1> Order dishes </h1>
+  <p><a href="index.html">← Return to the homepage</a></p>
+  <div class="order-wrap">
+    <h1>Order</h1>
 
-  <form id="order-form">
-    <div id="meals-list">
-      <!-- Piatti caricati da JS -->
-    </div>
+    <!-- Riepilogo piatto -->
+    <section id="dish" class="dish-card" aria-live="polite">
+      <!-- filled by JS -->
+    </section>
 
-    <h3> Delivery method: </h3>
-    <!-- Asporto rimosso: solo consegna a domicilio -->
-    <label><input type="radio" name="delivery" value="domicilio" checked> Pick up at the restaurant</label><br>
+    <form id="order-form">
+      <h3>Delivery method</h3>
+      <label>
+        <input type="radio" name="delivery" value="pickup" checked>
+        Pick up at the restaurant
+      </label>
 
+      <h3>Payment method</h3>
+      <label><input type="radio" name="payment" value="carta_credito" checked> Credit card</label><br>
+      <label><input type="radio" name="payment" value="prepagata"> Prepaid card</label>
 
+      <h3>Order summary</h3>
+      <div id="summary"><!-- filled by JS --></div>
 
-    <h3> Payment method: </h3>
-    <label><input type="radio" name="payment" value="carta_credito" checked> Credit card </label><br>
-    <label><input type="radio" name="payment" value="prepagata"> Prepaid card </label><br>
+      <div class="line"><span class="muted">Subtotal</span> <span id="subtotal">€0.00</span></div>
+      <div class="line"><span class="muted">Fees</span> <span id="fees">€0.00</span></div>
+      <div class="line total"><span>Total</span> <span id="total">€0.00</span></div>
 
-    <h3> Cart </h3>
-    <div id="cart-list"></div>
+      <button type="submit" style="margin-top:14px;">Confirm order</button>
+    </form>
+  </div>
 
-    <p id="total"><strong> Total: €0.00 </strong></p>
-
-    <button type="submit"> Send order </button>
-  </form>
-
-  <script src="js/order.js"></script>
+  <!-- JS separato -->
+  <script src="js/order.js" defer></script>
 </body>
 </html>

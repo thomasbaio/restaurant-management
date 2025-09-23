@@ -1,6 +1,7 @@
 // js/order.js — compat: lista piatti (se niente dishId) + ordine singolo (se dishId)
+(() => {
+  "use strict";
 
-(function () {
   /* -------- auth: cliente -------- */
   const user = JSON.parse(localStorage.getItem("loggedUser") || "null");
   if (!user || user.role !== "cliente") {
@@ -16,43 +17,61 @@
 
   /* -------- helpers -------- */
   const qs  = (s) => document.querySelector(s);
-  const qsa = (s) => Array.from(document.querySelectorAll(s));
   const fmt = (n) => `€${(Number(n || 0)).toFixed(2)}`;
   const getParam = (k) => new URLSearchParams(location.search).get(k) || "";
 
-  function isValidImgPath(s){ if(typeof s!=="string")return false; const t=s.trim(); if(!t||t==="#"||t==="-")return false; return /^https?:\/\//i.test(t)||t.startsWith("//")||t.startsWith("/"); }
-  function firstImage(p){
-    const src=p||{}, raw=src.raw||{};
-    const c=[src.immagine,src.foto,src.strMealThumb,src.image,src.thumb,src.picture,src.img,
-             raw.immagine,raw.foto,raw.strMealThumb,raw.image,raw.thumb,raw.picture,raw.img];
-    for(let u of c){ if(!isValidImgPath(u)) continue; u=String(u).trim(); return u.startsWith("//")?"https:"+u:u; }
+  function isValidImgPath(s) {
+    if (typeof s !== "string") return false;
+    const t = s.trim();
+    if (!t || t === "#" || t === "-") return false;
+    return /^https?:\/\//i.test(t) || t.startsWith("//") || t.startsWith("/");
+  }
+
+  function firstImage(p) {
+    const src = p || {};
+    const raw = src.raw || {};
+    const cands = [
+      src.immagine, src.foto, src.strMealThumb, src.image, src.thumb, src.picture, src.img,
+      raw.immagine, raw.foto, raw.strMealThumb, raw.image, raw.thumb, raw.picture, raw.img,
+    ];
+    for (let u of cands) {
+      if (!isValidImgPath(u)) continue;
+      u = String(u).trim();
+      return u.startsWith("//") ? "https:" + u : u;
+    }
     return "";
   }
-  function pickImageURL(p){
-    const u=firstImage(p);
-    if(isValidImgPath(u)) return u.startsWith("/")?location.origin+u:u;
-    const label = encodeURIComponent((p.nome||p.strMeal||p.name||"Food").split(" ")[0]);
+
+  function pickImageURL(p) {
+    const u = firstImage(p);
+    if (isValidImgPath(u)) return u.startsWith("/") ? location.origin + u : u;
+    const label = encodeURIComponent((p.nome || p.strMeal || p.name || "Food").split(" ")[0]);
     return `https://placehold.co/160x120?text=${label}`;
   }
-  function normalizeMeal(raw, restaurantIdFallback){
+
+  function normalizeMeal(raw, restaurantIdFallback) {
     let id = raw.idmeals ?? raw.idMeal ?? raw.id ?? raw._id ?? null;
     if (id != null) id = String(id);
     const name = raw.nome ?? raw.strMeal ?? raw.name ?? "No name";
     const category = raw.tipologia ?? raw.category ?? raw.strCategory ?? "";
     let price = raw.prezzo ?? raw.price ?? 0;
-    if (typeof price === "string") { const n=Number(price.replace(",", ".")); price = Number.isFinite(n)?n:0; }
+    if (typeof price === "string") {
+      const n = Number(price.replace(",", "."));
+      price = Number.isFinite(n) ? n : 0;
+    }
     const restaurantId = raw.restaurantId ?? restaurantIdFallback ?? "";
     const ingredients = Array.isArray(raw.ingredients) ? raw.ingredients.filter(Boolean) : [];
     const description = raw.descrizione ?? raw.description ?? raw.strInstructions ?? "";
-    return { id, name, price:Number(price), category, restaurantId, ingredients, description, raw };
+    return { id, name, price: Number(price), category, restaurantId, ingredients, description, raw };
   }
 
   async function fetchMeals() {
-    for (const path of ["/meals", "/api/meals"]) {
+    const paths = ["/meals", "/api/meals"];
+    for (const path of paths) {
       try {
         const res = await fetch(`${API_BASE}${path}`, { headers: { Accept: "application/json" } });
         if (res.ok) return await res.json();
-      } catch {}
+      } catch (_) {}
     }
     throw new Error("Cannot load meals");
   }
@@ -60,39 +79,45 @@
   async function loadMealById(dishId, restaurantIdHint) {
     const data = await fetchMeals();
     let list = [];
-    if (Array.isArray(data) && data.some(r => Array.isArray(r.menu))) {
+
+    if (Array.isArray(data) && data.some((r) => Array.isArray(r.menu))) {
       for (const r of data) {
         const rid = r.restaurantId ?? r.idRestaurant ?? r.id ?? r._id ?? "";
-        for (const m of (r.menu || [])) list.push(normalizeMeal(m, rid));
+        for (const m of r.menu || []) list.push(normalizeMeal(m, rid));
       }
     } else if (Array.isArray(data)) {
-      list = data.map(m => normalizeMeal(m));
+      list = data.map((m) => normalizeMeal(m));
     } else {
-      const stack=[data];
-      while(stack.length){
-        const cur=stack.pop();
-        if (!cur || typeof cur!=="object") continue;
+      // fallback ricorsivo
+      const stack = [data];
+      while (stack.length) {
+        const cur = stack.pop();
+        if (!cur || typeof cur !== "object") continue;
         if (Array.isArray(cur.menu)) {
           const rid = cur.restaurantId ?? cur.idRestaurant ?? cur.id ?? cur._id ?? "";
-          for (const m of cur.menu) list.push(normalizeMeal(m, rid));
+          for (const m of cur.menu || []) list.push(normalizeMeal(m, rid));
         }
-        Object.values(cur).forEach(v=>{
-          if (Array.isArray(v)) v.forEach(x=>x&&typeof x==="object"&&stack.push(x));
-          else if (v&&typeof v==="object") stack.push(v);
-        });
+        for (const v of Object.values(cur)) {
+          if (Array.isArray(v)) v.forEach((x) => x && typeof x === "object" && stack.push(x));
+          else if (v && typeof v === "object") stack.push(v);
+        }
       }
     }
+
     const found =
-      list.find(x => String(x.id) === String(dishId)) ||
-      list.find(x => String(x.raw?.idmeals) === String(dishId)) ||
-      list.find(x => String(x.raw?._id) === String(dishId));
+      list.find((x) => String(x.id) === String(dishId)) ||
+      list.find((x) => String(x.raw?.idmeals) === String(dishId)) ||
+      list.find((x) => String(x.raw?._id) === String(dishId));
+
     if (!found) throw new Error("Dish not found");
     if (restaurantIdHint && !found.restaurantId) found.restaurantId = String(restaurantIdHint);
     return found;
   }
 
   /* -------- ordine singolo (nuovo layout) -------- */
-  let currentMeal = null, qty = 1, FEES = 0;
+  let currentMeal = null;
+  let qty = 1;
+  const FEES = 0;
 
   function renderDish() {
     const root = qs("#dish");
@@ -109,77 +134,95 @@
           Quantity
           <input id="qty" class="qty-input" type="number" min="1" max="99" step="1" value="${qty}">
         </label>
-      </div>`;
+      </div>
+    `;
+
     const qtyInput = qs("#qty");
     qtyInput?.addEventListener("input", () => {
       const v = Math.max(1, Math.min(99, Number(qtyInput.value || 1)));
-      qty = v; qtyInput.value = String(v); renderSummary();
+      qty = v;
+      qtyInput.value = String(v);
+      renderSummary();
     });
   }
 
   function renderSummary() {
-    const sum = qs("#summary"); if (!sum || !currentMeal) return;
+    const sum = qs("#summary");
+    if (!sum || !currentMeal) return;
     const sub = currentMeal.price * qty;
     sum.innerHTML = `<div class="line"><span>${currentMeal.name} × ${qty}</span><span>${fmt(sub)}</span></div>`;
-    const s = qs("#subtotal"), f = qs("#fees"), t = qs("#total");
+    const s = qs("#subtotal");
+    const f = qs("#fees");
+    const t = qs("#total");
     if (s) s.textContent = fmt(sub);
     if (f) f.textContent = fmt(FEES);
     if (t) t.textContent = fmt(sub + FEES);
   }
 
-  async function submitOrder(e){
+  async function submitOrder(e) {
     e.preventDefault();
-    if (!currentMeal) { alert("Dish not loaded."); return; }
+    if (!currentMeal) {
+      alert("Dish not loaded.");
+      return;
+    }
+
     const fd = new FormData(e.target);
     const delivery = fd.get("delivery") || "pickup";
-    const payment  = fd.get("payment")  || "carta_credito";
+    const payment = fd.get("payment") || "carta_credito";
+
     const item = {
       dishId: String(currentMeal.id),
       name: currentMeal.name,
       price: Number(currentMeal.price),
       qty,
       restaurantId: currentMeal.restaurantId || "",
-      imageUrl: pickImageURL(currentMeal)
+      imageUrl: pickImageURL(currentMeal),
     };
+
     const body = {
       userId: user._id || user.id || user.username || "",
       restaurantId: item.restaurantId,
       items: [item],
-      delivery, payment,
+      delivery,
+      payment,
       subtotal: Number((item.price * qty).toFixed(2)),
       fees: Number(FEES),
       total: Number((item.price * qty + FEES).toFixed(2)),
       status: "ordinato",
-      createdAt: new Date().toISOString()
+      createdAt: new Date().toISOString(),
     };
+
     try {
       const res = await fetch(`${API_BASE}/orders`, {
-        method:"POST", headers:{ "Content-Type":"application/json" }, body: JSON.stringify(body)
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
       });
-      if (!res.ok) throw new Error(await res.text().catch(()=>res.statusText));
+      if (!res.ok) throw new Error(await res.text().catch(() => res.statusText));
       alert("Order placed successfully!");
       location.href = "i-miei-ordini.html";
     } catch (err) {
       console.warn("POST /orders failed, fallback local:", err.message);
-      const key="orders_local_fallback";
-      const arr=JSON.parse(localStorage.getItem(key)||"[]"); arr.push(body);
+      const key = "orders_local_fallback";
+      const arr = JSON.parse(localStorage.getItem(key) || "[]");
+      arr.push(body);
       localStorage.setItem(key, JSON.stringify(arr));
       alert("Order saved locally (offline mode).");
       location.href = "i-miei-ordini.html";
     }
   }
 
-  /* -------- fallback: lista piatti nella vecchia order.html -------- */
-  function renderPickerListInto(el, groups){
+  /* -------- fallback: lista piatti per vecchia order.html -------- */
+  function renderPickerListInto(el, groups) {
     el.innerHTML = "";
-    groups.forEach(g => {
+    groups.forEach((g) => {
       const sect = document.createElement("fieldset");
       sect.className = "restaurant-section";
       const legend = document.createElement("legend");
       legend.textContent = g.name;
       sect.appendChild(legend);
 
-      g.items.forEach(m => {
+      g.items.forEach((m) => {
         const row = document.createElement("div");
         row.className = "meal-item";
         row.innerHTML = `
@@ -187,22 +230,22 @@
             <div style="display:flex;gap:10px;align-items:center;flex:1;">
               <img src="${pickImageURL(m)}" alt="${m.name}" width="80" height="60" style="object-fit:cover;border-radius:8px;background:#f3f4f6" onerror="this.style.display='none'">
               <div>
-                <div><strong>${m.name}</strong> ${m.category?`<em class="muted">(${m.category})</em>`:""}</div>
+                <div><strong>${m.name}</strong> ${m.category ? `<em class="muted">(${m.category})</em>` : ""}</div>
                 <div class="muted">${fmt(m.price)}</div>
               </div>
             </div>
             <button class="btn-order" data-id="${m.id}" data-rid="${m.restaurantId}">Order</button>
-          </div>`;
+          </div>
+        `;
         sect.appendChild(row);
       });
 
       el.appendChild(sect);
     });
 
-    // click -> vai alla stessa pagina con dishId
-    el.querySelectorAll(".btn-order").forEach(btn=>{
-      btn.addEventListener("click", ()=>{
-        const id = btn.getAttribute("data-id");
+    el.querySelectorAll(".btn-order").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        const id = btn.getAttribute("data-id") || "";
         const rid = btn.getAttribute("data-rid") || "";
         const q = new URLSearchParams({ dishId: id, restaurantId: rid });
         location.href = `order.html?${q.toString()}`;
@@ -210,21 +253,26 @@
     });
   }
 
-  async function buildGroupsForPicker(){
+  async function buildGroupsForPicker() {
     const data = await fetchMeals();
     const groupsMap = new Map(); // rid -> { name, items[] }
-    function ensure(rid, name){
+
+    function ensure(rid, name) {
       const k = String(rid || "");
-      if (!groupsMap.has(k)) groupsMap.set(k, { name: name || (k ? `Restaurant ${k}` : "Restaurant"), items: [] });
-      else if (name && /^Restaurant /.test(groupsMap.get(k).name)) groupsMap.get(k).name = name;
+      if (!groupsMap.has(k)) {
+        groupsMap.set(k, { name: name || (k ? `Restaurant ${k}` : "Restaurant"), items: [] });
+      } else if (name && /^Restaurant /.test(groupsMap.get(k).name)) {
+        groupsMap.get(k).name = name;
+      }
       return groupsMap.get(k);
     }
-    if (Array.isArray(data) && data.some(r => Array.isArray(r.menu))) {
+
+    if (Array.isArray(data) && data.some((r) => Array.isArray(r.menu))) {
       for (const r of data) {
         const rid = r.restaurantId ?? r.idRestaurant ?? r.id ?? r._id ?? "";
         const rname = r.nome ?? r.name ?? r.restaurantName ?? "";
         const g = ensure(rid, rname);
-        for (const m of (r.menu||[])) g.items.push(normalizeMeal(m, rid));
+        for (const m of r.menu || []) g.items.push(normalizeMeal(m, rid));
       }
     } else if (Array.isArray(data)) {
       for (const m of data) {
@@ -233,31 +281,33 @@
         g.items.push(nm);
       }
     }
-    return Array.from(groupsMap.values()).filter(g => g.items.length);
+
+    return Array.from(groupsMap.values()).filter((g) => g.items.length);
   }
 
   /* -------- boot -------- */
   window.addEventListener("DOMContentLoaded", async () => {
     const dishId = getParam("dishId");
-    const rid    = getParam("restaurantId");
+    const rid = getParam("restaurantId");
 
-    // Se ho un dishId, uso il NUOVO layout (dettaglio + riepilogo)
     if (dishId) {
       try {
-        const meal = await loadMealById(dishId, rid);
-        currentMeal = meal;
+        currentMeal = await loadMealById(dishId, rid);
         renderDish();
         renderSummary();
         qs("#order-form")?.addEventListener("submit", submitOrder);
       } catch (e) {
         console.error(e);
-        (qs("#dish") || qs("#meals-list"))?.insertAdjacentHTML("beforeend",
-          `<p class="muted">Dish not available. <a href="ricerca_piatti.html">Back to dishes</a></p>`);
+        (qs("#dish") || qs("#meals-list"))?.insertAdjacentHTML(
+          "beforeend",
+          `<p class="muted">Dish not available. <a href="ricerca_piatti.html">Back to dishes</a></p>`
+        );
+        qs("#order-form")?.addEventListener("submit", (ev) => ev.preventDefault());
       }
       return;
     }
 
-    // Altrimenti, VECCHIO layout: riempi #meals-list con un PICKER (niente cart)
+    // vecchia order.html con #meals-list
     const listEl = qs("#meals-list");
     if (listEl) {
       try {
@@ -268,8 +318,35 @@
         }
         renderPickerListInto(listEl, groups);
 
-        // il bottone "Send order" non ha senso senza dish selezionato
+        const tot = qs("#total");
+        if (tot) tot.textContent = "Total: €0.00";
+
         const form = qs("#order-form");
-        form?.addEventListener("submit", (e)=>{
+        form?.addEventListener("submit", (e) => {
           e.preventDefault();
-          a
+          alert("Choose a dish with the Order button.");
+        });
+      } catch (err) {
+        console.error("Error loading dishes:", err);
+        alert(`Error loading dishes.\nBase URL: ${API_BASE}\nDetails: ${err.message}`);
+      }
+      return;
+    }
+
+    // nuova pagina ma senza dishId
+    const dishBox = qs("#dish");
+    if (dishBox) {
+      dishBox.innerHTML = `
+        <div>
+          <h2>No dish selected</h2>
+          <p class="muted">Open a dish and press "Order".</p>
+          <p><a href="ricerca_piatti.html">Go to dishes</a></p>
+        </div>
+      `;
+      qs("#order-form")?.addEventListener("submit", (e) => {
+        e.preventDefault();
+        alert("Select a dish first.");
+      });
+    }
+  });
+})();
