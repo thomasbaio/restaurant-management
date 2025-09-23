@@ -1,18 +1,39 @@
 // ========= base url per API =========
-const isLocal = location.hostname === "localhost" || location.hostname === "127.0.0.1";
-const API_BASE = isLocal ? "http://localhost:3000" : "https://restaurant-management-wzhj.onrender.com";
+const isLocal  = ["localhost", "127.0.0.1"].includes(location.hostname);
+const API_BASE = isLocal ? "http://localhost:3000"
+                         : "https://restaurant-management-wzhj.onrender.com";
 
-// ========= fetch helper con timeout =========
+/* ========= fetch helper robusto =========
+   - legge come testo
+   - controlla content-type
+   - tenta JSON.parse solo se ha senso
+   - errori sempre parlanti (no "Unexpected token '<'")
+*/
 async function apiGet(path) {
+  const url  = `${API_BASE}${path}`;
   const ctrl = new AbortController();
-  const t = setTimeout(() => ctrl.abort(), 12000);
+  const t    = setTimeout(() => ctrl.abort(), 12000);
   try {
-    const res = await fetch(`${API_BASE}${path}`, { signal: ctrl.signal, mode: "cors" });
+    const res   = await fetch(url, { signal: ctrl.signal, mode: "cors" });
+    const ctype = (res.headers.get("content-type") || "").toLowerCase();
+    const text  = await res.text(); // sempre testo
+
     if (!res.ok) {
-      const body = await res.text().catch(() => "");
-      throw new Error(`HTTP ${res.status} ${res.statusText}${body ? " – " + body : ""}`);
+      // mostra un pezzetto del body (spesso HTML 404)
+      const snip = text?.slice(0, 120)?.replace(/\s+/g, " ");
+      throw new Error(`HTTP ${res.status} ${res.statusText} – ${snip || "no body"}`);
     }
-    return await res.json();
+
+    // prova a capire se è JSON
+    if (ctype.includes("application/json") || (text && text.trim().startsWith("{")) || (text && text.trim().startsWith("["))) {
+      try { return JSON.parse(text); }
+      catch {
+        throw new Error(`Invalid JSON from ${path}: ${text.slice(0, 80)}…`);
+      }
+    }
+
+    // risposta 200 ma non JSON
+    throw new Error(`Unexpected content-type for ${path}: ${ctype || "unknown"}`);
   } finally {
     clearTimeout(t);
   }
@@ -24,28 +45,18 @@ const when      = d => { try { return new Date(d).toLocaleString(); } catch { re
 const normId    = o => o?.id ?? o?._id ?? "";
 const normState = o => String(o?.status ?? o?.state ?? o?.stato ?? "ordinato").toLowerCase();
 
-// etichette in inglese per gli stati
 const labelStatus = s => {
   const t = String(s || "").toLowerCase();
   const map = {
-    ordinato: "Ordered",
-    preparazione: "Preparing",
-    consegna: "Ready for pickup",
-    consegnato: "Delivered",
-    ritirato: "Picked up",
-    annullato: "Canceled",
-    withdrawn: "Picked up",
-    delivered: "Delivered",
-    canceled: "Canceled",
-    cancelled: "Canceled"
+    ordinato: "Ordered", preparazione: "Preparing", consegna: "Ready for pickup",
+    consegnato: "Delivered", ritirato: "Picked up", annullato: "Canceled",
+    withdrawn: "Picked up", delivered: "Delivered", canceled: "Canceled", cancelled: "Canceled"
   };
   return map[t] || (s || "Unknown");
 };
-
-// stati finali (storico)
 const FINAL = new Set(["consegnato","ritirato","annullato","delivered","withdrawn","canceled","cancelled"]);
 
-// ========= normalizza /meals -> mappa { id -> {nome, prezzo} } =========
+// ========= meals map =========
 function buildMealsMap(rawMeals) {
   const map = new Map();
   const isDish = r => (r?.idmeals || r?.id || r?._id || r?.idMeal);
@@ -64,100 +75,58 @@ function buildMealsMap(rawMeals) {
   return map;
 }
 
-// ========= helpers per items/id/qty =========
-const getQty = it => Number(it?.qty ?? it?.quantity ?? it?.quantita ?? it?.q ?? 1) || 1;
+// ========= helpers item/price =========
+const getQty  = it => Number(it?.qty ?? it?.quantity ?? it?.quantita ?? it?.q ?? 1) || 1;
 const getItemId = it => it?.mealId ?? it?.idmeal ?? it?.idmeals ?? it?.idMeal ?? it?.id ?? it?._id;
 const getItemNameFromSnapshot = it => (it?.name ?? it?.nome ?? it?.strMeal) || "";
 
-// estrae array di id dai vari formati di `meals`
 function extractIdsFromMeals(meals) {
   if (!Array.isArray(meals)) return [];
   return meals.map(m => (typeof m === "object" && m !== null) ? getItemId(m) : m);
 }
-
-// ========= alias prezzi (unit e linea) + totale ordine =========
-function firstNumber(...vals) {
-  for (const v of vals) {
-    const n = Number(v);
-    if (Number.isFinite(n)) return n;
-  }
-  return NaN;
-}
-
-function getUnitPrice(it, cat) {
-  const fromItem = firstNumber(
-    it?.prezzo, it?.price, it?.unitPrice, it?.prezzoUnitario,
-    it?.costo, it?.cost, it?.amount, it?.importo, it?.unit_amount
-  );
-  if (Number.isFinite(fromItem) && fromItem > 0) return fromItem;
-
-  const qty = getQty(it);
-  const line = getLineTotal(it);
-  if (qty > 0 && Number.isFinite(line) && line > 0) return line / qty;
-
-  const fromCatalog = Number(cat?.prezzo);
-  if (Number.isFinite(fromCatalog) && fromCatalog > 0) return fromCatalog;
-
+function firstNumber(...vals){ for(const v of vals){ const n=Number(v); if(Number.isFinite(n)) return n; } return NaN; }
+function getLineTotal(it){ return firstNumber(it?.lineTotal,it?.line_total,it?.total,it?.totale,it?.subtotal,it?.importoTotale,it?.amount_total); }
+function getOrderSnapshotTotal(ord){ return firstNumber(ord?.total,ord?.totale,ord?.grandTotal,ord?.amount_total,ord?.subtotal,ord?.importoTotale); }
+function getUnitPrice(it, cat){
+  const fromItem = firstNumber(it?.prezzo,it?.price,it?.unitPrice,it?.prezzoUnitario,it?.costo,it?.cost,it?.amount,it?.importo,it?.unit_amount);
+  if (Number.isFinite(fromItem) && fromItem>0) return fromItem;
+  const qty=getQty(it), line=getLineTotal(it);
+  if (qty>0 && Number.isFinite(line) && line>0) return line/qty;
+  const fromCatalog=Number(cat?.prezzo);
+  if (Number.isFinite(fromCatalog) && fromCatalog>0) return fromCatalog;
   return 0;
 }
 
-function getLineTotal(it) {
-  return firstNumber(
-    it?.lineTotal, it?.line_total, it?.total, it?.totale,
-    it?.subtotal, it?.importoTotale, it?.amount_total
-  );
-}
-
-function getOrderSnapshotTotal(ord) {
-  return firstNumber(
-    ord?.total, ord?.totale, ord?.grandTotal, ord?.amount_total,
-    ord?.subtotal, ord?.importoTotale
-  );
-}
-
-// ========= elenco piatti + totale =========
+// ========= render items =========
 function renderItemsAndTotal(order, mealsMap) {
-  let total = 0;
-  let rows = [];
+  let total = 0; let rows = [];
   const mealsIdsByIndex = extractIdsFromMeals(order.meals);
-
   const pushRow = (name, qty, unit, lineMaybe) => {
     const line = Number.isFinite(lineMaybe) && lineMaybe > 0 ? lineMaybe : unit * qty;
     total += line;
-    rows.push(
-      `<li>${name} &times;${qty} — <span class="muted">unit</span> ${money(unit)} <strong>→ ${money(line)}</strong></li>`
-    );
+    rows.push(`<li>${name} &times;${qty} — <span class="muted">unit</span> ${money(unit)} <strong>→ ${money(line)}</strong></li>`);
   };
 
   if (Array.isArray(order.items) && order.items.length) {
     order.items.forEach((it, idx) => {
       const id  = getItemId(it) ?? mealsIdsByIndex[idx];
       const cat = id != null ? mealsMap.get(String(id)) : null;
-
-      let name = getItemNameFromSnapshot(it);
-      const noName = !name || ["senza nome","unnamed","dish","piatto"].includes(String(name).trim().toLowerCase());
-      if (noName) name = cat?.nome || (id != null ? `Dish #${id}` : "Dish");
-
-      const qty   = getQty(it);
-      const unit  = getUnitPrice(it, cat);
-      const lineT = getLineTotal(it);
-
+      let name  = getItemNameFromSnapshot(it);
+      if (!name || ["senza nome","unnamed","dish","piatto"].includes(String(name).trim().toLowerCase()))
+        name = cat?.nome || (id != null ? `Dish #${id}` : "Dish");
+      const qty=getQty(it), unit=getUnitPrice(it, cat), lineT=getLineTotal(it);
       pushRow(name, qty, unit, lineT);
     });
-
   } else if (Array.isArray(order.meals) && order.meals.length) {
     order.meals.forEach(m => {
       const id  = (typeof m === "object") ? getItemId(m) : m;
       const qty = (typeof m === "object") ? getQty(m) : 1;
       const cat = id != null ? mealsMap.get(String(id)) : null;
-
       const name  = cat?.nome || (id != null ? `Dish #${id}` : "Dish");
       const unit  = getUnitPrice(m, cat);
       const lineT = getLineTotal(m);
-
       pushRow(name, qty, unit, lineT);
     });
-
   } else {
     const snap = getOrderSnapshotTotal(order);
     if (Number.isFinite(snap) && snap > 0) {
@@ -167,48 +136,43 @@ function renderItemsAndTotal(order, mealsMap) {
       return { html: `<ul class="dishes"><li class="muted">—</li></ul>`, total: Number(order.total) || 0 };
     }
   }
-
   const snap = getOrderSnapshotTotal(order);
   if (Number.isFinite(snap) && snap > 0) total = snap;
-
   return { html: `<ul class="dishes">${rows.join("")}</ul>`, total };
 }
 
-/* ============ Fallback anti-404 per ORDERS ============ */
-/* Prova vari endpoint e normalizza in ARRAY di ordini */
+/* ====== Fallback anti-404 per ORDERS ====== */
 async function fetchOrdersWithFallback(username) {
   const qs = username ? `?username=${encodeURIComponent(username)}` : "";
   const candidates = [
-    `/orders${qs}`,                 // quello attuale
-    `/api/orders${qs}`,             // con prefisso /api
-    `/api/v1/orders${qs}`,          // con versione
-    username ? `/orders/user/${encodeURIComponent(username)}` : null, // RESTful
-    `/order${qs}`                   // variante singolare
+    `/orders${qs}`,
+    `/api/orders${qs}`,
+    `/api/v1/orders${qs}`,
+    username ? `/orders/user/${encodeURIComponent(username)}` : null,
+    `/order${qs}`,
+    `/api/order${qs}`
   ].filter(Boolean);
 
   let lastErr = null;
-  for (const path of candidates) {
+  for (const p of candidates) {
     try {
-      const data = await apiGet(path);
-
-      // Possibili forme: [], {orders:[]}, {active:[], completed:[]}
+      const data = await apiGet(p);
       if (Array.isArray(data)) return data;
-
       if (data && typeof data === "object") {
         if (Array.isArray(data.orders)) return data.orders;
         if (Array.isArray(data.active) || Array.isArray(data.completed)) {
-          const active = Array.isArray(data.active) ? data.active : [];
-          const completed = Array.isArray(data.completed) ? data.completed : [];
-          return [...active, ...completed];
+          const a = Array.isArray(data.active) ? data.active : [];
+          const c = Array.isArray(data.completed) ? data.completed : [];
+          return [...a, ...c];
         }
       }
-      // Se risponde ma non è nel formato atteso, prova il prossimo
-      lastErr = new Error(`Unexpected payload from ${path}`);
+      lastErr = new Error(`Unexpected payload from ${p}`);
     } catch (e) {
       lastErr = e;
     }
   }
-  throw lastErr || new Error("No compatible /orders endpoint found");
+  console.warn("[orders] fallback: nessun endpoint valido. Ultimo errore:", lastErr?.message);
+  return []; // NON lanciare, così la pagina resta viva
 }
 
 /* ============ bootstrap pagina ============ */
@@ -223,68 +187,62 @@ window.onload = async () => {
 
   const attiviList  = document.getElementById("attivi-list");
   const passatiList = document.getElementById("passati-list");
+  const setLoading  = msg => {
+    attiviList.innerHTML  = `<li>${msg}</li>`;
+    passatiList.innerHTML = `<li>${msg}</li>`;
+  };
+  setLoading("Loading orders...");
 
-  attiviList.innerHTML = "<li>Loading orders...</li>";
-  passatiList.innerHTML = "<li>Loading orders...</li>";
+  // carica ordini (con fallback) e meals (tollerante agli errori)
+  const ordersArr = await fetchOrdersWithFallback(user.username);
+  let mealsRaw = [];
+  try { mealsRaw = await apiGet(`/meals`); }
+  catch (e) { console.warn("[meals] fallback a catalogo vuoto:", e?.message); }
 
-  try {
-    const [ordersArr, mealsRaw] = await Promise.all([
-      fetchOrdersWithFallback(user.username),
-      apiGet(`/meals`)
-    ]);
+  const mealsMap = buildMealsMap(mealsRaw);
+  const safeOrders = Array.isArray(ordersArr) ? ordersArr : [];
 
-    const mealsMap   = buildMealsMap(mealsRaw);
-    const safeOrders = Array.isArray(ordersArr) ? ordersArr : [];
+  if (safeOrders.length === 0) {
+    attiviList.innerHTML  = "<li>No orders.</li>";
+    passatiList.innerHTML = "<li>No completed orders.</li>";
+    return;
+  }
 
-    if (safeOrders.length === 0) {
-      attiviList.innerHTML = "<li>No orders.</li>";
-      passatiList.innerHTML = "<li>No completed orders.</li>";
+  const attivi  = safeOrders.filter(o => !FINAL.has(normState(o)));
+  const passati = safeOrders.filter(o =>  FINAL.has(normState(o)));
+
+  const render = (ordini, container) => {
+    if (!ordini.length) {
+      container.innerHTML = "<li>-- No orders --</li>";
       return;
     }
+    ordini.sort((a,b) => new Date(b.createdAt||0) - new Date(a.createdAt||0));
 
-    const attivi  = safeOrders.filter(o => !FINAL.has(normState(o)));
-    const passati = safeOrders.filter(o =>  FINAL.has(normState(o)));
+    container.innerHTML = ordini.map(o => {
+      const stato   = normState(o);
+      const { html, total } = renderItemsAndTotal(o, mealsMap);
 
-    const render = (ordini, container) => {
-      if (!ordini.length) {
-        container.innerHTML = "<li>-- No orders --</li>";
-        return;
-      }
-      ordini.sort((a,b) => new Date(b.createdAt||0) - new Date(a.createdAt||0));
+      const created  = o.createdAt ? when(o.createdAt) : "n/a";
+      const closedAt = o.closedAt || o.deliveredAt || o.ritiratoAt || o.consegnatoAt;
+      const closed   = closedAt ? when(closedAt) : "—";
+      const delivery = "Pickup at restaurant";
 
-      container.innerHTML = ordini.map(o => {
-        const stato   = normState(o);
-        const { html, total } = renderItemsAndTotal(o, mealsMap);
+      const orderTotal = Number(getOrderSnapshotTotal(o)) || total;
 
-        const created  = o.createdAt ? when(o.createdAt) : "n/a";
-        const closedAt = o.closedAt || o.deliveredAt || o.ritiratoAt || o.consegnatoAt;
-        const closed   = closedAt ? when(closedAt) : "—";
-        const delivery = "Pickup at restaurant";
+      return `
+        <li>
+          <strong>ID:</strong> ${normId(o)}<br>
+          Created: ${created}${FINAL.has(stato) ? ` · Closed: ${closed}` : ""}<br>
+          Status: ${labelStatus(stato)}<br>
+          Dishes: ${html}
+          Total: <strong>${money(orderTotal)}</strong><br>
+          ${delivery}
+        </li>
+      `;
+    }).join("");
+  };
 
-        const orderTotal = Number(getOrderSnapshotTotal(o)) || total;
-
-        return `
-          <li>
-            <strong>ID:</strong> ${normId(o)}<br>
-            Created: ${created}${FINAL.has(stato) ? ` · Closed: ${closed}` : ""}<br>
-            Status: ${labelStatus(stato)}<br>
-            Dishes: ${html}
-            Total: <strong>${money(orderTotal)}</strong><br>
-            ${delivery}
-          </li>
-        `;
-      }).join("");
-    };
-
-    render(attivi, attiviList);
-    render(passati, passatiList);
-
-  } catch (err) {
-    console.error("Loading error:", err);
-    const hint = isLocal
-      ? "Make sure the local backend is running at http://localhost:3000."
-      : "Make sure the backend on Render is online.";
-    attiviList.innerHTML  = `<li style="color:#b00">Error while loading: ${err?.message ?? err}. ${hint}</li>`;
-    passatiList.innerHTML = `<li style="color:#b00">Error while loading: ${err?.message ?? err}. ${hint}</li>`;
-  }
+  render(attivi, attiviList);
+  render(passati, passatiList);
 };
+
