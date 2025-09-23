@@ -1,10 +1,13 @@
-// main.js — versione senza alcun riferimento a "edit dish" o "edit.html"
+// main.js — versione "ORDER" (senza cart)
 
 // ========================= base URL per API =========================
 const isLocal = location.hostname === "localhost" || location.hostname === "127.0.0.1";
 const API_BASE = isLocal ? "http://localhost:3000" : location.origin;
 
-/* ===================== helpers di normalizzazione ===================== */
+// ====== Config pagina ordine (modifica se usi un nome diverso) ======
+const ORDER_PAGE = "order.html";
+
+// ===================== helpers di normalizzazione =====================
 
 // estrai array ingredienti
 function extractIngredients(p) {
@@ -137,27 +140,26 @@ function applyImageFallbackFromMap(meal, imgMap) {
   return meal;
 }
 
-/* =================== utilità carrello (solo per clienti) =================== */
+/* =================== flusso ordine singolo (no cart) =================== */
 
-if (typeof window.addToCart !== "function") {
-  window.addToCart = function addToCart(meal) {
-    const user = JSON.parse(localStorage.getItem("loggedUser") || "null");
-    if (!user || user.role !== "cliente") {
-      alert("Devi accedere come cliente per aggiungere al carrello.");
-      return;
-    }
-    const key = "cart";
-    const cart = JSON.parse(localStorage.getItem(key) || "[]");
-    cart.push({
-      id: meal.id,
-      nome: meal.nome,
-      prezzo: meal.prezzo,
-      restaurantId: meal.restaurantId,
-      qty: 1
-    });
-    localStorage.setItem(key, JSON.stringify(cart));
-    alert(`Added to cart: ${meal.nome}`);
-  };
+function goToOrder(meal) {
+  let user = null;
+  try { user = JSON.parse(localStorage.getItem("loggedUser") || "null"); } catch {}
+  if (!user || user.role !== "cliente") {
+    alert("Accedi come cliente per effettuare un ordine.");
+    location.href = "login.html";
+    return;
+  }
+  if (!meal || !meal.id) {
+    alert("Non è stato possibile iniziare l'ordine per questo piatto.");
+    return;
+  }
+
+  const params = new URLSearchParams({
+    dishId: String(meal.id),
+    restaurantId: meal.restaurantId ? String(meal.restaurantId) : "",
+  });
+  location.href = `${ORDER_PAGE}?${params.toString()}`;
 }
 
 /* =========================== ui helpers =========================== */
@@ -274,8 +276,15 @@ function renderTable(meals, isRestaurateur) {
       <td>${meal.tipologia || "-"}</td>
       <td>${ings.length ? ings.join(", ") : "-"}</td>
       <td>${imgHTML}</td>
-      <td>${deleteHTML}</td>
+      <td>
+        <button class="btn-order" data-id="${meal.id}">Order</button>
+        ${deleteHTML}
+      </td>
     `;
+
+    // attach pulsante Order
+    const orderBtn = tr.querySelector(".btn-order");
+    orderBtn.addEventListener("click", () => goToOrder(meal));
 
     if (canDelete) {
       const btn = tr.querySelector(".btn-delete");
@@ -443,9 +452,9 @@ function renderMenusGroupedSection(meals, rawAllData, activeCategory) {
         const user = JSON.parse(localStorage.getItem("loggedUser") || "null");
         if (user?.role === "cliente") {
           const btn = document.createElement("button");
-          btn.className = "btn-add";
-          btn.textContent = "Add to cart";
-          btn.addEventListener("click", () => addToCart(meal));
+          btn.className = "btn-order";
+          btn.textContent = "Order";
+          btn.addEventListener("click", () => goToOrder(meal));
           card.appendChild(btn);
         }
 
@@ -530,7 +539,7 @@ async function renderPersonalizedOffersGrouped(user, allMeals) {
           <div><strong>${p.nome}</strong> ${p.tipologia ? `– <span class="muted">(${p.tipologia})</span>` : ""}</div>
           <div>€ ${formatPrice(p.prezzo)}</div>
           ${(JSON.parse(localStorage.getItem("loggedUser")||"null")?.role === "cliente")
-            ? `<button class="btn-add" data-id="${p.id}">Add to cart</button>`
+            ? `<button class="btn-order" data-id="${p.id}">Order</button>`
             : ``}
         </div>
       </li>
@@ -546,12 +555,12 @@ async function renderPersonalizedOffersGrouped(user, allMeals) {
 
   container.innerHTML = sections.join("") || `<li>No restaurants available for "<strong>${pref}</strong>".</li>`;
 
-  // Attach “Add to cart”
-  container.querySelectorAll("button.btn-add").forEach(btn => {
+  // Attach “Order”
+  container.querySelectorAll("button.btn-order").forEach(btn => {
     btn.addEventListener("click", () => {
       const id = btn.getAttribute("data-id");
       const m  = matches.find(x => String(x.id) === String(id));
-      if (m) addToCart(m);
+      if (m) goToOrder(m);
     });
   });
 }
@@ -575,7 +584,7 @@ window.onload = async () => {
     if (noti && (!user || user.role !== "cliente")) {
       noti.innerHTML = `
         <div class="box muted">
-          Sei libero di sfogliare i menu. <strong>Accedi come cliente</strong> per aggiungere piatti al carrello.
+          Sei libero di sfogliare i menu. <strong>Accedi come cliente</strong> per effettuare un ordine.
           <a href="login.html">Vai al login</a>
         </div>
       `;
@@ -757,4 +766,3 @@ window.onload = async () => {
     alert("Error loading menu");
   }
 };
-
