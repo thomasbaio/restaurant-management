@@ -1,4 +1,5 @@
-// js/order.js — single dish + builder multi-piatto con "Add to the order" (riepilogo include bozza)
+// js/order.js — single dish + builder multi-piatto con "Add to the order"
+// Riepilogo include bozza, "Confirm order" porta a payment.html
 (() => {
   "use strict";
 
@@ -187,6 +188,14 @@
   let qty = 1;
   const FEES = 0;
 
+  // 👉 helper: passa l’ordine alla pagina di pagamento
+  function goToPayment(order) {
+    localStorage.setItem("pendingOrder", JSON.stringify(order));
+    const d = getDraft();
+    if (!d || d.restaurantId === order.restaurantId) clearDraft();
+    location.href = "payment.html";
+  }
+
   function renderDish() {
     const root = qs("#dish");
     if (!root || !currentMeal) return;
@@ -237,7 +246,6 @@
     let subtotal = 0;
 
     if (sameRestaurantDraft) {
-      // bozza + piatto corrente, con merge su dishId
       const merged = mergeItemsByDishId([
         ...draft.items,
         {
@@ -258,7 +266,6 @@
         );
       });
     } else {
-      // bozza di altro ristorante: avviso + solo piatto corrente
       if (draft && draft.items && draft.items.length) {
         lines.push(`<div class="muted">You have an in-progress order for another restaurant. It won't be included.</div>`);
       }
@@ -294,54 +301,41 @@
     location.href = "index.html"; // torna al menu per aggiungere altro
   }
 
+  // 👉 "Confirm order" ora passa a payment.html con pendingOrder
   async function submitSingleOrder(e) {
     e.preventDefault();
     if (!currentMeal) { alert("Dish not loaded."); return; }
+
     const fd = new FormData(e.target);
     const delivery = fd.get("delivery") || "pickup";
     const payment  = fd.get("payment")  || "carta_credito";
 
-    // NB: come da opzione 2, l'invio include SOLO il piatto corrente
-    const item = {
+    const items = [{
       dishId: String(currentMeal.id),
       name: currentMeal.name,
       price: Number(currentMeal.price),
       qty,
       restaurantId: currentMeal.restaurantId || "",
       imageUrl: pickImageURL(currentMeal)
-    };
+    }];
 
-    const body = {
+    const subtotal = items.reduce((s, it) => s + it.price * it.qty, 0);
+    const order = {
       userId: user._id || user.id || user.username || "",
-      restaurantId: item.restaurantId,
-      items: [item],
+      username: user.username,                 // compat con payment.html esistente
+      role: user.role,
+      restaurantId: items[0].restaurantId,
+      items,                                   // nuovo formato
+      meals: items.map(i => i.dishId),         // compat vecchio (solo gli ID)
       delivery, payment,
-      subtotal: Number((item.price * qty).toFixed(2)),
-      fees: Number(FEES),
-      total: Number((item.price * qty + FEES).toFixed(2)),
+      subtotal: Number(subtotal.toFixed(2)),
+      fees: 0,
+      total: Number(subtotal.toFixed(2)),
       status: "ordinato",
       createdAt: new Date().toISOString()
     };
 
-    try {
-      const res = await fetch(`${API_BASE}/orders`, {
-        method:"POST", headers:{ "Content-Type":"application/json" }, body: JSON.stringify(body)
-      });
-      if (!res.ok) throw new Error(await res.text().catch(()=>res.statusText));
-      // se la bozza è dello stesso ristorante, la pulisco
-      const d = getDraft();
-      if (d && d.restaurantId === body.restaurantId) clearDraft();
-      alert("Order placed successfully!");
-      location.href = "i-miei-ordini.html";
-    } catch (err) {
-      console.warn("POST /orders failed, fallback local:", err.message);
-      const key="orders_local_fallback";
-      const arr=JSON.parse(localStorage.getItem(key)||"[]"); arr.push(body);
-      localStorage.setItem(key, JSON.stringify(arr));
-      clearDraft();
-      alert("Order saved locally (offline mode).");
-      location.href = "i-miei-ordini.html";
-    }
+    goToPayment(order);
   }
 
   /* ============== BUILDER: più piatti e somme (senza dishId) ============== */
@@ -458,6 +452,7 @@
     return Array.from(groupsMap.values()).filter(g => g.items.length);
   }
 
+  // 👉 "Confirm order" del builder porta a payment.html
   async function submitBuilderOrder(e, container) {
     e.preventDefault();
     const inputs = container.querySelectorAll("input.qty");
@@ -492,10 +487,13 @@
     }
 
     const subtotal = items.reduce((s, it) => s + it.price * it.qty, 0);
-    const body = {
+    const order = {
       userId: user._id || user.id || user.username || "",
+      username: user.username,
+      role: user.role,
       restaurantId: restaurantId || "",
       items,
+      meals: items.map(i => i.dishId),
       delivery: "pickup",
       payment: "carta_credito",
       subtotal: Number(subtotal.toFixed(2)),
@@ -505,23 +503,7 @@
       createdAt: new Date().toISOString()
     };
 
-    try {
-      const res = await fetch(`${API_BASE}/orders`, {
-        method:"POST", headers:{ "Content-Type":"application/json" }, body: JSON.stringify(body)
-      });
-      if (!res.ok) throw new Error(await res.text().catch(()=>res.statusText));
-      clearDraft(); // ordine confermato → pulisco bozza
-      alert("Order placed successfully!");
-      location.href = "i-miei-ordini.html";
-    } catch (err) {
-      console.warn("POST /orders failed, fallback local:", err.message);
-      const key="orders_local_fallback";
-      const arr=JSON.parse(localStorage.getItem(key)||"[]"); arr.push(body);
-      localStorage.setItem(key, JSON.stringify(arr));
-      clearDraft();
-      alert("Order saved locally (offline mode).");
-      location.href = "i-miei-ordini.html";
-    }
+    goToPayment(order);
   }
 
   /* ============================ boot ============================ */
@@ -534,7 +516,7 @@
       try {
         currentMeal = await loadMealById(dishId, rid);
         renderDish();
-        renderSummary(); // riepilogo che include bozza
+        renderSummary(); // riepilogo include bozza
         qs("#order-form")?.addEventListener("submit", submitSingleOrder);
       } catch (e) {
         console.error(e);
@@ -547,7 +529,7 @@
       return;
     }
 
-    // ——— Modalità builder (senza dishId): più piatti e somma totale
+    // ——— Modalità builder (senza dishId)
     const listEl = qs("#meals-list");
     if (listEl) {
       try {
