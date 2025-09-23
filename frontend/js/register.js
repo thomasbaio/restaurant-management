@@ -1,24 +1,27 @@
-// =============== Config base URL (localhost / prod / file) ===============
+// ================= Base URL =================
 const isLocal = ["localhost", "127.0.0.1"].includes(location.hostname);
 const isFile  = location.protocol === "file:";
 const PROD    = "https://restaurant-management-wzhj.onrender.com";
 
-const API_BASE = isLocal ? "http://localhost:3000" 
-               : isFile  ? PROD 
+const API_BASE = isLocal ? "http://localhost:3000"
+               : isFile  ? PROD
                : location.origin;
 
 console.log("[register] API_BASE:", API_BASE);
 
-// =============== Cache elementi ===============
+// ================= Cache elementi =================
 const form   = document.getElementById("register-form");
 const roleEl = document.getElementById("role");
 
 const extraCliente = document.getElementById("cliente-extra");
 const extraRist    = document.getElementById("ristoratore-extra");
 
+// base
 const usernameEl = document.getElementById("username");
 const emailEl    = document.getElementById("email");
 const passEl     = document.getElementById("password");
+
+// cliente
 const preferenzaEl = document.getElementById("preferenza");
 
 // ristoratore
@@ -28,7 +31,7 @@ const luogoEl = document.getElementById("luogo");
 const viaEl   = document.getElementById("via");
 const rnameEl = document.getElementById("restaurantName");
 
-// =============== UI dinamica per ruoli ===============
+// ================= UI per ruoli =================
 function refreshRoleUI() {
   const role = roleEl?.value;
   const isCliente = role === "cliente";
@@ -43,46 +46,79 @@ function refreshRoleUI() {
     if (el) el.required = !!isRisto;
   });
 }
-
 roleEl?.addEventListener("change", refreshRoleUI);
 refreshRoleUI();
 
-// =============== Validazione minima ===============
+// ================= Validazione =================
 function validateForm() {
-  if (!usernameEl?.value.trim()) return "Username obbligatorio.";
-  if (!emailEl?.value.trim())    return "Email obbligatoria.";
-  if (!passEl?.value || passEl.value.length < 6) return "Password di almeno 6 caratteri.";
+  if (!usernameEl?.value.trim()) return "Username is required.";
+  if (!emailEl?.value.trim())    return "Email is required.";
+  if (!passEl?.value || passEl.value.length < 6) return "Password must be at least 6 characters.";
 
   if (roleEl?.value === "ristoratore") {
-    if (!rnameEl?.value.trim()) return "Nome ristorante obbligatorio.";
-    if (!telEl?.value.trim())   return "Telefono obbligatorio.";
+    if (!rnameEl?.value.trim()) return "Restaurant name is required for restaurants.";
+    if (!telEl?.value.trim())   return "Phone number is required for restaurants.";
   }
   return null;
 }
 
-// =============== Helper fetch con timeout ===============
-async function apiPost(path, data, { timeout = 12000 } = {}) {
+// ================= Helper fetch con timeout =================
+async function doPost(path, payload, { timeout = 12000 } = {}) {
   const ctrl = new AbortController();
   const t = setTimeout(() => ctrl.abort(), timeout);
   try {
     const res = await fetch(`${API_BASE}${path}`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(data),
+      body: JSON.stringify(payload),
       signal: ctrl.signal,
       mode: "cors"
     });
-    if (!res.ok) {
-      const txt = await res.text().catch(() => "");
-      throw new Error(`HTTP ${res.status} – ${txt || "Errore"}`);
-    }
-    return await res.json();
+    return res;
   } finally {
     clearTimeout(t);
   }
 }
 
-// =============== Submit form ===============
+// Prova più endpoint: continua se 404, altrimenti gestisci risposta
+async function smartRegister(payload) {
+  const candidates = [
+    "/users/register",
+    "/api/users/register",
+    "/users",              // molti backend fanno POST /users per creare
+    "/api/users",
+    "/auth/register",
+    "/register"
+  ];
+
+  let lastErrTxt = "";
+  for (const path of candidates) {
+    try {
+      const res = await doPost(path, payload);
+      if (res.status === 404) {
+        console.warn(`[register] 404 on ${path}, trying next...`);
+        lastErrTxt = `404 on ${path}`;
+        continue;
+      }
+      if (!res.ok) {
+        const txt = await res.text().catch(() => "");
+        throw new Error(`HTTP ${res.status} ${res.statusText}${txt ? " – " + txt : ""}`);
+      }
+      const data = await res.json().catch(() => ({}));
+      return { ok: true, data, path };
+    } catch (e) {
+      // abort -> timeout
+      if (e.name === "AbortError") {
+        throw new Error("Network timeout while contacting server.");
+      }
+      // altri errori (CORS, 5xx, ecc.)
+      throw e;
+    }
+  }
+  throw new Error(`No matching register endpoint (tried: ${candidates.join(", ")}). Last: ${lastErrTxt}`);
+}
+
+// ================= Submit =================
 form?.addEventListener("submit", async (e) => {
   e.preventDefault();
 
@@ -118,14 +154,15 @@ form?.addEventListener("submit", async (e) => {
   if (submitBtn) { submitBtn.disabled = true; submitBtn.textContent = "Registrazione…"; }
 
   try {
-    const data = await apiPost("/users/register", payload);
-    console.log("Registrazione OK:", data);
-    alert("Registrazione completata! Ora puoi accedere.");
-    window.location.href = "login.html";
-  } catch (err2) {
-    console.error("Errore richiesta:", err2);
-    alert(`Errore di registrazione:\n${err2.message || err2}`);
+    const { ok, data, path } = await smartRegister(payload);
+    console.log("Registration OK via", path, data);
+    alert("Registrazione completata! Ora puoi effettuare il login.");
+    location.href = "login.html";
+  } catch (e2) {
+    console.error("Registration error:", e2);
+    alert(`Errore di registrazione:\n${e2.message || e2}`);
   } finally {
     if (submitBtn) { submitBtn.disabled = false; submitBtn.textContent = prevTxt; }
   }
 });
+
