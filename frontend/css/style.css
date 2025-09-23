@@ -583,3 +583,52 @@ ul.dishes { margin: 6px 0 0 0; padding-left: 20px; }
   .cart-line-total { grid-area: total; justify-self:end; }
   .remove-line { grid-area: remove; justify-self:end; }
 }
+/* ====== Order page ====== */
+.order-wrap {
+  max-width: 900px;
+  margin: 0 auto;
+}
+
+.order-wrap .dish-card {
+  display: flex;
+  gap: 16px;
+  align-items: flex-start;
+  margin: 12px 0;
+  padding: 12px;
+  border: 1px solid #e5e7eb;
+  border-radius: 12px;
+}
+
+.order-wrap .dish-card img {
+  width: 160px;
+  height: 120px;
+  object-fit: cover;
+  border-radius: 10px;
+  background: #f3f4f6;
+}
+
+.order-wrap .muted {
+  color: #6b7280;
+}
+
+.order-wrap .line {
+  display: flex;
+  justify-content: space-between;
+  margin: 6px 0;
+}
+
+.order-wrap .total {
+  font-weight: 800;
+  font-size: 1.25rem;
+}
+
+.order-wrap .qty-input {
+  width: 80px;
+}
+
+/* stampa compatta: nasconde solo le immagini del blocco ordine */
+@media print {
+  .order-wrap img {
+    display: none;
+  }
+}
