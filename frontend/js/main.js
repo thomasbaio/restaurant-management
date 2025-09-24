@@ -1,4 +1,4 @@
-// main.js — versione "ORDER" (senza cart)
+// main.js — versione "ORDER" (senza cart) — Opzione 4 (GET /meals?restaurantId=...)
 
 // ========================= base URL per API =========================
 const isLocal = location.hostname === "localhost" || location.hostname === "127.0.0.1";
@@ -19,7 +19,6 @@ function isValidImgPath(s) {
   if (typeof s !== "string") return false;
   const t = s.trim();
   if (!t || t === "-" || t === "#") return false;
-  // http(s)://...  oppure  //cdn...  oppure  /uploads/...
   return /^https?:\/\//i.test(t) || t.startsWith("//") || t.startsWith("/");
 }
 
@@ -29,16 +28,14 @@ function firstImage(p) {
   const raw = src.raw || {};
 
   const candidates = [
-    // normalizzato
     src.immagine, src.foto, src.strMealThumb, src.image, src.thumb, src.picture, src.img,
-    // originale (raw)
     raw.immagine, raw.foto, raw.strMealThumb, raw.image, raw.thumb, raw.picture, raw.img
   ];
 
   for (let c of candidates) {
     if (!isValidImgPath(c)) continue;
     c = String(c).trim();
-    if (c.startsWith("//")) return "https:" + c; // protocol-relative -> forza https
+    if (c.startsWith("//")) return "https:" + c;
     return c;
   }
   return "";
@@ -48,8 +45,8 @@ function firstImage(p) {
 function pickImageURL(p) {
   const cand = firstImage(p);
   if (isValidImgPath(cand)) {
-    if (cand.startsWith("/")) return `${location.origin}${cand}`; // path relativo -> assoluto
-    return cand; // http/https
+    if (cand.startsWith("/")) return `${location.origin}${cand}`;
+    return cand;
   }
   const label = encodeURIComponent((p.nome || "Food").split(" ")[0]);
   return `https://placehold.co/80x60?text=${label}`;
@@ -57,24 +54,15 @@ function pickImageURL(p) {
 
 // normalizza un piatto a un formato coerente per il rendering
 function normalizeMeal(p, restaurantIdFallback) {
-  // id (supporta idmeals, idMeal, id, _id)
   let id = p.idmeals ?? p.idMeal ?? p.id;
   if (!id && typeof p._id === "string") id = p._id;
 
-  // nome
   const nome = p.nome ?? p.strMeal ?? p.name ?? "Senza nome";
-
-  // tipologia/categoria
   const tipologia = p.tipologia ?? p.strCategory ?? p.category ?? "";
-
-  // prezzo
   let prezzo = p.prezzo ?? p.price;
   prezzo = (prezzo !== undefined && prezzo !== null && !isNaN(Number(prezzo))) ? Number(prezzo) : undefined;
 
-  // immagine
   const immagine = firstImage(p);
-
-  // restaurantId
   const restaurantId = p.restaurantId ?? restaurantIdFallback ?? null;
 
   return {
@@ -97,18 +85,16 @@ function formatPrice(n) {
 
 /* =================== fallback foto da file (meals1.json) =================== */
 
-// normalizzazione chiave "nome|categoria" senza accenti/maiuscole/spazi multipli
 function normalizeKey(nome, cat) {
   const strip = (s) => String(s || "")
     .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")   // rimuove diacritici
+    .replace(/[\u0300-\u036f]/g, "")
     .toLowerCase()
     .trim()
     .replace(/\s+/g, " ");
   return `${strip(nome)}|${strip(cat)}`;
 }
 
-// costruisce una mappa da piatti del FILE: key -> url immagine
 async function buildFileImageMap() {
   try {
     const res = await fetch(`${API_BASE}/meals/common-meals?source=file`);
@@ -130,7 +116,6 @@ async function buildFileImageMap() {
   }
 }
 
-// se il piatto non ha immagine, prova a prenderla dalla mappa del file
 function applyImageFallbackFromMap(meal, imgMap) {
   if (!meal) return meal;
   if (isValidImgPath(meal.immagine) || isValidImgPath(firstImage(meal))) return meal;
@@ -177,7 +162,6 @@ function setSelectedCategoryLabel(cat) {
   el.textContent = label;
 }
 
-// preferenza profilo (usata per Offerte speciali)
 function getUserPreferredCategory(u) {
   return (u?.preferenza ?? u?.preferredCategory ?? u?.favoriteCategory ?? "")
     .toString()
@@ -193,7 +177,6 @@ function setDisabled(el, disabled) {
 }
 
 function enforceClientExclusivity(isCustomer) {
-  // Blocchi marcati data-client-only
   document.querySelectorAll("[data-client-only]").forEach(block => {
     if (isCustomer) {
       block.hidden = false;
@@ -204,7 +187,6 @@ function enforceClientExclusivity(isCustomer) {
     }
   });
 
-  // search dish (filtro ingredienti)
   const ingInput = document.getElementById("filter-ingredient");
   if (ingInput) {
     if (isCustomer) {
@@ -217,7 +199,6 @@ function enforceClientExclusivity(isCustomer) {
     }
   }
 
-  // search restaurant
   const restForm   = document.getElementById("search-restaurants-form");
   const btnSearch  = document.getElementById("btn-cerca-ristoranti");
   const nomeInput  = document.getElementById("nome");
@@ -238,7 +219,6 @@ function enforceClientExclusivity(isCustomer) {
 
 /* =========================== renderers =========================== */
 
-// tabella classica (se presente)
 function renderTable(meals, isRestaurateur) {
   const tbody = document.getElementById("menu-body");
   if (!tbody) return;
@@ -257,7 +237,6 @@ function renderTable(meals, isRestaurateur) {
     const imgURL = pickImageURL(meal);
     const imgHTML = imgURL ? `<img src="${imgURL}" width="80" height="60" alt="Photo">` : "-";
 
-    // delete abilitato solo a ristoratore con id valido
     const hasIdMeals = meal.idmeals != null && meal.idmeals !== "";
     const oidRaw = meal.raw && typeof meal.raw._id === "string" ? meal.raw._id : "";
     const theOidIsValid = /^[0-9a-fA-F]{24}$/.test(oidRaw);
@@ -282,7 +261,6 @@ function renderTable(meals, isRestaurateur) {
       </td>
     `;
 
-    // attach pulsante Order
     const orderBtn = tr.querySelector(".btn-order");
     orderBtn.addEventListener("click", () => goToOrder(meal));
 
@@ -295,7 +273,6 @@ function renderTable(meals, isRestaurateur) {
   });
 }
 
-// elimina piatto (ristoratore)
 async function removeMeal(idMeals, oid, rid) {
   let user = null;
   try { user = JSON.parse(localStorage.getItem("loggedUser")); } catch {}
@@ -349,16 +326,13 @@ function renderMenusGroupedSection(meals, rawAllData, activeCategory) {
   const root = document.getElementById("menu-by-restaurant");
   if (!root) return;
 
-  // se c'è una categoria attiva, filtra prima
   const cat = (activeCategory || "").trim().toLowerCase();
   const mealsFiltered = cat && cat !== "*"
     ? (meals || []).filter(p => (p.tipologia || "").toLowerCase() === cat)
     : (meals || []);
 
-  // costruisco mappa restaurantId -> { name, items[] }
   const groups = new Map();
 
-  // prova a ricavare i nomi ristorante da /meals (annidato)
   if (Array.isArray(rawAllData) && rawAllData.some(r => Array.isArray(r.menu))) {
     for (const r of rawAllData) {
       const rid = String(r.restaurantId ?? r.id ?? r._id ?? "");
@@ -375,7 +349,6 @@ function renderMenusGroupedSection(meals, rawAllData, activeCategory) {
     groups.get(rid).items.push(p);
   }
 
-  // prova ad arricchire i nomi con /users/restaurants (best-effort)
   const enrichNames = async () => {
     const needsLookup = [...groups.values()].some(g => !g.name || /^Ristorante\s/.test(g.name));
     if (!needsLookup) return;
@@ -472,7 +445,6 @@ function renderMenusGroupedSection(meals, rawAllData, activeCategory) {
 
 /* ========================= Personalized offers helpers ========================= */
 
-// ——— Ricava una mappa { restaurantId -> nomeRistorante } dai ristoratori
 async function fetchRestaurantsNameMap() {
   try {
     const res = await fetch(`${API_BASE}/users/restaurants`, { mode: "cors" });
@@ -490,7 +462,6 @@ async function fetchRestaurantsNameMap() {
   }
 }
 
-// ——— Raggruppa per restaurantId una lista di piatti
 function groupMealsByRestaurant(meals) {
   const groups = new Map();
   for (const m of (Array.isArray(meals) ? meals : [])) {
@@ -501,7 +472,6 @@ function groupMealsByRestaurant(meals) {
   return groups;
 }
 
-// ——— Render “Personalized offers” raggruppate per ristorante
 async function renderPersonalizedOffersGrouped(user, allMeals) {
   const container = document.getElementById("special-offers");
   if (!container) return;
@@ -514,7 +484,6 @@ async function renderPersonalizedOffersGrouped(user, allMeals) {
     return;
   }
 
-  // Filtra SOLO per preferenza (le offerte non dipendono dalla select categoria dei menu)
   const matches = (Array.isArray(allMeals) ? allMeals : [])
     .filter(p => (p.tipologia || "").toLowerCase() === pref.toLowerCase());
 
@@ -523,7 +492,6 @@ async function renderPersonalizedOffersGrouped(user, allMeals) {
     return;
   }
 
-  // Mappa nomi ristoranti
   const nameMap = await fetchRestaurantsNameMap();
   const groups   = groupMealsByRestaurant(matches);
 
@@ -555,7 +523,6 @@ async function renderPersonalizedOffersGrouped(user, allMeals) {
 
   container.innerHTML = sections.join("") || `<li>No restaurants available for "<strong>${pref}</strong>".</li>`;
 
-  // Attach “Order”
   container.querySelectorAll("button.btn-order").forEach(btn => {
     btn.addEventListener("click", () => {
       const id = btn.getAttribute("data-id");
@@ -575,10 +542,8 @@ window.onload = async () => {
   const isCustomer = role === "cliente";
   const isRestaurateur = role === "ristoratore";
 
-  // ⬇️ Rendi “search dish” e “search restaurant” esclusivi dei clienti
   enforceClientExclusivity(isCustomer);
 
-  // Banner “browse only” per non clienti
   (function showBrowseOnlyBanner() {
     const noti = document.getElementById("noti");
     if (noti && (!user || user.role !== "cliente")) {
@@ -591,7 +556,6 @@ window.onload = async () => {
     }
   })();
 
-  // mostra/nasconde sezione “offerte speciali” in base al ruolo
   (function toggleSpecialOffers() {
     const ul = document.getElementById("special-offers");
     if (!ul) return;
@@ -607,50 +571,53 @@ window.onload = async () => {
     }
   })();
 
-  // nascondi link “aggiungi” se non ristoratore (compatibilità)
   const linkAdd = document.getElementById("link-add");
   if (linkAdd && !isRestaurateur) linkAdd.style.display = "none";
 
+  // Guard ristoratore senza restaurantId
   if (isRestaurateur && (!user.restaurantId || user.restaurantId === "")) {
     alert("Error: your restaurateur profile has no associated restaurantId.");
     return;
   }
 
   try {
-    // carica menu + mappa immagini
+    // ⬇️ Opzione 4: chiamata diversa se ristoratore o cliente
+    const mealsURL = isRestaurateur
+      ? `${API_BASE}/meals?restaurantId=${encodeURIComponent(user.restaurantId)}`
+      : `${API_BASE}/meals`;
+
     const [menuRes, imgMap] = await Promise.all([
-      fetch(`${API_BASE}/meals`),
+      fetch(mealsURL, { mode: "cors" }),
       buildFileImageMap(),
     ]);
 
     if (!menuRes.ok) {
       const body = await menuRes.text().catch(() => "");
-      throw new Error(`GET /meals ${menuRes.status} – ${body}`);
+      throw new Error(`GET ${mealsURL} ${menuRes.status} – ${body}`);
     }
-    const allData = await menuRes.json();
+    const fetched = await menuRes.json();
 
-    const isNested = Array.isArray(allData) && allData.some(r => Array.isArray(r.menu));
-
-    // tutti i piatti normalizzati (con restaurantId)
+    // Se il backend restituisce già SOLO i piatti del ristorante (ristoratore),
+    // normalizziamo direttamente. Se è lista “annidata”, appiattiamo.
+    const isNested = Array.isArray(fetched) && fetched.some(r => Array.isArray(r.menu));
     const allMealsNormalized = isNested
-      ? allData.flatMap(r => (r.menu || []).map(m => normalizeMeal(m, r.restaurantId)))
-      : (Array.isArray(allData) ? allData.map(m => normalizeMeal(m)) : []);
+      ? fetched.flatMap(r => (r.menu || []).map(m => normalizeMeal(m, r.restaurantId)))
+      : (Array.isArray(fetched) ? fetched.map(m => normalizeMeal(m)) : []);
 
+    // Applica fallback immagini
     allMealsNormalized.forEach(m => applyImageFallbackFromMap(m, imgMap));
 
-    // ———— costruzione lista categorie (per select) ————
+    // Costruisci select categorie
     const categories = Array.from(new Set(
       allMealsNormalized.map(m => (m.tipologia || "").trim()).filter(Boolean)
     )).sort((a, b) => a.localeCompare(b));
 
     const catSelect = document.getElementById("category-filter");
     if (catSelect && !catSelect.dataset.populated) {
-      // opzione "tutte"
       const optAll = document.createElement("option");
       optAll.value = "*";
       optAll.textContent = "All categories";
       catSelect.appendChild(optAll);
-      // opzioni reali
       for (const c of categories) {
         const o = document.createElement("option");
         o.value = c;
@@ -660,45 +627,33 @@ window.onload = async () => {
       catSelect.dataset.populated = "1";
     }
 
-    // ———— DECISIONE CATEGORIA ATTIVA ————
-    // I menù NON devono usare la preferenza del cliente.
-    // Priorità: 1) select #category-filter, 2) URL ?cat=, 3) "*"
+    // Categoria attiva
     const urlCat = getQueryParam("cat");
-    let activeCategory = "*"; // di default mostra tutto
-
+    let activeCategory = "*";
     if (catSelect && catSelect.value && catSelect.value !== "*") {
       activeCategory = catSelect.value;
     } else if (urlCat) {
       activeCategory = urlCat;
       if (catSelect) catSelect.value = urlCat;
     }
-
     setSelectedCategoryLabel(activeCategory && activeCategory !== "*" ? activeCategory : "All categories");
 
-    // ———— COSTRUISCI LISTA “da mostrare” (tabella) ————
+    // ———— COSTRUISCI LISTA “da mostrare” ————
     let mealsToShow;
     if (isRestaurateur) {
-      if (isNested) {
-        const ristorante = allData.find(r => String(r.restaurantId) === String(user.restaurantId));
-        if (!ristorante) {
-          alert(`Error: no menu found for your restaurantId (${user.restaurantId}).`);
-          return;
-        }
-        mealsToShow = (ristorante.menu || []).map(m => normalizeMeal(m, ristorante.restaurantId));
-      } else {
-        const filtered = allMealsNormalized.filter(m => String(m.restaurantId) === String(user.restaurantId));
-        mealsToShow = filtered.length ? filtered : allMealsNormalized;
-      }
+      // Già filtrati lato backend: usa ciò che è arrivato
+      mealsToShow = allMealsNormalized;
     } else {
+      // Cliente: tutti i piatti
       mealsToShow = allMealsNormalized;
     }
     mealsToShow.forEach(m => applyImageFallbackFromMap(m, imgMap));
 
-    // salva global per filtro ingredienti
+    // salva global per filtri/offer
     window.__allMeals = mealsToShow;
-    window.__allMealsAll = allMealsNormalized; // utile per offerte speciali
+    window.__allMealsAll = allMealsNormalized;
 
-    // render tabella (se presente)
+    // Tabella
     renderTable(
       activeCategory && activeCategory !== "*"
         ? mealsToShow.filter(p => (p.tipologia || "").toLowerCase() === activeCategory.toLowerCase())
@@ -706,10 +661,10 @@ window.onload = async () => {
       isRestaurateur
     );
 
-    // render vista per ristorante (card) con la categoria attiva
-    renderMenusGroupedSection(mealsToShow, allData, activeCategory);
+    // Card per ristorante (clienti vedono gruppi; ristoratore vede solo il suo)
+    renderMenusGroupedSection(mealsToShow, fetched, activeCategory);
 
-    // ———— Personalized offers (solo cliente), raggruppate per ristorante ————
+    // Offerte personalizzate (solo cliente)
     if (isCustomer) {
       await renderPersonalizedOffersGrouped(user, (window.__allMealsAll || []));
     } else {
@@ -722,34 +677,32 @@ window.onload = async () => {
       }
     }
 
-    // ———— eventi: cambio categoria dal select ————
-    if (catSelect) {
-      catSelect.addEventListener("change", () => {
-        const newCat = catSelect.value || "*";
+    // Cambio categoria
+    const catSelect2 = document.getElementById("category-filter");
+    if (catSelect2) {
+      catSelect2.addEventListener("change", () => {
+        const newCat = catSelect2.value || "*";
         setSelectedCategoryLabel(newCat && newCat !== "*" ? newCat : "All categories");
 
-        // aggiorna tabella
         const mealsNow = (window.__allMeals || []);
         const filteredForTable = newCat && newCat !== "*"
           ? mealsNow.filter(p => (p.tipologia || "").toLowerCase() === newCat.toLowerCase())
           : mealsNow;
+
         renderTable(filteredForTable, isRestaurateur);
-
-        // aggiorna vista per ristorante
-        renderMenusGroupedSection(mealsNow, allData, newCat);
-
-        // le offerte restano ancorate alla preferenza profilo
+        renderMenusGroupedSection(mealsNow, fetched, newCat);
       });
     }
 
-    // filtro ingredienti live (se presente) — esclusivo clienti già gestito da enforceClientExclusivity
+    // Filtro ingredienti live (solo clienti)
     const filterInput = document.getElementById("filter-ingredient");
     if (filterInput) {
       filterInput.addEventListener("input", () => {
-        if (filterInput.disabled) return; // se non cliente, non fa nulla
+        if (filterInput.disabled) return;
         const text = filterInput.value.trim().toLowerCase();
         const base = (window.__allMeals || []);
-        const categoryNow = (catSelect && catSelect.value) ? catSelect.value : activeCategory;
+        const catSelectNow = document.getElementById("category-filter");
+        const categoryNow = (catSelectNow && catSelectNow.value) ? catSelectNow.value : activeCategory;
         const baseByCat = categoryNow && categoryNow !== "*"
           ? base.filter(p => (p.tipologia || "").toLowerCase() === categoryNow.toLowerCase())
           : base;
@@ -757,7 +710,7 @@ window.onload = async () => {
           (p.ingredients || []).some(i => String(i).toLowerCase().includes(text))
         );
         renderTable(filtered, isRestaurateur);
-        renderMenusGroupedSection(filtered, allData, categoryNow);
+        renderMenusGroupedSection(filtered, fetched, categoryNow);
       });
     }
 
