@@ -7,20 +7,36 @@ const API_BASE =
 console.log('add.js loaded:', document.currentScript?.src);
 console.log('API_BASE ->', API_BASE);
 
-// helper: parse JSON in modo sicuro 
+// ===== helpers =====
 async function safeJson(res) {
   const ct = res.headers.get('content-type') || '';
   const text = await res.text();
   if (!ct.includes('application/json')) {
-    // mostra un estratto utile per il debug
     const snippet = text.slice(0, 200).replace(/\s+/g, ' ');
     throw new Error(`Non-JSON response (${res.status}) → ${snippet}`);
   }
-  try {
-    return JSON.parse(text);
-  } catch (e) {
-    throw new Error(`JSON parse error (${res.status}): ${e.message}`);
-  }
+  try { return JSON.parse(text); }
+  catch (e) { throw new Error(`JSON parse error (${res.status}): ${e.message}`); }
+}
+
+function readUser() {
+  try { return JSON.parse(localStorage.getItem("loggedUser") || "null"); }
+  catch { return null; }
+}
+
+function isRistoratore(u) {
+  const role = String(u?.role ?? "").trim().toLowerCase();
+  return ["ristoratore","restauratore","restaurant","ristorante"].includes(role);
+}
+
+function showBanner(container, html) {
+  if (!container) return;
+  const div = document.createElement("div");
+  div.className = "alert info";
+  div.style.margin = "8px 0";
+  div.innerHTML = html;
+  container.parentElement?.insertBefore(div, container);
+  return div;
 }
 
 // =================== gestione ingredienti manuali ===================
@@ -30,16 +46,19 @@ const addBtn          = document.getElementById("add-ingredient-btn");
 
 let ingredients = [];
 
-addBtn.addEventListener("click", () => {
-  const ing = (ingredientInput.value || "").trim();
-  if (ing && !ingredients.map(x => x.toLowerCase()).includes(ing.toLowerCase())) {
-    ingredients.push(ing);
-    updateIngredientList();
-    ingredientInput.value = "";
-  }
-});
+if (addBtn) {
+  addBtn.addEventListener("click", () => {
+    const ing = (ingredientInput.value || "").trim();
+    if (ing && !ingredients.map(x => x.toLowerCase()).includes(ing.toLowerCase())) {
+      ingredients.push(ing);
+      updateIngredientList();
+      ingredientInput.value = "";
+    }
+  });
+}
 
 function updateIngredientList() {
+  if (!ingredientList) return;
   ingredientList.innerHTML = ingredients.map((ing, i) => `
     <li style="margin-bottom: 5px;">
       ${ing}
@@ -54,95 +73,124 @@ window.removeIngredient = function(index) {
 };
 
 // =================== submit: piatto personalizzato ===================
-document.getElementById("meal-form").addEventListener("submit", async function (e) {
-  e.preventDefault();
+const mealForm = document.getElementById("meal-form");
+if (mealForm) {
+  mealForm.addEventListener("submit", async function (e) {
+    e.preventDefault();
 
-  const userStr = localStorage.getItem("loggedUser");
-  const user = userStr ? JSON.parse(userStr) : null;
-
-  if (!user || user.role !== "ristoratore") {
-    alert("Unauthorized: a restaurateur account is required.");
-    return;
-  }
-  if (!user.restaurantId) {
-    alert("No restaurantId associated with this user. Please log in again as a restaurateur.");
-    return;
-  }
-
-  const nome        = document.getElementById("name").value.trim();
-  const prezzo      = parseFloat(document.getElementById("price").value);
-  const descrizione = document.getElementById("description").value.trim();
-  const tipologia   = document.getElementById("preferenza").value; // <- allineato con l'HTML
-  const immagine    = document.getElementById("image").value.trim();
-
-  if (!nome || Number.isNaN(prezzo)) {
-    alert("Please enter a valid name and price.");
-    return;
-  }
-
-  const newMeal = {
-    restaurantId: user.restaurantId,
-    nome,
-    prezzo,
-    descrizione,
-    tipologia,
-    ingredients,      // dagli input manuali sopra
-    immagine,
-    origine: "personalizzato"
-  };
-
-  try {
-    const res = await fetch(`${API_BASE}/meals`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(newMeal)
-    });
-
-    if (!res.ok) {
-      const errText = await res.text();
-      throw new Error(`HTTP ${res.status} - ${errText || 'Save error'}`);
+    const user = readUser();
+    if (!isRistoratore(user)) {
+      alert("Solo i ristoratori possono creare piatti personalizzati.");
+      return;
+    }
+    if (!user?.restaurantId) {
+      alert("Per salvare nel tuo menu imposta prima il Restaurant ID nel profilo.");
+      return;
     }
 
-    alert("Dish added!");
-    window.location.href = "index.html";
-  } catch (err) {
-    console.error("Network/save error:", err);
-    alert(String(err.message || err));
-  }
-});
+    const nome        = document.getElementById("name").value.trim();
+    const prezzoRaw   = document.getElementById("price").value;
+    const prezzo      = Number(prezzoRaw);
+    const descrizione = (document.getElementById("description").value || "").trim();
+    const tipologia   = document.getElementById("preferenza").value;
+    const immagine    = (document.getElementById("image").value || "").trim();
+
+    if (!nome || !Number.isFinite(prezzo) || prezzo <= 0) {
+      alert("Inserisci un nome e un prezzo valido (> 0).");
+      return;
+    }
+
+    const newMeal = {
+      restaurantId: user.restaurantId,
+      nome,
+      prezzo,
+      descrizione,
+      tipologia,
+      ingredients,
+      immagine,
+      origine: "personalizzato"
+    };
+
+    try {
+      const res = await fetch(`${API_BASE}/meals`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(newMeal)
+      });
+
+      if (!res.ok) {
+        const errText = await res.text();
+        throw new Error(`HTTP ${res.status} - ${errText || 'Save error'}`);
+      }
+
+      alert("Piatto salvato nel tuo menu!");
+      window.location.href = "index.html";
+    } catch (err) {
+      console.error("Network/save error:", err);
+      alert(String(err.message || err));
+    }
+  });
+}
 
 // =================== piatti comuni (cards + "Aggiungi al mio menu") ===================
 window.addEventListener('DOMContentLoaded', async () => {
   const container = document.getElementById("common-meals-container");
   if (!container) return;
 
-  const userStr = localStorage.getItem("loggedUser");
-  const user = userStr ? JSON.parse(userStr) : null;
+  const user = readUser();
 
-  if (!user || user.role !== "ristoratore" || !user.restaurantId) {
+  // 1) Guard SOLO sul ruolo (non su restaurantId)
+  if (!isRistoratore(user)) {
     container.innerHTML = "<p>Only restaurateurs can view common dishes.</p>";
     return;
   }
 
+  // Se manca restaurantId, avvisa ma NON bloccare la visualizzazione
+  if (!user?.restaurantId) {
+    showBanner(container, "Suggerimento: per <b>aggiungere</b> un piatto comune al tuo menu devi prima impostare il <b>Restaurant ID</b> nel profilo.");
+  }
+
+  // 2) Carica l’elenco provando più endpoint
+  async function loadCommon() {
+    const tries = [
+      `${API_BASE}/meals/common-meals`,
+      `${API_BASE}/meals/common`,
+      `${API_BASE}/meals?common=1`
+    ];
+    let lastErr = null;
+    for (const url of tries) {
+      try {
+        const res = await fetch(url);
+        if (!res.ok) {
+          lastErr = new Error(`HTTP ${res.status}`);
+          continue;
+        }
+        const data = await safeJson(res);
+        return Array.isArray(data) ? data : [];
+      } catch (e) {
+        lastErr = e;
+      }
+    }
+    throw lastErr || new Error("Common meals not available");
+  }
+
   try {
-    const res = await fetch(`${API_BASE}/meals/common-meals`);
-    if (!res.ok) {
-      const t = await res.text();
-      throw new Error(`HTTP ${res.status} - ${t || 'Load error'}`);
+    container.innerHTML = "<p>Loading...</p>";
+    const commonMeals = await loadCommon();
+    if (!commonMeals.length) {
+      container.innerHTML = `<p class="muted">Nessun piatto comune disponibile.</p>`;
+      return;
     }
 
-    const commonMeals = await safeJson(res); // evita "unexpected token <" su error pages
     container.innerHTML = "";
-
     commonMeals.forEach(raw => {
-      // normalizzazione campi 
+      // normalizzazione campi
       const nome        = raw.strMeal         || raw.nome        || raw.name || "No name";
       const categoria   = raw.strCategory     || raw.tipologia   || raw.category || "-";
       const istruzioni  = raw.strInstructions || raw.descrizione || "-";
-      const img         = raw.strMealThumb    || raw.immagine    || "";
-      let ings = [];
+      const img         = raw.strMealThumb    || raw.immagine    || raw.image || "";
 
-      // se formato TheMealDB: strIngredient1..20
+      let ings = [];
       if (typeof raw.strIngredient1 !== "undefined") {
         for (let i = 1; i <= 20; i++) {
           const ing = raw["strIngredient" + i];
@@ -152,7 +200,6 @@ window.addEventListener('DOMContentLoaded', async () => {
         ings = raw.ingredients;
       }
 
-      // UI card
       const card = document.createElement("div");
       card.style.border = "1px solid #ccc";
       card.style.marginBottom = "10px";
@@ -161,17 +208,22 @@ window.addEventListener('DOMContentLoaded', async () => {
 
       card.innerHTML = `
         <strong>${nome}</strong> <small>(${categoria})</small><br>
-        ${img ? `<img src="${img}" alt="${nome}" width="150" style="margin:6px 0;border-radius:6px;">` : ""}
+        ${img ? `<img src="${img}" alt="${nome}" width="150" style="margin:6px 0;border-radius:6px;object-fit:cover;">` : ""}
         <div style="font-size: 12px; color:#444;"><em>${istruzioni}</em></div>
         <div style="font-size: 12px; margin-top:4px;"><small>Ingredients: ${ings.join(", ") || "-"}</small></div>
         <button type="button" class="add-btn" style="margin-top:8px;">Add to my menu</button>
       `;
 
       card.querySelector(".add-btn").addEventListener("click", async () => {
+        const u = readUser();
+        if (!u?.restaurantId) {
+          alert("Per aggiungere al tuo menu imposta prima il Restaurant ID nel profilo.");
+          return;
+        }
         const nuovoPiatto = {
-          restaurantId: user.restaurantId,
+          restaurantId: u.restaurantId,
           nome,
-          prezzo: raw.prezzo || 10,
+          prezzo: Number(raw.prezzo || 10),
           descrizione: istruzioni,
           tipologia: categoria,
           immagine: img,
@@ -191,7 +243,7 @@ window.addEventListener('DOMContentLoaded', async () => {
             throw new Error(`HTTP ${addRes.status} - ${addTxt || 'Save error'}`);
           }
 
-          alert("Dish added to your menu!");
+          alert("Piatto aggiunto al tuo menu!");
           window.location.href = "index.html";
         } catch (err) {
           console.error("Common dish add error:", err);
