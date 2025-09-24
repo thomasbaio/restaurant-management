@@ -1,42 +1,67 @@
-const API_BASE =
-  (location.hostname === 'localhost' || location.hostname === '127.0.0.1')
-    ? 'http://localhost:3000'
-    : 'https://restaurant-management-wzhj.onrender.com';
+// login.js (FRONTEND) — invia email/username + password e salva data.user
 
-console.log('API_BASE ->', API_BASE);
+(() => {
+  const isLocal = ["localhost", "127.0.0.1"].includes(location.hostname);
+  const API_BASE = isLocal
+    ? "http://localhost:3000"
+    : "https://restaurant-management-wzhj.onrender.com";
 
-document.getElementById("login-form").addEventListener("submit", async function (e) {
-  e.preventDefault();
+  const form = document.getElementById("login-form");
+  if (!form) return;
 
-  const username = document.getElementById("username").value.trim();
-  const password = document.getElementById("password").value;
+  form.addEventListener("submit", async (e) => {
+    e.preventDefault();
 
-  try {
-    const res = await fetch(`${API_BASE}/users/login`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ username, password })
-    });
+    const emailEl = document.getElementById("email");
+    const userEl  = document.getElementById("username");
+    const passEl  = document.getElementById("password");
 
-    const text = await res.text();
-    if (!res.ok) {
-      throw new Error(`HTTP ${res.status} - ${text || 'Login error'}`);
+    const email = (emailEl?.value || "").trim();
+    const username = (userEl?.value || "").trim();
+    const password = (passEl?.value || "").trim();
+
+    if ((!email && !username) || !password) {
+      alert("Inserisci email o username e la password.");
+      return;
     }
 
-    let data;
-    try { data = JSON.parse(text); } catch { data = {}; }
+    try {
+      const res = await fetch(`${API_BASE}/users/login`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        mode: "cors",
+        body: JSON.stringify({
+          // invia entrambi; il backend userà quello presente
+          email: email || undefined,
+          username: username || undefined,
+          password
+        })
+      });
 
-    // Sslvo utente per il frontend (username, role, restaurantId, ecc.)
-    localStorage.setItem("loggedUser", JSON.stringify(data));
+      const text = await res.text();
+      let data; try { data = JSON.parse(text); } catch { data = {}; }
 
-    alert("Login successful!");
-    window.location.href = "index.html";
-  } catch (err) {
-    console.error("Request error:", err);
-    const msg = /Failed to fetch|NetworkError|CORS/i.test(String(err))
-      ? "Unable to contact the server (check that the URL isn't localhost and that CORS is enabled)."
-      : err.message;
-    alert(msg);
-  }
-});
+      if (!res.ok) {
+        // mostra messaggio dettagliato dal server se disponibile
+        const msg = (data && data.message) ? data.message : (text || `HTTP ${res.status}`);
+        throw new Error(msg);
+      }
 
+      if (!data || !data.user) {
+        throw new Error("Risposta non valida dal server (utente mancante).");
+      }
+
+      // ✅ salva SOLO i dati utente
+      localStorage.setItem("loggedUser", JSON.stringify(data.user));
+
+      alert("Login effettuato!");
+      window.location.href = "index.html";
+    } catch (err) {
+      console.error("Login error:", err);
+      const isNetwork = /Failed to fetch|NetworkError|CORS/i.test(String(err));
+      alert(isNetwork
+        ? "Impossibile contattare il server. Controlla URL/connessione."
+        : `Credenziali non valide: ${err.message}`);
+    }
+  });
+})();
