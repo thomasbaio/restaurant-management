@@ -1,4 +1,4 @@
-// main.js — versione "ORDER" (senza cart) — Opzione 4 (GET /meals?restaurantId=...)
+// main.js — versione "ORDER" (senza cart) — Opzione 4 + Auto-Healing restaurantId
 
 // ========================= base URL per API =========================
 const isLocal = location.hostname === "localhost" || location.hostname === "127.0.0.1";
@@ -35,7 +35,7 @@ function firstImage(p) {
   for (let c of candidates) {
     if (!isValidImgPath(c)) continue;
     c = String(c).trim();
-    if (c.startsWith("//")) return "https:" + c;
+    if (c.startsWith("//")) return "https:" + c; // forza https
     return c;
   }
   return "";
@@ -97,7 +97,7 @@ function normalizeKey(nome, cat) {
 
 async function buildFileImageMap() {
   try {
-    const res = await fetch(`${API_BASE}/meals/common-meals?source=file`);
+    const res = await fetch(`${API_BASE}/meals/common-meals?source=file`, { mode: "cors" });
     if (!res.ok) throw new Error(`GET /meals/common-meals?source=file ${res.status}`);
     const list = await res.json();
     const map = new Map();
@@ -544,6 +544,7 @@ window.onload = async () => {
 
   enforceClientExclusivity(isCustomer);
 
+  // Banner “browse only” per non clienti
   (function showBrowseOnlyBanner() {
     const noti = document.getElementById("noti");
     if (noti && (!user || user.role !== "cliente")) {
@@ -556,6 +557,7 @@ window.onload = async () => {
     }
   })();
 
+  // mostra/nasconde sezione “offerte speciali” in base al ruolo
   (function toggleSpecialOffers() {
     const ul = document.getElementById("special-offers");
     if (!ul) return;
@@ -571,17 +573,50 @@ window.onload = async () => {
     }
   })();
 
+  // nascondi link “aggiungi” se non ristoratore (compatibilità)
   const linkAdd = document.getElementById("link-add");
   if (linkAdd && !isRestaurateur) linkAdd.style.display = "none";
 
-  // Guard ristoratore senza restaurantId
+  /* ===== FIX IMMEDIATO: Auto-healing del restaurantId per ristoratori ===== */
   if (isRestaurateur && (!user.restaurantId || user.restaurantId === "")) {
-    alert("Error: your restaurateur profile has no associated restaurantId.");
-    return;
+    try {
+      // tenta di recuperarlo dalla lista ristoratori (cerca per username/email)
+      const resp = await fetch(`${API_BASE}/users/restaurants`, { mode: "cors" });
+      if (resp.ok) {
+        const arr = await resp.json();
+        const match = (Array.isArray(arr) ? arr : []).find(x =>
+          String(x.username || "").toLowerCase() === String(user.username || "").toLowerCase() ||
+          String(x.email || "").toLowerCase()    === String(user.email || "").toLowerCase()
+        );
+        if (match?.restaurantId) {
+          user.restaurantId = match.restaurantId;
+          localStorage.setItem("loggedUser", JSON.stringify(user));
+        }
+      }
+    } catch (_) {}
+
+    // Se ancora mancante, mostra messaggio in pagina e interrompi (niente alert)
+    if (!user.restaurantId) {
+      const tbody = document.getElementById("menu-body");
+      const host = tbody || document.getElementById("noti") || document.body;
+      const html = `
+        <div class="box" style="margin:12px 0;">
+          Il tuo profilo ristoratore non è collegato a nessun <code>restaurantId</code>.<br/>
+          Vai su <a href="edituser.html">Modifica profilo</a> e collega il ristorante,
+          poi effettua nuovamente il login.
+        </div>`;
+      if (tbody) {
+        tbody.innerHTML = `<tr><td colspan="6">${html}</td></tr>`;
+      } else {
+        host.insertAdjacentHTML("afterbegin", html);
+      }
+      return;
+    }
   }
+  /* ===== Fine FIX IMMEDIATO ===== */
 
   try {
-    // ⬇️ Opzione 4: chiamata diversa se ristoratore o cliente
+    // Opzione 4: rotta diversa se ristoratore o cliente
     const mealsURL = isRestaurateur
       ? `${API_BASE}/meals?restaurantId=${encodeURIComponent(user.restaurantId)}`
       : `${API_BASE}/meals`;
@@ -597,17 +632,14 @@ window.onload = async () => {
     }
     const fetched = await menuRes.json();
 
-    // Se il backend restituisce già SOLO i piatti del ristorante (ristoratore),
-    // normalizziamo direttamente. Se è lista “annidata”, appiattiamo.
     const isNested = Array.isArray(fetched) && fetched.some(r => Array.isArray(r.menu));
     const allMealsNormalized = isNested
       ? fetched.flatMap(r => (r.menu || []).map(m => normalizeMeal(m, r.restaurantId)))
       : (Array.isArray(fetched) ? fetched.map(m => normalizeMeal(m)) : []);
 
-    // Applica fallback immagini
     allMealsNormalized.forEach(m => applyImageFallbackFromMap(m, imgMap));
 
-    // Costruisci select categorie
+    // categorie
     const categories = Array.from(new Set(
       allMealsNormalized.map(m => (m.tipologia || "").trim()).filter(Boolean)
     )).sort((a, b) => a.localeCompare(b));
@@ -627,7 +659,7 @@ window.onload = async () => {
       catSelect.dataset.populated = "1";
     }
 
-    // Categoria attiva
+    // categoria attiva
     const urlCat = getQueryParam("cat");
     let activeCategory = "*";
     if (catSelect && catSelect.value && catSelect.value !== "*") {
@@ -638,22 +670,15 @@ window.onload = async () => {
     }
     setSelectedCategoryLabel(activeCategory && activeCategory !== "*" ? activeCategory : "All categories");
 
-    // ———— COSTRUISCI LISTA “da mostrare” ————
-    let mealsToShow;
-    if (isRestaurateur) {
-      // Già filtrati lato backend: usa ciò che è arrivato
-      mealsToShow = allMealsNormalized;
-    } else {
-      // Cliente: tutti i piatti
-      mealsToShow = allMealsNormalized;
-    }
+    // lista da mostrare
+    let mealsToShow = allMealsNormalized; // ristoratore: già filtrati; cliente: tutti
     mealsToShow.forEach(m => applyImageFallbackFromMap(m, imgMap));
 
-    // salva global per filtri/offer
+    // global per filtri/offerte
     window.__allMeals = mealsToShow;
     window.__allMealsAll = allMealsNormalized;
 
-    // Tabella
+    // tabella
     renderTable(
       activeCategory && activeCategory !== "*"
         ? mealsToShow.filter(p => (p.tipologia || "").toLowerCase() === activeCategory.toLowerCase())
@@ -661,10 +686,10 @@ window.onload = async () => {
       isRestaurateur
     );
 
-    // Card per ristorante (clienti vedono gruppi; ristoratore vede solo il suo)
+    // card per ristorante
     renderMenusGroupedSection(mealsToShow, fetched, activeCategory);
 
-    // Offerte personalizzate (solo cliente)
+    // offerte personalizzate (solo cliente)
     if (isCustomer) {
       await renderPersonalizedOffersGrouped(user, (window.__allMealsAll || []));
     } else {
@@ -677,7 +702,7 @@ window.onload = async () => {
       }
     }
 
-    // Cambio categoria
+    // cambio categoria
     const catSelect2 = document.getElementById("category-filter");
     if (catSelect2) {
       catSelect2.addEventListener("change", () => {
@@ -694,7 +719,7 @@ window.onload = async () => {
       });
     }
 
-    // Filtro ingredienti live (solo clienti)
+    // filtro ingredienti live (solo clienti)
     const filterInput = document.getElementById("filter-ingredient");
     if (filterInput) {
       filterInput.addEventListener("input", () => {
