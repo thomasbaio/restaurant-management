@@ -1,12 +1,11 @@
-// login.js — Frontend completo (robusto a /login 404, salva token+user)
+// login.js — Frontend robusto: prova prima /users/login, poi /login.
+// Mostra corpo errore se il server non restituisce JSON valido o manca "user".
 (() => {
-  // ===== API base (dev/prod) =====
   const isLocal = ["localhost", "127.0.0.1"].includes(location.hostname);
   const API_BASE = isLocal
     ? "http://localhost:3000"
     : "https://restaurant-management-wzhj.onrender.com";
 
-  // ===== util: POST JSON con gestione status =====
   async function postJson(url, payload) {
     const res = await fetch(url, {
       method: "POST",
@@ -22,20 +21,29 @@
     if (!res.ok) {
       const msg = (data && (data.message || data.error)) || text || `HTTP ${res.status}`;
       const err = new Error(msg);
-      err.status = res.status;           // <— importante per il fallback 404
+      err.status = res.status;
       err.statusText = res.statusText;
+      err.body = text;
       throw err;
     }
-    return data || {};
+    return { data, raw: text };
   }
 
-  // ===== attach al form =====
+  function pickUser(obj) {
+    if (!obj) return null;
+    // accetta vari layout
+    if (obj.user) return obj.user;
+    if (obj.data && obj.data.user) return obj.data.user;
+    // alcuni backend rispondono direttamente con l'utente
+    if (obj.username || obj.email || obj.role) return obj;
+    return null;
+  }
+
   document.addEventListener("DOMContentLoaded", () => {
-    const form   = document.getElementById("login-form");
+    const form    = document.getElementById("login-form");
     const emailEl = document.getElementById("email");     // opzionale
     const userEl  = document.getElementById("username");  // può contenere username o email
     const passEl  = document.getElementById("password");
-
     if (!form) return;
 
     form.addEventListener("submit", async (e) => {
@@ -50,7 +58,6 @@
         return;
       }
 
-      // payload: se nel campo username mettono un'email, usala come email
       const payload = {};
       if (rawEmail) payload.email = rawEmail;
       else if (rawUser.includes("@")) payload.email = rawUser;
@@ -58,17 +65,32 @@
       payload.password = password;
 
       try {
-        // tenta /login; se 404 → fallback /users/login
-        let data;
+        let resp, data, user;
+
+        // 1) prova /users/login (il tuo prod non ha /login)
         try {
-          data = await postJson(`${API_BASE}/login`, payload);
+          resp = await postJson(`${API_BASE}/users/login`, payload);
         } catch (e1) {
-          if (e1.status !== 404) throw e1; // solo 404 attiva il fallback
-          data = await postJson(`${API_BASE}/users/login`, payload);
+          // 2) fallback /login solo se 404 o 405
+          if (!(e1.status === 404 || e1.status === 405)) throw e1;
+          resp = await postJson(`${API_BASE}/login`, payload);
         }
 
-        const user = data.user || data.data?.user || null;
-        if (!user) throw new Error("Risposta non valida dal server (utente mancante).");
+        data = resp.data ?? null;
+
+        // se il server ha risposto HTML, fallisci con dettaglio
+        if (!data && resp.raw && /^\s*<!DOCTYPE html>/i.test(resp.raw)) {
+          throw new Error("Il server ha risposto HTML invece di JSON:\n" + resp.raw.slice(0, 200));
+        }
+
+        user = pickUser(data);
+        if (!user) {
+          // mostra anche il JSON grezzo che è arrivato per debug
+          throw new Error(
+            "Risposta non valida dal server (utente mancante). Corpo: " +
+            (resp.raw ? resp.raw.slice(0, 300) : JSON.stringify(data))
+          );
+        }
 
         // salva token (se presente) e utente “safe”
         if (data.token) localStorage.setItem("authToken", data.token);
