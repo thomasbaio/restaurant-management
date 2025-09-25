@@ -169,6 +169,67 @@ function pickUpdatableFields(body) {
   return update;
 }
 
+/* ----------------------- helpers “comuni” backend ----------------------- */
+
+const norm = (s) => String(s || "").trim().toLowerCase();
+const nameOf = (m) => norm(m.name || m.nome || m.strMeal);
+const imgOf  = (m) => norm(m.image || m.immagine || m.strMealThumb);
+
+function ingredientsOf(m) {
+  if (Array.isArray(m.ingredients)) return m.ingredients.filter(Boolean);
+  if (Array.isArray(m.ingredienti)) return m.ingredienti.filter(Boolean);
+  const out = [];
+  for (let i = 1; i <= 20; i++) {
+    const v = m["strIngredient" + i];
+    if (v && String(v).trim()) out.push(String(v).trim());
+  }
+  return out;
+}
+
+// scegli la copia “migliore”: immagine > più ingredienti > descrizione più lunga
+function chooseBetter(a, b) {
+  const ai = imgOf(a) ? 1 : 0,  bi = imgOf(b) ? 1 : 0;
+  if (ai !== bi) return ai > bi ? a : b;
+
+  const ac = ingredientsOf(a).length, bc = ingredientsOf(b).length;
+  if (ac !== bc) return ac > bc ? a : b;
+
+  const ad = (a.description || a.descrizione || a.strInstructions || "").trim().length;
+  const bd = (b.description || b.descrizione || b.strInstructions || "").trim().length;
+  if (ad !== bd) return ad > bd ? a : b;
+
+  return a;
+}
+
+function dedupeByName(list) {
+  const map = new Map();
+  for (const m of list) {
+    const n = nameOf(m);
+    if (!n) continue;
+    map.set(n, map.has(n) ? chooseBetter(map.get(n), m) : m);
+  }
+  return [...map.values()];
+}
+
+// carica SOLO i piatti “comuni” dal file (no menu dei ristoranti)
+function loadCommonFromFile() {
+  const { data } = readFileMeals();
+  if (!data) return [];
+
+  // se esiste una proprietà "common" usala
+  if (Array.isArray(data.common)) {
+    return data.common.map(withIngredients);
+  }
+
+  // se l'array top-level è già una lista di piatti, considerali comuni
+  if (Array.isArray(data) && data.length && looksLikeMeal(data[0])) {
+    return data.map(withIngredients);
+  }
+
+  // altrimenti (lista ristoranti con menu) → nessun “comune” nel file
+  return [];
+}
+
 /* ------------------------------- ROUTES ------------------------------- */
 
 /**
@@ -176,7 +237,7 @@ function pickUpdatableFields(body) {
  * /meals/common-meals:
  *   get:
  *     tags: [Meals]
- *     summary: Lista dei piatti comuni (merge DB + file) con dedup
+ *     summary: Lista dei piatti comuni (merge DB + file), senza piatti dei ristoranti, con deduplica
  *     parameters:
  *       - in: query
  *         name: source
@@ -186,15 +247,20 @@ function pickUpdatableFields(body) {
  *           enum: [all, db, file]
  *           default: all
  *       - in: query
- *         name: dedup
- *         description: Modalità di deduplica
+ *         name: excludeMyMenu
+ *         description: RestaurantId del chiamante; esclude i piatti già presenti nel suo menu (per nome)
  *         schema:
  *           type: string
- *           enum: [perRestaurant, global, off]
- *           default: perRestaurant
+ *       - in: query
+ *         name: dedup
+ *         description: Modalità di deduplica (attualmente per nome)
+ *         schema:
+ *           type: string
+ *           enum: [global, off]
+ *           default: global
  *     responses:
  *       200:
- *         description: Elenco piatti comuni (deduplicati)
+ *         description: Elenco piatti comuni (deduplicati e filtrati)
  *         content:
  *           application/json:
  *             schema:
@@ -205,56 +271,74 @@ function pickUpdatableFields(body) {
 router.get("/common-meals", async (req, res) => {
   try {
     const source = String(req.query.source || "all").toLowerCase();
-    const dedupMode = String(req.query.dedup || "perRestaurant").toLowerCase();
+    const dedupMode = String(req.query.dedup || "global").toLowerCase();
+    const excludeMyMenu = String(req.query.excludeMyMenu || "").trim();
 
-    // file
+    // --- FILE: solo “comuni” dal file (no menu dei ristoranti) ---
     let fileMeals = [];
-    const { data, filePath, error, exists } = readFileMeals();
+    const { filePath, exists, error } = readFileMeals();
     if (source !== "db") {
       if (error && source === "file") {
-        return res
-          .status(500)
-          .json({ error: "Unable to read common dishes file", detail: error });
+        return res.status(500).json({ error: "Unable to read common dishes file", detail: error });
       }
-      fileMeals = flattenFileMeals(data).map(withIngredients);
+      fileMeals = loadCommonFromFile();
     }
     res.setHeader("X-Meals-File", filePath || "");
     res.setHeader("X-Meals-File-Exists", String(!!exists));
     res.setHeader("X-Meals-File-Count", String(fileMeals.length));
 
-    // db
+    // --- DB: prendi solo candidati “comuni” ed escludi SEMPRE quelli con restaurantId ---
     let dbMeals = [];
     if (source !== "file" && mongoReady()) {
-      dbMeals = await Meal.find({ $or: [{ isCommon: true }, { origine: "comune" }] }).lean();
-      dbMeals = dbMeals.map(withIngredients);
+      const base = {
+        $or: [
+          { isCommon: true },
+          { origine: "comune" },
+          { restaurantId: { $exists: false } },
+          { restaurantId: null },
+          { restaurantId: "" },
+        ],
+      };
+      dbMeals = await Meal.find(base).lean();
+      dbMeals = dbMeals
+        .filter((m) => !m.restaurantId) // sicurezza: niente piatti dei ristoranti
+        .map(withIngredients);
       res.setHeader("X-Meals-DB-Count", String(dbMeals.length));
     } else if (source === "db" && !mongoReady()) {
       return res.status(503).json({ error: "Database not connected" });
     }
 
-    // merge + dedup
-    const keyOf = (m) => {
-      const id = m.idmeals ?? m.idMeal ?? m.id ?? m._id;
-      if (id != null) return String(id).toLowerCase();
+    // --- merge e deduplica ---
+    let merged = [...dbMeals, ...fileMeals];
+    if (dedupMode !== "off") merged = dedupeByName(merged);
 
-      const name = (m.nome || m.name || m.strMeal || "").toLowerCase().trim();
-      const cat = (m.tipologia || m.category || m.strCategory || "").toLowerCase().trim();
-      const rid = (m.restaurantId || "").toString().toLowerCase().trim();
-
-      if (dedupMode === "off") return `${Math.random()}|${name}|${cat}`;
-      if (dedupMode === "global") return `${name}|${cat}`;
-      return rid ? `${rid}|${name}|${cat}` : `${name}|${cat}`;
-    };
-
-    const seen = new Set();
-    const merged = [];
-    for (const m of [...dbMeals, ...fileMeals]) {
-      const k = keyOf(m);
-      if (!seen.has(k)) {
-        seen.add(k);
-        merged.push(m);
+    // --- escludi piatti già nel mio menu (per nome) ---
+    if (excludeMyMenu) {
+      let myNames = new Set();
+      if (mongoReady()) {
+        const mine = await Meal.find({ restaurantId: excludeMyMenu })
+          .select("nome name strMeal")
+          .lean();
+        myNames = new Set(mine.map((x) => nameOf(x)));
+      } else {
+        // fallback file: cerca nel formato annidato
+        const { data } = readFileMeals();
+        if (Array.isArray(data)) {
+          for (const r of data) {
+            const rid = r?.restaurantId ?? r?.id ?? r?._id;
+            if (String(rid) === String(excludeMyMenu)) {
+              const menu = Array.isArray(r.menu) ? r.menu : [];
+              myNames = new Set(menu.map((x) => nameOf(x)));
+              break;
+            }
+          }
+        }
       }
+      merged = merged.filter((m) => !myNames.has(nameOf(m)));
     }
+
+    // ordinamento per nome
+    merged.sort((a, b) => nameOf(a).localeCompare(nameOf(b)));
 
     return res.json(merged);
   } catch (err) {
