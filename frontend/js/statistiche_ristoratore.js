@@ -7,117 +7,137 @@ const API_BASE = isLocal
         ? "https://restaurant-management-wzhj.onrender.com"
         : location.origin));
 
+// Permetti override manuale dell’endpoint ordini se lo conosci (opzionale)
+const ORDERS_ENDPOINT = window.ORDERS_ENDPOINT || null; // es: "/api/orders/restaurant"
+
 // ========================= HELPERS =========================
 async function fetchJSON(url, options = {}) {
-  const res = await fetch(url, {
-    headers: { "Content-Type": "application/json", ...(options.headers || {}) },
-    mode: "cors",
-    ...options
-  });
-  const text = await res.text().catch(() => "");
-  let data = null;
-  try { data = text ? JSON.parse(text) : null; } catch { data = null; }
-  if (!res.ok) {
-    const msg = (data && (data.message || data.error)) || text || `HTTP ${res.status}`;
-    throw new Error(`${url} → ${msg}`);
+  try {
+    const res = await fetch(url, {
+      headers: { "Content-Type": "application/json", ...(options.headers || {}) },
+      mode: "cors",
+      ...options
+    });
+    const text = await res.text().catch(() => "");
+    // Tenta JSON, altrimenti torna null (es. HTML 404)
+    let data = null;
+    try { data = text ? JSON.parse(text) : null; } catch { data = null; }
+    if (!res.ok) {
+      // se non è ok ma è HTML o vuoto -> restituisco null e lascio il caller decidere
+      return null;
+    }
+    return data;
+  } catch {
+    return null;
   }
-  return data;
 }
 
-// Prova un URL ma accetta solo risposta "array" (lista ordini)
-async function probeOrders(url) {
-  const data = await fetchJSON(url);
-  if (Array.isArray(data)) return data;
-  // alcuni backend incapsulano in {orders:[...]}
-  if (data && Array.isArray(data.orders)) return data.orders;
-  throw new Error(`${url} → formato non valido`);
+// normalizza una risposta “ordini” in array
+function asOrdersArray(payload) {
+  if (Array.isArray(payload)) return payload;
+  if (!payload || typeof payload !== "object") return null;
+  const keys = ["orders", "data", "results", "items", "list"];
+  for (const k of keys) {
+    if (Array.isArray(payload[k])) return payload[k];
+  }
+  return null;
 }
 
-// Prova in sequenza più URL e restituisce {url, data}
-async function discoverOrders(restaurantId) {
+// Prova una lista di URL e restituisce SEMPRE un array (anche vuoto)
+async function findOrders(restaurantId) {
   const qs = `restaurantId=${encodeURIComponent(restaurantId)}`;
-  const candidates = [
-    `${API_BASE}/orders?${qs}`,
-    `${API_BASE}/api/orders?${qs}`,
-    `${API_BASE}/v1/orders?${qs}`,
-    `${API_BASE}/orders/restaurant/${encodeURIComponent(restaurantId)}`,
-    `${API_BASE}/api/orders/restaurant/${encodeURIComponent(restaurantId)}`,
-    `${API_BASE}/v1/orders/restaurant/${encodeURIComponent(restaurantId)}`,
-    // fallback “tutto” (filtreremo lato client)
-    `${API_BASE}/orders`,
-    `${API_BASE}/api/orders`,
-    `${API_BASE}/v1/orders`
-  ];
+  const base = API_BASE.replace(/\/+$/, "");
 
-  let lastErr = null;
+  const candidates = [];
+
+  // 1) eventuale override manuale
+  if (ORDERS_ENDPOINT) {
+    const ep = ORDERS_ENDPOINT.replace(/^\//, "");
+    candidates.push(`${base}/${ep}?${qs}`, `${base}/${ep}/${encodeURIComponent(restaurantId)}`);
+  }
+
+  // 2) endpoint più comuni
+  candidates.push(
+    `${base}/orders?${qs}`,
+    `${base}/api/orders?${qs}`,
+    `${base}/v1/orders?${qs}`,
+    `${base}/orders/restaurant/${encodeURIComponent(restaurantId)}`,
+    `${base}/api/orders/restaurant/${encodeURIComponent(restaurantId)}`,
+    `${base}/v1/orders/restaurant/${encodeURIComponent(restaurantId)}`,
+    // 3) fallback “tutti” (filtreremo client-side)
+    `${base}/orders`,
+    `${base}/api/orders`,
+    `${base}/v1/orders`,
+    // 4) altre varianti viste in progetti simili
+    `${base}/myorders`,
+    `${base}/api/myorders`,
+    `${base}/order`,
+    `${base}/api/order`,
+    `${base}/orders/list`,
+    `${base}/api/orders/list`
+  );
+
   for (const u of candidates) {
-    try {
-      const data = await probeOrders(u);
-      console.info("[STATISTICHE] endpoint ordini rilevato:", u);
-      return { url: u, data };
-    } catch (e) {
-      console.warn("[STATISTICHE] fallito", u, e.message);
-      lastErr = e;
+    const raw = await fetchJSON(u);
+    const arr = asOrdersArray(raw);
+    if (arr) {
+      console.info("[STATISTICHE] trovato endpoint ordini:", u);
+      return { url: u, orders: arr };
+    }
+    // Se la risposta è un array “puro”
+    if (Array.isArray(raw)) {
+      console.info("[STATISTICHE] trovato endpoint ordini (array):", u);
+      return { url: u, orders: raw };
     }
   }
-  throw lastErr || new Error("Nessuna rotta /orders trovata");
+
+  // Nessun endpoint trovato → ritorna array vuoto (niente errori in console)
+  return { url: null, orders: [] };
 }
 
-// Meals
-async function discoverMeals(restaurantId) {
+// Meals discovery analogo (sempre ritorna lista ristoranti)
+async function findMeals(restaurantId) {
+  const base = API_BASE.replace(/\/+$/, "");
   const candidates = [
-    `${API_BASE}/meals`,
-    `${API_BASE}/meals/common-meals`,
-    `${API_BASE}/api/meals`,
-    `${API_BASE}/v1/meals`
+    `${base}/meals`,
+    `${base}/meals/common-meals`,
+    `${base}/api/meals`,
+    `${base}/v1/meals`
   ];
-  let lastErr = null;
   for (const u of candidates) {
-    try {
-      const data = await fetchJSON(u);
-      // normalizza in [{restaurantId, menu:[...]}]
-      if (Array.isArray(data) && data[0]?.menu) return data;
-      if (Array.isArray(data)) return [{ restaurantId, menu: data }]; // piatti comuni
-      if (data?.restaurants) return data.restaurants;
-      // se non riconosco, forzo errore per provare il prossimo
-      throw new Error("formato meals non riconosciuto");
-    } catch (e) {
-      console.warn("[STATISTICHE] meals fallito", u, e.message);
-      lastErr = e;
-    }
+    const raw = await fetchJSON(u);
+    if (!raw) continue;
+
+    if (Array.isArray(raw) && raw[0]?.menu) return raw; // [{restaurantId, menu}]
+    if (Array.isArray(raw)) return [{ restaurantId, menu: raw }]; // piatti comuni
+    if (raw?.restaurants) return raw.restaurants;
   }
-  throw lastErr || new Error("Nessuna rotta /meals trovata");
+  // Non trovato: nessun menu → ritorna contenitore vuoto
+  return [{ restaurantId, menu: [] }];
 }
 
 // utils
 const S = (v) => (v == null ? undefined : String(v));
 const money = (n) => `€${Number(n || 0).toFixed(2)}`;
-
-function mealId(p) {
-  return S(p?.idmeals ?? p?.idMeal ?? p?.id ?? p?._id);
-}
-function mealName(p) {
-  return p?.nome ?? p?.strMeal ?? p?.name ?? p?.title ?? "Unnamed";
-}
-function mealPrice(p) {
+const mealId    = (p) => S(p?.idmeals ?? p?.idMeal ?? p?.id ?? p?._id);
+const mealName  = (p) => p?.nome ?? p?.strMeal ?? p?.name ?? p?.title ?? "Unnamed";
+const mealPrice = (p) => {
   const n = Number(p?.prezzo ?? p?.price ?? p?.costo ?? 0);
   return Number.isFinite(n) ? n : 0;
-}
+};
 
-// Normalizza righe ordine: [{mealId, qty, price}]
+// normalizza righe d’ordine: [{mealId, qty, price}]
 function normalizeOrderLines(order) {
   const out = [];
-
   const pushId = (id) => out.push({ mealId: S(id), qty: 1, price: undefined });
+
   (order.meals || []).forEach(pushId);
   (order.dishes || []).forEach(pushId);
 
-  // items può essere array di ID o oggetti
   if (Array.isArray(order.items)) {
     for (const it of order.items) {
-      if (typeof it === "string" || typeof it === "number") {
-        pushId(it);
-      } else if (it) {
+      if (typeof it === "string" || typeof it === "number") pushId(it);
+      else if (it) {
         out.push({
           mealId: S(it.mealId ?? it.id ?? it._id ?? it.productId),
           qty: Number(it.qty ?? it.quantity ?? 1) || 1,
@@ -126,8 +146,6 @@ function normalizeOrderLines(order) {
       }
     }
   }
-
-  // altre chiavi comuni
   for (const key of ["lines", "products", "cart"]) {
     const arr = order[key];
     if (Array.isArray(arr)) {
@@ -140,7 +158,6 @@ function normalizeOrderLines(order) {
       }
     }
   }
-
   return out.filter(x => x.mealId);
 }
 
@@ -162,6 +179,7 @@ window.addEventListener("load", async () => {
   const totIncasso  = document.getElementById("tot-incasso");
   const topUl       = document.getElementById("piatti-popolari");
   const errorBox    = document.getElementById("stats-error");
+  const missingBox  = document.getElementById("missing-orders-route");
 
   // placeholders
   if (totOrdini)  totOrdini.textContent  = "—";
@@ -169,82 +187,70 @@ window.addEventListener("load", async () => {
   if (totIncasso) totIncasso.textContent = "—";
   if (topUl) topUl.innerHTML = "<li class='muted'>Loading…</li>";
   if (errorBox) errorBox.textContent = "";
+  if (missingBox) missingBox.innerHTML = "";
 
-  try {
-    // 1) trova endpoint ordini e carica dati
-    const { url: ordersUrl, data: ordersRaw } = await discoverOrders(rid);
+  // 1) carica ordini (senza lanciare)
+  const { url: usedOrdersUrl, orders: ordersRaw } = await findOrders(rid);
 
-    // 2) carica menu e mappa id -> piatto
-    const restaurants = await discoverMeals(rid);
-    const myMenu = (restaurants.find(r => String(r.restaurantId) === String(rid))?.menu) || [];
-    const myMap  = new Map(myMenu.map(p => [mealId(p), p]));
-    const myIds  = new Set([...myMap.keys()].filter(Boolean));
+  // 2) carica piatti (senza lanciare)
+  const restaurants = await findMeals(rid);
+  const myMenu = (restaurants.find(r => String(r.restaurantId) === String(rid))?.menu) || [];
+  const myMap  = new Map(myMenu.map(p => [mealId(p), p]));
+  const myIds  = new Set([...myMap.keys()].filter(Boolean));
 
-    // 3) se l'endpoint ordini non filtrava lato server, filtriamo noi
-    const orders = ordersUrl.includes("/restaurant/")
-      || ordersUrl.includes("?restaurantId=")
-      ? ordersRaw
-      : ordersRaw.filter(o => normalizeOrderLines(o).some(l => myIds.has(l.mealId)));
+  // 3) filtra ordini per i miei piatti se l’endpoint non filtra lato server
+  const orders = usedOrdersUrl && (usedOrdersUrl.includes("/restaurant/") || usedOrdersUrl.includes("?restaurantId="))
+    ? ordersRaw
+    : ordersRaw.filter(o => normalizeOrderLines(o).some(l => myIds.has(l.mealId)));
 
-    // 4) calcolo statistiche
-    let countOrdersWithMine = 0;
-    let totalItems = 0;
-    let totalRevenue = 0;
-    const soldByName = Object.create(null);
+  // 4) statistiche
+  let countOrdersWithMine = 0, totalItems = 0, totalRevenue = 0;
+  const soldByName = Object.create(null);
 
-    for (const ord of orders) {
-      const lines = normalizeOrderLines(ord);
-      let hasMine = false;
-
-      for (const ln of lines) {
-        if (!myIds.has(ln.mealId)) continue;
-        hasMine = true;
-
-        const m = myMap.get(ln.mealId);
-        const qty = Number(ln.qty || 1);
-        const price = Number(ln.price ?? mealPrice(m));
-
-        totalItems   += qty;
-        totalRevenue += price * qty;
-
-        const name = mealName(m);
-        soldByName[name] = (soldByName[name] || 0) + qty;
-      }
-
-      if (hasMine) countOrdersWithMine++;
+  for (const ord of orders) {
+    const lines = normalizeOrderLines(ord);
+    let hasMine = false;
+    for (const ln of lines) {
+      if (!myIds.has(ln.mealId)) continue;
+      hasMine = true;
+      const m = myMap.get(ln.mealId);
+      const qty = Number(ln.qty || 1);
+      const price = Number(ln.price ?? mealPrice(m));
+      totalItems   += qty;
+      totalRevenue += price * qty;
+      const name = mealName(m);
+      soldByName[name] = (soldByName[name] || 0) + qty;
     }
+    if (hasMine) countOrdersWithMine++;
+  }
 
-    // 5) aggiorna DOM
-    if (totOrdini)  totOrdini.textContent  = String(countOrdersWithMine);
-    if (totPiatti)  totPiatti.textContent  = String(totalItems);
-    if (totIncasso) totIncasso.textContent = money(totalRevenue);
+  // 5) aggiorna DOM
+  if (totOrdini)  totOrdini.textContent  = String(countOrdersWithMine);
+  if (totPiatti)  totPiatti.textContent  = String(totalItems);
+  if (totIncasso) totIncasso.textContent = money(totalRevenue);
 
-    if (topUl) {
-      const html = Object.entries(soldByName)
-        .sort((a, b) => b[1] - a[1])
-        .slice(0, 10)
-        .map(([name, qty]) => `<li>${name} — ${qty}×</li>`)
-        .join("");
-      topUl.innerHTML = html || "<li>No orders received.</li>";
-    }
-  } catch (err) {
-    console.error("[STATISTICHE] errore:", err);
-    if (topUl) topUl.innerHTML = "<li>⚠️ Error loading.</li>";
-    if (errorBox) errorBox.textContent = err.message;
+  if (topUl) {
+    const html = Object.entries(soldByName)
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 10)
+      .map(([name, qty]) => `<li>${name} — ${qty}×</li>`)
+      .join("");
+    topUl.innerHTML = html || "<li>No orders received.</li>";
+  }
 
-    // Messaggio extra in pagina quando manca la rotta /orders
-    const box = document.getElementById("missing-orders-route");
-    if (box) {
-      box.innerHTML = `
-        <div style="background:#fff3cd;color:#664d03;border:1px solid #ffecb5;padding:10px;border-radius:6px;">
-          <strong>Endpoint /orders non trovato.</strong><br>
-          Il backend pubblicato non espone <code>/orders</code> né <code>/api/orders</code>.
-          Monta una di queste rotte oppure crea <code>/orders/restaurant/:id</code>.
-        </div>
-      `;
-    }
-
-    alert("Errore caricamento statistiche: " + err.message);
+  // Se non abbiamo trovato nessun endpoint ordini, mostra un avviso (ma niente errori)
+  if (!usedOrdersUrl && missingBox) {
+    missingBox.innerHTML = `
+      <div style="background:#fff3cd;color:#664d03;border:1px solid #ffecb5;padding:10px;border-radius:6px;">
+        <strong>Endpoint ordini non trovato.</strong><br>
+        Il backend non espone <code>/orders</code> (né varianti comuni).<br>
+        Soluzioni:
+        <ol style="margin:6px 0 0 18px;">
+          <li>Montare una rotta: <code>GET /orders?restaurantId=:rid</code> oppure <code>GET /orders/restaurant/:rid</code>.</li>
+          <li>Oppure definire in frontend <code>window.ORDERS_ENDPOINT = "/PERCORSO_ESATTO"</code>.</li>
+        </ol>
+      </div>`;
   }
 });
+
 
