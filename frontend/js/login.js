@@ -1,4 +1,4 @@
-// login.js — Frontend robusto: prova prima /users/login, poi /login.
+/// login.js — Frontend robusto: prova prima /users/login, poi /login.
 // Mostra corpo errore se il server non restituisce JSON valido o manca "user".
 (() => {
   const isLocal = ["localhost", "127.0.0.1"].includes(location.hostname);
@@ -6,6 +6,7 @@
     ? "http://localhost:3000"
     : "https://restaurant-management-wzhj.onrender.com";
 
+  // ---------- helpers ----------
   async function postJson(url, payload) {
     const res = await fetch(url, {
       method: "POST",
@@ -31,7 +32,7 @@
 
   function pickUser(obj) {
     if (!obj) return null;
-    // accetta vari layout
+    // layout comuni
     if (obj.user) return obj.user;
     if (obj.data && obj.data.user) return obj.data.user;
     // alcuni backend rispondono direttamente con l'utente
@@ -39,6 +40,28 @@
     return null;
   }
 
+  const normRole = (r) => String(r || "").trim().toLowerCase();
+
+  function ensureRestaurantId(userLike) {
+    const role = normRole(userLike.role);
+    if (role !== "ristoratore") return userLike;
+
+    // se il backend lo ha già messo bene, usa quello
+    let rid =
+      userLike.restaurantId ||
+      userLike.restaurant?.restaurantId ||
+      "";
+
+    // paracadute: se manca ancora, deriviamo dall'id
+    if (!rid) {
+      const base = String(userLike._id || userLike.id || userLike.legacyId || "").trim();
+      rid = base || ""; // se proprio non c'è nulla, rimane stringa vuota
+    }
+
+    return { ...userLike, restaurantId: rid };
+  }
+
+  // ---------- main ----------
   document.addEventListener("DOMContentLoaded", () => {
     const form    = document.getElementById("login-form");
     const emailEl = document.getElementById("email");     // opzionale
@@ -67,7 +90,7 @@
       try {
         let resp, data, user;
 
-        // 1) prova /users/login (il tuo prod non ha /login)
+        // 1) prova /users/login (spesso su prod)
         try {
           resp = await postJson(`${API_BASE}/users/login`, payload);
         } catch (e1) {
@@ -92,14 +115,26 @@
           );
         }
 
-        // salva token (se presente) e utente “safe”
+        // token & tokenType
         if (data.token) localStorage.setItem("authToken", data.token);
+        if (data.tokenType) localStorage.setItem("tokenType", data.tokenType);
+
+        // garantisci restaurantId per ristoratori
+        const ensured = ensureRestaurantId(user);
+
+        // salva un utente "safe" nel localStorage
         const safeUser = {
-          id: user._id || user.id || user.legacyId || null,
-          username: user.username || "",
-          email: user.email || "",
-          role: user.role || "",
-          restaurantId: user.restaurantId || user.r_o || "",
+          id: ensured._id || ensured.id || ensured.legacyId || null,
+          username: ensured.username || "",
+          email: ensured.email || "",
+          role: ensured.role || "",
+          restaurantId: ensured.restaurantId || "",
+          // (facoltativi) altri campi utili lato UI:
+          telefono: ensured.telefono || "",
+          luogo: ensured.luogo || "",
+          partitaIva: ensured.partitaIva || "",
+          indirizzo: ensured.indirizzo || "",
+          preferenza: ensured.preferenza || ""
         };
         localStorage.setItem("loggedUser", JSON.stringify(safeUser));
 

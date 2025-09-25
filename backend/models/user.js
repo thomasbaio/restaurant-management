@@ -1,18 +1,24 @@
-// ./models/user.js (estratto)
 const mongoose = require('mongoose');
 
 const UserSchema = new mongoose.Schema({
-  username: { type: String, required: true, unique: true, trim: true },
-  email:    { type: String, required: true, unique: true, lowercase: true, trim: true },
-  password: { type: String, required: true },
-  role:     { type: String, enum: ['cliente', 'ristoratore'], default: 'cliente' },
+  username:  { type: String, required: true, unique: true, trim: true },
+  email:     { type: String, required: true, unique: true, lowercase: true, trim: true },
+  password:  { type: String, required: true },
+  role:      { type: String, enum: ['cliente', 'ristoratore'], default: 'cliente' },
 
   // campi ristoratore...
   telefono:   { type: String },
   partitaIva: { type: String },
   indirizzo:  { type: String },
   luogo:      { type: String },
-  restaurantId: { type: String },
+
+  // ID ristorante (unico se presente; i clienti possono non averlo)
+  restaurantId: { type: String, default: "", unique: true, sparse: true, index: true },
+
+  // opzionale: se nel tuo progetto usi un id legacy numerico
+  legacyId:   { type: Number, index: true, sparse: true },
+
+  // blocco info ristorante (facoltativo, lo lasciamo com'è)
   restaurant: {
     restaurantId: String,
     nome: String,
@@ -23,10 +29,37 @@ const UserSchema = new mongoose.Schema({
   },
 
   // preferenza del cliente (tipologia piatto)
-  // Se vuoi stringa libera:
   preferenza: { type: String, trim: true }
-  // Oppure con vincoli:
-  // preferenza: { type: String, enum: ['pizza','pasta','burger','sushi','dessert','vegan','gluten-free'], default: undefined }
 }, { timestamps: true });
+
+/* ---------- helpers per auto-assegnazione ---------- */
+function normalizeRole(s) {
+  return String(s || '').trim().toLowerCase();
+}
+function makeRestaurantId(doc) {
+  if (doc.restaurantId) return String(doc.restaurantId);
+  if (process.env.DEFAULT_RESTAURANT_ID) return String(process.env.DEFAULT_RESTAURANT_ID);
+  if (doc.legacyId != null) return `r_${doc.legacyId}`;
+  return String(doc._id);
+}
+
+/* ---------- pre-save: normalizza e assegna restaurantId se serve ---------- */
+UserSchema.pre('save', function(next) {
+  // normalizza role
+  const r = normalizeRole(this.role);
+  if (r === 'ristoratore' || r === 'restauratore' || r === 'ristorante' || r === 'restaurant') {
+    this.role = 'ristoratore';
+  } else {
+    this.role = 'cliente';
+  }
+
+  // se ristoratore e manca restaurantId -> genera
+  if (this.role === 'ristoratore' && !this.restaurantId) {
+    this.restaurantId = makeRestaurantId(this);
+  }
+  next();
+});
+
+module.exports = mongoose.model('User', UserSchema);
 
 module.exports = mongoose.model('User', UserSchema);

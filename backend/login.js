@@ -2,182 +2,171 @@
 const express = require("express");
 const bcrypt = require("bcrypt");
 const crypto = require("crypto");
+let jwt; try { jwt = require("jsonwebtoken"); } catch {}
 const router = express.Router();
-const User = require("./models/user");
 
-// --- helpers ---
-function escRe(s = "") {
-  return String(s).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-}
-function looksLikeBcryptHash(s) {
-  return typeof s === "string" && /^\$2[aby]\$[0-9]{2}\$[./A-Za-z0-9]{53}$/.test(s);
-}
+const User = require("./models/user"); // Assicurati che lo schema includa restaurantId: String
+
+const JWT_SECRET = process.env.JWT_SECRET || null;
+const JWT_TTL = process.env.JWT_TTL || "7d";
 
 /**
  * @swagger
  * tags:
  *   name: Users
- *   description: Gestione utenti e autenticazione
+ *   description: Autenticazione e sessione
  */
 
-/**
- * @swagger
- * components:
- *   schemas:
- *     LoginRequest:
- *       type: object
- *       required:
- *         - password
- *       properties:
- *         email:
- *           type: string
- *           format: email
- *           example: thomas@example.com
- *         username:
- *           type: string
- *           example: thomas
- *         password:
- *           type: string
- *           example: mySecret123
- *     LoginResponse:
- *       type: object
- *       properties:
- *         ok:
- *           type: boolean
- *           example: true
- *         token:
- *           type: string
- *           description: JWT o token random
- *           example: eyJhbGciOiJIUzI1NiIsInR5cCI6...
- *         user:
- *           type: object
- *           properties:
- *             _id: { type: string, example: "64f0c2..." }
- *             username: { type: string, example: "thomas" }
- *             email: { type: string, example: "thomas@example.com" }
- *             role: { type: string, example: "ristoratore" }
- *             restaurantId: { type: string, example: "r_o" }
- *             preferenza: { type: string, example: "vegano" }
- *             telefono: { type: string, example: "3456789012" }
- *             luogo: { type: string, example: "Milano" }
- *             partitaIva: { type: string, example: "IT12345678901" }
- *             indirizzo: { type: string, example: "Via Roma 10" }
- *   responses:
- *     Unauthorized:
- *       description: Credenziali non valide
- *       content:
- *         application/json:
- *           schema:
- *             type: object
- *             properties:
- *               message:
- *                 type: string
- *                 example: Credenziali non valide
- *     ValidationError:
- *       description: Richiesta non valida
- *       content:
- *         application/json:
- *           schema:
- *             type: object
- *             properties:
- *               message:
- *                 type: string
- *                 example: email (o username) e password obbligatori
- */
+/* ----------------------- helpers ----------------------- */
+
+function isNonEmpty(s) {
+  return typeof s === "string" && s.trim().length > 0;
+}
+
+function escRegex(s = "") {
+  return String(s).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function normalizeRole(s) {
+  return String(s || "").trim().toLowerCase();
+}
+
+function makeRestaurantId(user) {
+  if (user.restaurantId) return String(user.restaurantId);
+  if (process.env.DEFAULT_RESTAURANT_ID) return String(process.env.DEFAULT_RESTAURANT_ID);
+  if (user.legacyId != null) return `r_${user.legacyId}`;
+  return String(user._id);
+}
+
+function buildSafeUser(u) {
+  return {
+    id: u._id,
+    username: u.username,
+    email: u.email,
+    role: u.role,
+    restaurantId: u.restaurantId || null,
+    telefono: u.telefono || "",
+    luogo: u.luogo || "",
+    partitaIva: u.partitaIva || "",
+    indirizzo: u.indirizzo || "",
+    nome: u.nome || "",
+    cognome: u.cognome || "",
+    pagamento: u.pagamento || "",
+    preferenza: u.preferenza || "",
+    legacyId: u.legacyId ?? null,
+  };
+}
+
+/* ----------------------- /login ----------------------- */
 
 /**
  * @swagger
  * /login:
  *   post:
  *     tags: [Users]
- *     summary: Login con email o username e password
- *     description: Verifica le credenziali e restituisce un token con i dati utente (JWT se configurato, altrimenti token random).
+ *     summary: Login con email (o username) e password
+ *     description: Verifica le credenziali e restituisce un token e i dati utente. Se l'utente è un ristoratore e non ha `restaurantId`, gli viene auto-assegnato e salvato.
  *     requestBody:
  *       required: true
  *       content:
  *         application/json:
  *           schema:
- *             $ref: "#/components/schemas/LoginRequest"
+ *             type: object
+ *             oneOf:
+ *               - required: [email, password]
+ *               - required: [username, password]
+ *             properties:
+ *               email: { type: string, format: email }
+ *               username: { type: string }
+ *               password: { type: string, minLength: 1 }
  *     responses:
  *       200:
- *         description: Login riuscito
+ *         description: Login effettuato
  *         content:
  *           application/json:
  *             schema:
- *               $ref: "#/components/schemas/LoginResponse"
+ *               type: object
+ *               properties:
+ *                 token: { type: string }
+ *                 tokenType: { type: string, enum: [jwt, opaque] }
+ *                 user:
+ *                   type: object
+ *                   properties:
+ *                     id: { type: string }
+ *                     username: { type: string }
+ *                     email: { type: string }
+ *                     role: { type: string }
+ *                     restaurantId: { type: string, nullable: true }
  *       400:
- *         $ref: "#/components/responses/ValidationError"
+ *         description: Parametri mancanti
  *       401:
- *         $ref: "#/components/responses/Unauthorized"
- *       500:
- *         description: Errore interno del server
+ *         description: Credenziali non valide
  */
 router.post("/login", async (req, res) => {
   try {
-    const { email = "", username = "", password = "" } = req.body || {};
+    const { email, username, password } = req.body || {};
 
-    if ((!email && !username) || !password) {
-      return res.status(400).json({ message: "email (o username) e password obbligatori" });
+    if (!isNonEmpty(password) || (!isNonEmpty(email) && !isNonEmpty(username))) {
+      return res.status(400).json({ error: "Missing credentials" });
     }
 
-    const query = email
-      ? { email: new RegExp("^" + escRe(email.trim()) + "$", "i") }
-      : { username: new RegExp("^" + escRe(username.trim()) + "$", "i") };
-
-    const user = await User.findOne(query).lean();
-    if (!user || !user.password) {
-      return res.status(401).json({ message: "Credenziali non valide" });
+    // ricerca case-insensitive per email o username
+    const or = [];
+    if (isNonEmpty(email)) {
+      or.push({ email: new RegExp("^" + escRegex(email.trim()) + "$", "i") });
+    }
+    if (isNonEmpty(username)) {
+      or.push({ username: new RegExp("^" + escRegex(username.trim()) + "$", "i") });
+    }
+    const user = await User.findOne({ $or: or }).exec();
+    if (!user) {
+      return res.status(401).json({ error: "Invalid credentials" });
     }
 
-    let valid = false;
-    if (looksLikeBcryptHash(user.password)) {
-      valid = await bcrypt.compare(password, user.password);
-    } else {
-      try {
-        const a = Buffer.from(password, "utf8");
-        const b = Buffer.from(String(user.password), "utf8");
-        if (a.length === b.length && crypto.timingSafeEqual(a, b)) valid = true;
-      } catch {}
-      if (!valid && String(user.password) === password) valid = true;
+    // verifica password
+    const ok = await bcrypt.compare(password, user.password || "");
+    if (!ok) {
+      return res.status(401).json({ error: "Invalid credentials" });
     }
 
-    if (!valid) {
-      return res.status(401).json({ message: "Credenziali non valide" });
-    }
-
-    let token;
-    try {
-      if (process.env.JWT_SECRET) {
-        const jwt = require("jsonwebtoken");
-        token = jwt.sign(
-          { sub: user._id?.toString(), role: user.role },
-          process.env.JWT_SECRET,
-          { expiresIn: "7d" }
-        );
-      } else {
-        token = crypto.randomBytes(24).toString("hex");
+    // auto-assegnazione restaurantId per ristoratori
+    const role = normalizeRole(user.role);
+    if (["ristoratore", "restauratore", "ristorante", "restaurant"].includes(role) && !user.restaurantId) {
+      user.restaurantId = makeRestaurantId(user);
+      try { await user.save(); } catch (e) {
+        // se fallisce il salvataggio, rispondiamo comunque con il valore calcolato
+        console.warn("[login] unable to persist restaurantId:", e?.message || e);
       }
-    } catch {
-      token = crypto.randomBytes(24).toString("hex");
     }
 
-    const outUser = {
-      _id: user._id?.toString() || user.id || "",
-      username: user.username || "",
-      email: user.email || "",
-      role: user.role || "",
-      restaurantId: String(user.restaurantId || user.r_o || ""),
-      preferenza: user.preferenza ?? "",
-      telefono: user.telefono ?? "",
-      luogo: user.luogo ?? "",
-      partitaIva: user.partitaIva ?? "",
-      indirizzo: user.indirizzo ?? "",
-    };
+    // token
+    let tokenType = "opaque";
+    let token = crypto.randomBytes(24).toString("hex");
 
-    return res.status(200).json({ ok: true, token, user: outUser });
+    if (jwt && JWT_SECRET) {
+      tokenType = "jwt";
+      token = jwt.sign(
+        {
+          sub: String(user._id),
+          role: user.role,
+          restaurantId: user.restaurantId || null,
+        },
+        JWT_SECRET,
+        { expiresIn: JWT_TTL }
+      );
+    }
+
+    // opzionale: aggiorna lastLogin
+    try { user.lastLogin = new Date(); await user.save(); } catch {}
+
+    return res.json({
+      token,
+      tokenType,
+      user: buildSafeUser(user),
+    });
   } catch (err) {
-    console.error("Errore login:", err);
-    return res.status(500).json({ message: "Errore durante il login" });
+    console.error("POST /login error:", err);
+    return res.status(500).json({ error: "Login error", detail: String(err?.message || err) });
   }
 });
 
