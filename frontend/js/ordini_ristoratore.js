@@ -1,110 +1,145 @@
-// base URL per API: locale vs produzione
-const isLocal = location.hostname === "localhost" || location.hostname === "127.0.0.1";
+// ===================== Base URL =====================
+const isLocal = ["localhost", "127.0.0.1"].includes(location.hostname);
 const API_BASE = isLocal
   ? "http://localhost:3000"
   : "https://restaurant-management-wzhj.onrender.com";
 
-// Helper fetch JSON con messaggi d'errore decenti
-async function fetchJSON(path, options = {}) {
-  const res = await fetch(`${API_BASE}${path}`, {
+// ===================== Helper fetch JSON =====================
+async function fetchJSON(url, options = {}) {
+  const res = await fetch(url, {
     headers: { "Content-Type": "application/json", ...(options.headers || {}) },
+    mode: "cors",
     ...options
   });
+
+  const text = await res.text();
+  let data = null;
+  try { data = text ? JSON.parse(text) : null; } catch { data = null; }
+
   if (!res.ok) {
-    const text = await res.text().catch(() => "");
-    throw new Error(`HTTP ${res.status} ${path} – ${text}`);
+    const msg = (data && (data.message || data.error)) || text || `HTTP ${res.status}`;
+    throw new Error(`${url} → ${msg}`);
   }
-  return res.json();
+  return data;
 }
 
-window.onload = async () => {
-  const user = JSON.parse(localStorage.getItem("loggedUser"));
+// Prova più URL (per backend diversi)
+async function tryMany(urls) {
+  let lastErr = null;
+  for (const u of urls) {
+    try { return await fetchJSON(u); }
+    catch (e) { console.warn("[ORDINI] fallito", u, e.message); lastErr = e; }
+  }
+  throw lastErr || new Error("Nessuna rotta disponibile");
+}
+
+// ===================== Utils =====================
+function money(n) {
+  return `€${Number(n || 0).toFixed(2)}`;
+}
+
+// ===================== On load =====================
+window.addEventListener("load", async () => {
+  const container = document.getElementById("ordine-lista");
+  let user = null;
+  try { user = JSON.parse(localStorage.getItem("loggedUser") || "null"); } catch {}
   if (!user || user.role !== "ristoratore") {
     alert("Access reserved for restaurateurs.");
     window.location.href = "login.html";
     return;
   }
 
-  const container = document.getElementById("ordine-lista");
-
   try {
-    // 1) carico ordini e piatti
-    const [orders, mealsDataRaw] = await Promise.all([
-      fetchJSON("/orders"),
-      fetchJSON("/meals") // se il tuo backend espone /meals/common-meals, cambia qui
+    // === 1) carico ordini ===
+    const rid = user.restaurantId || user._id || "r_o";
+    const orders = await tryMany([
+      `${API_BASE}/orders?restaurantId=${encodeURIComponent(rid)}`,
+      `${API_BASE}/api/orders?restaurantId=${encodeURIComponent(rid)}`,
+      `${API_BASE}/orders/restaurant/${encodeURIComponent(rid)}`,
+      `${API_BASE}/api/orders/restaurant/${encodeURIComponent(rid)}`
     ]);
 
-    // 2) normalizzo la struttura dei piatti/ristoranti
-    // - caso A: /meals restituisce un array di ristoranti con { restaurantId, menu: [...] }
-    // - caso B: /meals restituisce direttamente un array "piatti comuni" (senza ristoranti)
-    let restaurants = [];
-    if (Array.isArray(mealsDataRaw) && mealsDataRaw.length && mealsDataRaw[0]?.menu) {
-      restaurants = mealsDataRaw; // Caso A
-    } else if (Array.isArray(mealsDataRaw) && mealsDataRaw.length && !mealsDataRaw[0]?.menu) {
-      // caso B (piatti comuni) → creo un finto container solo per non rompere la logica
-      restaurants = [{ restaurantId: user.restaurantId, menu: mealsDataRaw }];
-    } else if (mealsDataRaw?.restaurants) {
-      restaurants = mealsDataRaw.restaurants;
-    } else {
-      restaurants = [];
-    }
-
-    // 3) piatti del ristorante loggato
-    const mieiPiatti = (restaurants.find(r => String(r.restaurantId) === String(user.restaurantId))?.menu) || [];
-
-    // 4) ordini che contengono almeno un piatto del ristorante
-    const ordiniFiltrati = orders.filter(order =>
-      Array.isArray(order.meals) &&
-      order.meals.some(id => mieiPiatti.some(p => String(p.idmeals ?? p.id ?? p._id) === String(id)))
-    );
-
-    if (ordiniFiltrati.length === 0) {
+    if (!Array.isArray(orders) || orders.length === 0) {
       container.innerHTML = "<p>No orders found for your restaurant.</p>";
       return;
     }
 
-    container.innerHTML = "";
+    // === 2) carico piatti ===
+    const mealsData = await tryMany([
+      `${API_BASE}/meals`,
+      `${API_BASE}/meals/common-meals`,
+      `${API_BASE}/api/meals`
+    ]);
 
+    // Normalizzo struttura
+    let restaurants = [];
+    if (Array.isArray(mealsData) && mealsData[0]?.menu) {
+      restaurants = mealsData; // caso A: lista ristoranti
+    } else if (Array.isArray(mealsData) && mealsData[0]) {
+      restaurants = [{ restaurantId: rid, menu: mealsData }]; // caso B: piatti comuni
+    } else if (mealsData?.restaurants) {
+      restaurants = mealsData.restaurants;
+    }
+
+    const mieiPiatti = (restaurants.find(r => String(r.restaurantId) === String(rid))?.menu) || [];
+
+    // === 3) filtro ordini ===
+    const ordiniFiltrati = orders.filter(o =>
+      Array.isArray(o.meals || o.items || o.dishes) &&
+      (o.meals || o.items || o.dishes).some(id =>
+        mieiPiatti.some(p => String(p.idmeals ?? p.id ?? p._id) === String(id))
+      )
+    );
+
+    if (ordiniFiltrati.length === 0) {
+      container.innerHTML = "<p>No orders with your dishes.</p>";
+      return;
+    }
+
+    // === 4) render ===
+    container.innerHTML = "";
     for (const ordine of ordiniFiltrati) {
+      const orderId = ordine.id ?? ordine._id;
+      const statoId = `stato-${orderId}`;
+
+      const piatti = (ordine.meals || ordine.items || ordine.dishes || []).map(id => {
+        const trovato = mieiPiatti.find(p => String(p.idmeals ?? p.id ?? p._id) === String(id));
+        return trovato ? (trovato.nome ?? trovato.strMeal ?? "Dish") : "(not your dish)";
+      });
+
       const div = document.createElement("div");
+      div.className = "ordine-box";
       div.style.border = "1px solid #ccc";
       div.style.marginBottom = "15px";
       div.style.padding = "10px";
       div.style.borderRadius = "6px";
       div.style.backgroundColor = "#f9f9f9";
 
-      const piatti = (ordine.meals || []).map(id => {
-        const trovato = mieiPiatti.find(
-          p => String(p.idmeals ?? p.id ?? p._id) === String(id)
-        );
-        return trovato ? (trovato.nome ?? trovato.strMeal ?? "Dish") : "(not your dish)";
-      });
-
-      const statoId = `stato-${ordine.id ?? ordine._id}`;
-      const orderId = ordine.id ?? ordine._id;
-
       div.innerHTML = `
+        <p><strong>Order ID:</strong> ${orderId}</p>
         <p><strong>Customer:</strong> ${ordine.username ?? ordine.user ?? "—"}</p>
         <p><strong>Status:</strong> <span id="${statoId}">${ordine.status}</span></p>
         <p><strong>Delivery:</strong> ${ordine.delivery ?? "—"}</p>
         <p><strong>Payment:</strong> ${ordine.payment ?? "—"}</p>
-        <p><strong>Dishes:</strong><br> ${piatti.map(p => ` ${p}`).join("<br>")}</p>
+        <p><strong>Dishes:</strong><br>${piatti.join("<br>")}</p>
         ${ordine.status !== "consegnato"
           ? `<button onclick="aggiornaStato('${orderId}', '${ordine.status}', '${statoId}')">Advance status</button>`
           : ""
         }
       `;
-
       container.appendChild(div);
     }
 
   } catch (err) {
     console.error(err);
-    container.innerHTML = `<p>Error loading orders or dishes.<br><small>${err.message}</small></p>`;
+    container.innerHTML = `<pre style="white-space:pre-wrap;color:#b00;background:#fee;padding:12px;border:1px solid #fbb;">
+Errore: ${err.message}
+Suggerimento: controlla che il backend esponga una rotta GET /orders o /api/orders.
+    </pre>`;
   }
-};
+});
 
-// stato ordine: ordinato → in preparazione → consegnato
+// ===================== Cambio stato =====================
 async function aggiornaStato(id, statoAttuale, domSpanId) {
   const next = {
     "ordinato": "in preparazione",
@@ -121,7 +156,6 @@ async function aggiornaStato(id, statoAttuale, domSpanId) {
     });
 
     if (res.ok) {
-      // aggiorno lo span del singolo ordine
       const span = document.getElementById(domSpanId || `stato-${id}`);
       if (span) span.textContent = next;
     } else {
