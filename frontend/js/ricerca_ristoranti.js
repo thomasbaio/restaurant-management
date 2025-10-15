@@ -35,6 +35,6 @@ async function cercaRistoranti() {
 
   } catch (err) {
     console.error("Search error:", err);
-    lista.innerHTML = "<li> Error while searching for restaurants.</li>";
+    lista.innerHTML = "<li> error while searching for restaurants.</li>";
   }
 }

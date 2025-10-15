@@ -191,7 +191,7 @@ function computeTotalForOrder(ord, mealsMap) {
   return renderItemsAndTotal(ord, mealsMap).total;
 }
 
-/* ---------------------- ETA / countdown ---------------------- */
+/* ---------------------- countdown ---------------------- */
 function minutesLabel(ms){ const m=Math.ceil(ms/60000); if(m<=1)return "≈ 1 min"; if(m<=5)return "≈ 5 min"; if(m<=10)return "≈ 10 min"; return `≈ ${m} min`; }
 function getETA(ord){
   const now=Date.now(); const state=String(ord?.status ?? ord?.state ?? "").toLowerCase();
@@ -213,7 +213,7 @@ function startCountdown(span, order){
   tick(); const id=setInterval(()=>{ if(!span.isConnected) return clearInterval(id); tick(); },15000);
 }
 
-/* ---------------------- INIT ---------------------- */
+/* ---------------------- init ---------------------- */
 document.addEventListener("DOMContentLoaded", initOrders);
 
 async function initOrders(){
@@ -229,12 +229,12 @@ async function initOrders(){
   const noti      = document.getElementById("noti");
 
   try {
-    // 1) Scopri endpoint ordini (evita 404)
+    // 1) scopri endpoint ordini (evita 404)
     const dOrders = await discoverOrders(user.username);
     ORDERS_BASE = dOrders.base || "/orders"; // default
     const orders = dOrders.data;             // se già arrivati dall'endpoint “buono”
 
-    // 2) Scopri endpoint piatti (evita 404)
+    // 2) scopri endpoint piatti (evita 404)
     const dMeals = await discoverMeals();
     MEALS_BASE = dMeals.base || "/meals";
     const restaurants = dMeals.data;
@@ -252,7 +252,7 @@ async function initOrders(){
       <p><strong>Active total:</strong> ${fmtMoney(totalAct)} — ${active.length} ${ordWord}</p>
     `;
 
-    // --- render ---
+    
     if (active.length === 0) {
       container.innerHTML = `
         <p>No active orders.</p>
@@ -300,7 +300,7 @@ async function initOrders(){
     });
 
   } catch (err) {
-    console.error("Error loading orders:", err);
+    console.error("error loading orders:", err);
     document.getElementById("orders-container").innerHTML = `
       <p style="color:#b00">Error loading orders.</p>
       <details><summary>Details</summary><pre>${String(err)}</pre></details>
@@ -310,7 +310,7 @@ async function initOrders(){
 
 /* ---------------- conferma ritiro con fallback endpoint ---------------- */
 async function confirmPickup(cardEl, idOrd, total) {
-  const ok = confirm("Are you sure you picked up your order at the counter?");
+  const ok = confirm("are you sure you picked up your order at the counter?");
   if (!ok) return;
 
   // prove in ordine: PUT /:id/state   → PATCH /:id   → PUT /:id/stato
@@ -336,18 +336,18 @@ async function confirmPickup(cardEl, idOrd, total) {
       const cards = Array.from(container.querySelectorAll(".ordine-box"));
       const newActiveTotal = cards.reduce((s, el) => s + Number(el.dataset.total || 0), 0);
       const plural = cards.length === 1 ? "active order" : "active orders";
-      const prevAll = summary.textContent.includes("Total spent") ? null : null; // solo display, lasciamo invariato
+      const prevAll = summary.textContent.includes("total spent") ? null : null; // solo display, lasciamo invariato
 
       summary.innerHTML = `
-        <p><strong>Active total:</strong> ${fmtMoney(newActiveTotal)} — ${cards.length} ${plural}</p>
+        <p><strong>active total:</strong> ${fmtMoney(newActiveTotal)} — ${cards.length} ${plural}</p>
       `;
       document.getElementById("noti").innerHTML =
-        `<p class="success">Pickup confirmed. The order has been moved to the <a href="storico_clienti.html"><strong>order history</strong></a>.</p>`;
+        `<p class="success">Pickup confirmed. the order has been moved to the <a href="storico_clienti.html"><strong>order history</strong></a>.</p>`;
 
       if (!container.querySelector(".ordine-box")) {
         container.innerHTML = `
           <p>No active orders.</p>
-          <p class="muted">You can find picked-up orders in the <a href="storico_clienti.html">order history</a>.</p>`;
+          <p class="muted">you can find picked-up orders in the <a href="storico_clienti.html">order history</a>.</p>`;
       }
       return;
     }
@@ -357,6 +357,8 @@ async function confirmPickup(cardEl, idOrd, total) {
     }
   }
 
-  alert("Error confirming pickup (endpoint not available).");
+  alert("error confirming pickup (endpoint not available).");
 }
 </script>
+</body>
+</html>

@@ -12,12 +12,12 @@
   <div class="order-wrap">
     <h1>Order</h1>
 
-    <!-- Modalità SINGOLO PIATTO (usata quando c'è ?dishId=...) -->
+    <!-- modalità singolo piatto (usata quando c'è ?dishId=...) -->
     <section id="dish" class="dish-card" aria-live="polite">
       <!-- filled by JS -->
     </section>
 
-    <!-- Modalità BUILDER (usata quando NON c'è dishId): l’elenco piatti viene iniettato qui -->
+    <!-- modalità builder (usata quando non c'è dishId): l’elenco piatti viene iniettato qui -->
     <h3 id="builder-heading">Add dishes</h3>
     <div id="meals-list">
       <!-- filled by JS -->
@@ -41,7 +41,7 @@
       <div class="line"><span class="muted">Fees</span> <span id="fees">€0.00</span></div>
       <div class="line total"><span>Total</span> <span id="total">€0.00</span></div>
 
-      <!-- In modalità singolo piatto, l’order.js inserisce qui anche il pulsante "Add to the order" -->
+      <!-- in modalità singolo piatto, l’order.js inserisce qui anche il pulsante "Add to the order" -->
       <button type="submit" style="margin-top:14px;">Confirm order</button>
     </form>
   </div>

@@ -41,15 +41,15 @@
     <a id="link-statistiche" href="statistiche_ristoratore.html" style="display:none;">Statistics</a>
   </div>
 
-  <!-- (RIMOSSO) Drawer carrello -->
 
-  <!-- Offerte speciali (solo clienti) -->
+
+  <!-- offerte speciali (solo clienti) -->
   <h2 data-client-only>Personalized offers only</h2>
   <ul id="special-offers" data-client-only>
     <li>Loading...</li>
   </ul>
 
-  <!-- Vista a sezioni per ristorante (cards) -->
+  <!-- vista a sezioni per ristorante -->
   <section style="margin:24px 0;">
     <h2 style="margin:0 0 10px;">Restaurant menu</h2>
     <div id="menu-by-restaurant"></div>
@@ -67,11 +67,11 @@
 
   <!-- script -->
   <script src="js/main.js" defer></script>
-  <!-- (RIMOSSO) <script src="js/main.homepage-cart.js" defer></script> -->
+  
 
   <script>
   window.addEventListener("DOMContentLoaded", () => {
-    // Leggi in sicurezza l'utente
+    // leggi in sicurezza l'utente
     let user = null;
     try { user = JSON.parse(localStorage.getItem("loggedUser") || "null"); } catch (_) { user = null; }
 
@@ -82,7 +82,7 @@
     const linkRestaurantOrders = document.getElementById("link-ordini-ristoratore");
     const linkStatistics = document.getElementById("link-statistiche");
 
-    // === Orders: porta alla pagina ordini cliente ===
+    // === orders: porta alla pagina ordini cliente ===
     const openOrdersBtn = document.getElementById("openOrdersBtn");
     if (openOrdersBtn) {
       openOrdersBtn.addEventListener("click", (e) => {
@@ -124,8 +124,8 @@
       }
     } else {
       if (noti) {
-        noti.innerHTML = `Sei libero di sfogliare i menu.
-          Accedi come cliente per effettuare ordini.
+        noti.innerHTML = `sei libero di sfogliare i menu.
+          accedi come cliente per effettuare ordini.
           <a href="login.html">Vai al login</a>`;
         noti.style.display = "block";
       }

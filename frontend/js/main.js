@@ -1,4 +1,3 @@
-// main.js — versione "ORDER" (senza cart) — Opzione 4 + Auto-Healing restaurantId
 
 // ========================= base URL per API =========================
 const isLocal = location.hostname === "localhost" || location.hostname === "127.0.0.1";
@@ -111,7 +110,7 @@ async function buildFileImageMap() {
     }
     return map;
   } catch (e) {
-    console.warn("Impossibile costruire la mappa immagini dal file:", e.message);
+    console.warn("impossibile costruire la mappa immagini dal file:", e.message);
     return new Map();
   }
 }
@@ -131,12 +130,12 @@ function goToOrder(meal) {
   let user = null;
   try { user = JSON.parse(localStorage.getItem("loggedUser") || "null"); } catch {}
   if (!user || user.role !== "cliente") {
-    alert("Accedi come cliente per effettuare un ordine.");
+    alert("accedi come cliente per effettuare un ordine.");
     location.href = "login.html";
     return;
   }
   if (!meal || !meal.id) {
-    alert("Non è stato possibile iniziare l'ordine per questo piatto.");
+    alert("non è stato possibile iniziare l'ordine per questo piatto.");
     return;
   }
 
@@ -168,7 +167,7 @@ function getUserPreferredCategory(u) {
     .trim();
 }
 
-/* ===================== Client exclusivity helpers ===================== */
+/* ===================== client exclusivity helpers ===================== */
 
 function setDisabled(el, disabled) {
   if (!el) return;
@@ -191,11 +190,11 @@ function enforceClientExclusivity(isCustomer) {
   if (ingInput) {
     if (isCustomer) {
       ingInput.disabled = false;
-      if (!ingInput.placeholder) ingInput.placeholder = "Filter by ingredient…";
+      if (!ingInput.placeholder) ingInput.placeholder = "filter by ingredient…";
     } else {
       ingInput.value = "";
       ingInput.disabled = true;
-      ingInput.placeholder = "Login as customer to use search";
+      ingInput.placeholder = "login as customer to use search";
     }
   }
 
@@ -226,7 +225,7 @@ function renderTable(meals, isRestaurateur) {
   tbody.innerHTML = "";
 
   if (!meals || !meals.length) {
-    tbody.innerHTML = '<tr><td colspan="6">No dishes found</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="6">no dishes found</td></tr>';
     return;
   }
 
@@ -278,7 +277,7 @@ async function removeMeal(idMeals, oid, rid) {
   try { user = JSON.parse(localStorage.getItem("loggedUser")); } catch {}
   if (!user || !user.restaurantId) return;
 
-  if (!confirm("Do you really want to delete this dish?")) return;
+  if (!confirm("do you really want to delete this dish?")) return;
 
   const restaurantId = rid || user.restaurantId;
 
@@ -296,7 +295,7 @@ async function removeMeal(idMeals, oid, rid) {
   }
 
   if (!attempts.length) {
-    alert("Unable to delete: missing or invalid ID.");
+    alert("unable to delete: missing or invalid ID.");
     return;
   }
 
@@ -304,7 +303,7 @@ async function removeMeal(idMeals, oid, rid) {
     const res = await fetch(url, { method: "DELETE" });
     if (!res.ok) {
       const body = await res.text().catch(() => "");
-      throw new Error(`DELETE failed ${res.status} – ${body}`);
+      throw new Error(`delete failed ${res.status} – ${body}`);
     }
   };
 
@@ -314,11 +313,11 @@ async function removeMeal(idMeals, oid, rid) {
       window.location.reload();
       return;
     } catch (e) {
-      console.warn("Tentativo fallito:", e.message);
+      console.warn("attempt failed:", e.message);
     }
   }
 
-  alert("Error removing dish");
+  alert("error removing dish");
 }
 
 // rendering “menù per ristorante” (card) con filtro categoria
@@ -369,7 +368,7 @@ function renderMenusGroupedSection(meals, rawAllData, activeCategory) {
     const entries = [...groups.entries()].filter(([, g]) => (g.items || []).length > 0);
 
     if (!entries.length) {
-      root.innerHTML = `<p>No restaurants available${cat && cat !== "*" ? ` for category "${activeCategory}"` : ""}.</p>`;
+      root.innerHTML = `<p>no restaurants available${cat && cat !== "*" ? ` for category "${activeCategory}"` : ""}.</p>`;
       return;
     }
 
@@ -443,7 +442,7 @@ function renderMenusGroupedSection(meals, rawAllData, activeCategory) {
   enrichNames().then(draw).catch(() => {});
 }
 
-/* ========================= Personalized offers helpers ========================= */
+/* ========================= personalized offers helpers ========================= */
 
 async function fetchRestaurantsNameMap() {
   try {
@@ -479,7 +478,7 @@ async function renderPersonalizedOffersGrouped(user, allMeals) {
   const pref = (user?.preferenza ?? user?.preferredCategory ?? "").toString().trim();
   if (!pref) {
     container.innerHTML = `
-      <li>No preference set. <a href="edituser.html">Set your preferred category</a> to receive personalized offers.</li>
+      <li>no preference set. <a href="edituser.html">set your preferred category</a> to receive personalized offers.</li>
     `;
     return;
   }
@@ -488,7 +487,7 @@ async function renderPersonalizedOffersGrouped(user, allMeals) {
     .filter(p => (p.tipologia || "").toLowerCase() === pref.toLowerCase());
 
   if (!matches.length) {
-    container.innerHTML = `<li>No dishes found for your preference "<strong>${pref}</strong>".</li>`;
+    container.innerHTML = `<li>no dishes found for your preference "<strong>${pref}</strong>".</li>`;
     return;
   }
 
@@ -521,7 +520,7 @@ async function renderPersonalizedOffersGrouped(user, allMeals) {
     `);
   }
 
-  container.innerHTML = sections.join("") || `<li>No restaurants available for "<strong>${pref}</strong>".</li>`;
+  container.innerHTML = sections.join("") || `<li>no restaurants available for "<strong>${pref}</strong>".</li>`;
 
   container.querySelectorAll("button.btn-order").forEach(btn => {
     btn.addEventListener("click", () => {
@@ -544,13 +543,13 @@ window.onload = async () => {
 
   enforceClientExclusivity(isCustomer);
 
-  // Banner “browse only” per non clienti
+  // banner “browse only” per non clienti
   (function showBrowseOnlyBanner() {
     const noti = document.getElementById("noti");
     if (noti && (!user || user.role !== "cliente")) {
       noti.innerHTML = `
         <div class="box muted">
-          Sei libero di sfogliare i menu. <strong>Accedi come cliente</strong> per effettuare un ordine.
+          sei libero di sfogliare i menu. <strong>accedi come cliente</strong> per effettuare un ordine.
           <a href="login.html">Vai al login</a>
         </div>
       `;
@@ -577,7 +576,7 @@ window.onload = async () => {
   const linkAdd = document.getElementById("link-add");
   if (linkAdd && !isRestaurateur) linkAdd.style.display = "none";
 
-  /* ===== FIX IMMEDIATO: Auto-healing del restaurantId per ristoratori ===== */
+  /* ===== auto-healing del restaurantId per ristoratori ===== */
   if (isRestaurateur && (!user.restaurantId || user.restaurantId === "")) {
     try {
       // tenta di recuperarlo dalla lista ristoratori (cerca per username/email)
@@ -595,7 +594,7 @@ window.onload = async () => {
       }
     } catch (_) {}
 
-    // Se ancora mancante, mostra messaggio in pagina e interrompi (niente alert)
+    // se ancora mancante, mostra messaggio in pagina e interrompi (niente alert)
     if (!user.restaurantId) {
       const tbody = document.getElementById("menu-body");
       const host = tbody || document.getElementById("noti") || document.body;
@@ -613,10 +612,10 @@ window.onload = async () => {
       return;
     }
   }
-  /* ===== Fine FIX IMMEDIATO ===== */
+
 
   try {
-    // Opzione 4: rotta diversa se ristoratore o cliente
+    // opzione 4: rotta diversa se ristoratore o cliente
     const mealsURL = isRestaurateur
       ? `${API_BASE}/meals?restaurantId=${encodeURIComponent(user.restaurantId)}`
       : `${API_BASE}/meals`;
@@ -740,7 +739,7 @@ window.onload = async () => {
     }
 
   } catch (err) {
-    console.error("Errore nel caricamento del menu:", err);
-    alert("Error loading menu");
+    console.error("errore nel caricamento del menu:", err);
+    alert("error loading menu");
   }
 };

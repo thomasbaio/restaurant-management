@@ -35,7 +35,7 @@ router.get("/:id", (req, res) => {
   const data = readData();
   const found = data.find(r => r.restaurantId === id);
 
-  if (!found) return res.status(404).send("Restaurant not found");
+  if (!found) return res.status(404).send("restaurant not found");
   res.json(found);
 });
 
@@ -45,7 +45,7 @@ router.put("/:id", (req, res) => {
   const data = readData();
 
   const index = data.findIndex(r => r.restaurantId === id);
-  if (index === -1) return res.status(404).send("Restaurant not found");
+  if (index === -1) return res.status(404).send("restaurant not found");
 
   data[index] = { ...data[index], ...req.body, restaurantId: id };
   writeData(data);
@@ -59,7 +59,7 @@ router.delete("/:id", (req, res) => {
   let data = readData();
 
   const index = data.findIndex(r => r.restaurantId === id);
-  if (index === -1) return res.status(404).send("Restaurant not found");
+  if (index === -1) return res.status(404).send("restaurant not found");
 
   data.splice(index, 1);
   writeData(data);

@@ -1,4 +1,4 @@
-// ========================= BASE URL =========================
+// ========================= base URL =========================
 const isLocal = ["localhost", "127.0.0.1"].includes(location.hostname);
 const API_BASE = isLocal
   ? "http://localhost:3000"
@@ -7,10 +7,10 @@ const API_BASE = isLocal
         ? "https://restaurant-management-wzhj.onrender.com"
         : location.origin));
 
-// Permetti override manuale dell’endpoint ordini se lo conosci (opzionale)
+// permetti override manuale dell’endpoint ordini se lo conosci (opzionale)
 const ORDERS_ENDPOINT = window.ORDERS_ENDPOINT || null; // es: "/api/orders/restaurant"
 
-// ========================= HELPERS =========================
+// ========================= helpers =========================
 async function fetchJSON(url, options = {}) {
   try {
     const res = await fetch(url, {
@@ -19,7 +19,7 @@ async function fetchJSON(url, options = {}) {
       ...options
     });
     const text = await res.text().catch(() => "");
-    // Tenta JSON, altrimenti torna null (es. HTML 404)
+    // tenta json, altrimenti torna null (es. HTML 404)
     let data = null;
     try { data = text ? JSON.parse(text) : null; } catch { data = null; }
     if (!res.ok) {
@@ -43,7 +43,7 @@ function asOrdersArray(payload) {
   return null;
 }
 
-// Prova una lista di URL e restituisce SEMPRE un array (anche vuoto)
+// prova una lista di URL e restituisce SEMPRE un array (anche vuoto)
 async function findOrders(restaurantId) {
   const qs = `restaurantId=${encodeURIComponent(restaurantId)}`;
   const base = API_BASE.replace(/\/+$/, "");
@@ -84,18 +84,18 @@ async function findOrders(restaurantId) {
       console.info("[STATISTICHE] trovato endpoint ordini:", u);
       return { url: u, orders: arr };
     }
-    // Se la risposta è un array “puro”
+    // se la risposta è un array “puro”
     if (Array.isArray(raw)) {
       console.info("[STATISTICHE] trovato endpoint ordini (array):", u);
       return { url: u, orders: raw };
     }
   }
 
-  // Nessun endpoint trovato → ritorna array vuoto (niente errori in console)
+  // nessun endpoint trovato → ritorna array vuoto (niente errori in console)
   return { url: null, orders: [] };
 }
 
-// Meals discovery analogo (sempre ritorna lista ristoranti)
+// meals discovery analogo (sempre ritorna lista ristoranti)
 async function findMeals(restaurantId) {
   const base = API_BASE.replace(/\/+$/, "");
   const candidates = [
@@ -112,7 +112,7 @@ async function findMeals(restaurantId) {
     if (Array.isArray(raw)) return [{ restaurantId, menu: raw }]; // piatti comuni
     if (raw?.restaurants) return raw.restaurants;
   }
-  // Non trovato: nessun menu → ritorna contenitore vuoto
+  // non trovato: nessun menu → ritorna contenitore vuoto
   return [{ restaurantId, menu: [] }];
 }
 
@@ -161,7 +161,7 @@ function normalizeOrderLines(order) {
   return out.filter(x => x.mealId);
 }
 
-// ========================= MAIN =========================
+// ========================= main =========================
 window.addEventListener("load", async () => {
   // auth
   let user = null;
@@ -189,10 +189,10 @@ window.addEventListener("load", async () => {
   if (errorBox) errorBox.textContent = "";
   if (missingBox) missingBox.innerHTML = "";
 
-  // 1) carica ordini (senza lanciare)
+  // 1) carica ordini 
   const { url: usedOrdersUrl, orders: ordersRaw } = await findOrders(rid);
 
-  // 2) carica piatti (senza lanciare)
+  // 2) carica piatti 
   const restaurants = await findMeals(rid);
   const myMenu = (restaurants.find(r => String(r.restaurantId) === String(rid))?.menu) || [];
   const myMap  = new Map(myMenu.map(p => [mealId(p), p]));
@@ -238,7 +238,7 @@ window.addEventListener("load", async () => {
     topUl.innerHTML = html || "<li>No orders received.</li>";
   }
 
-  // Se non abbiamo trovato nessun endpoint ordini, mostra un avviso (ma niente errori)
+  // se non abbiamo trovato nessun endpoint ordini, mostra un avviso (ma niente errori)
   if (!usedOrdersUrl && missingBox) {
     missingBox.innerHTML = `
       <div style="background:#fff3cd;color:#664d03;border:1px solid #ffecb5;padding:10px;border-radius:6px;">

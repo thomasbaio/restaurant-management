@@ -1,4 +1,4 @@
-// base URL: localhost in dev, Render in produzione
+
 const API_BASE =
   (location.hostname === 'localhost' || location.hostname === '127.0.0.1')
     ? 'http://localhost:3000'
@@ -13,7 +13,7 @@ async function safeJson(res) {
   const text = await res.text();
   if (!ct.includes('application/json')) {
     const snippet = text.slice(0, 200).replace(/\s+/g, ' ');
-    throw new Error(`Non-JSON response (${res.status}) → ${snippet}`);
+    throw new Error(`non-JSON response (${res.status}) → ${snippet}`);
   }
   try { return JSON.parse(text); }
   catch (e) { throw new Error(`JSON parse error (${res.status}): ${e.message}`); }
@@ -62,7 +62,7 @@ function updateIngredientList() {
   ingredientList.innerHTML = ingredients.map((ing, i) => `
     <li style="margin-bottom: 5px;">
       ${ing}
-      <button type="button" onclick="removeIngredient(${i})" style="margin-left: 10px;" aria-label="Remove ingredient">❌</button>
+      <button type="button" onclick="removeIngredient(${i})" style="margin-left: 10px;" aria-label="remove ingredient"></button>
     </li>
   `).join("");
 }
@@ -80,11 +80,11 @@ if (mealForm) {
 
     const user = readUser();
     if (!isRistoratore(user)) {
-      alert("Solo i ristoratori possono creare piatti personalizzati.");
+      alert("solo i ristoratori possono creare piatti personalizzati.");
       return;
     }
     if (!user?.restaurantId) {
-      alert("Per salvare nel tuo menu imposta prima il Restaurant ID nel profilo.");
+      alert("per salvare nel tuo menu imposta prima il Restaurant ID nel profilo.");
       return;
     }
 
@@ -96,7 +96,7 @@ if (mealForm) {
     const immagine    = (document.getElementById("image").value || "").trim();
 
     if (!nome || !Number.isFinite(prezzo) || prezzo <= 0) {
-      alert("Inserisci un nome e un prezzo valido (> 0).");
+      alert("inserisci un nome e un prezzo valido (> 0).");
       return;
     }
 
@@ -123,7 +123,7 @@ if (mealForm) {
         throw new Error(`HTTP ${res.status} - ${errText || 'Save error'}`);
       }
 
-      alert("Piatto salvato nel tuo menu!");
+      alert("piatto salvato nel tuo menu!");
       window.location.href = "index.html";
     } catch (err) {
       console.error("Network/save error:", err);
@@ -139,18 +139,18 @@ window.addEventListener('DOMContentLoaded', async () => {
 
   const user = readUser();
 
-  // 1) Guard SOLO sul ruolo (non su restaurantId)
+  // 1) guard SOLO sul ruolo (non su restaurantId)
   if (!isRistoratore(user)) {
     container.innerHTML = "<p>Only restaurateurs can view common dishes.</p>";
     return;
   }
 
-  // Se manca restaurantId, avvisa ma NON bloccare la visualizzazione
+  // se manca restaurantId, avvisa ma NON bloccare la visualizzazione
   if (!user?.restaurantId) {
-    showBanner(container, "Suggerimento: per <b>aggiungere</b> un piatto comune al tuo menu devi prima impostare il <b>Restaurant ID</b> nel profilo.");
+    showBanner(container, "suggerimento: per <b>aggiungere</b> un piatto comune al tuo menu devi prima impostare il <b>Restaurant ID</b> nel profilo.");
   }
 
-  // 2) Carica l’elenco provando più endpoint
+  // 2) carica l’elenco provando più endpoint
   async function loadCommon() {
     const tries = [
       `${API_BASE}/meals/common-meals`,
@@ -171,14 +171,14 @@ window.addEventListener('DOMContentLoaded', async () => {
         lastErr = e;
       }
     }
-    throw lastErr || new Error("Common meals not available");
+    throw lastErr || new Error("common meals not available");
   }
 
   try {
     container.innerHTML = "<p>Loading...</p>";
     const commonMeals = await loadCommon();
     if (!commonMeals.length) {
-      container.innerHTML = `<p class="muted">Nessun piatto comune disponibile.</p>`;
+      container.innerHTML = `<p class="muted">nessun piatto comune disponibile.</p>`;
       return;
     }
 
@@ -217,7 +217,7 @@ window.addEventListener('DOMContentLoaded', async () => {
       card.querySelector(".add-btn").addEventListener("click", async () => {
         const u = readUser();
         if (!u?.restaurantId) {
-          alert("Per aggiungere al tuo menu imposta prima il Restaurant ID nel profilo.");
+          alert("per aggiungere al tuo menu imposta prima il Restaurant ID nel profilo.");
           return;
         }
         const nuovoPiatto = {
@@ -243,7 +243,7 @@ window.addEventListener('DOMContentLoaded', async () => {
             throw new Error(`HTTP ${addRes.status} - ${addTxt || 'Save error'}`);
           }
 
-          alert("Piatto aggiunto al tuo menu!");
+          alert("piatto aggiunto al tuo menu!");
           window.location.href = "index.html";
         } catch (err) {
           console.error("Common dish add error:", err);
@@ -255,7 +255,7 @@ window.addEventListener('DOMContentLoaded', async () => {
     });
 
   } catch (err) {
-    console.error("Error loading common dishes:", err);
-    container.innerHTML = `<p style="color:#b00;">${String(err.message || 'Error loading common dishes.')}</p>`;
+    console.error("error loading common dishes:", err);
+    container.innerHTML = `<p style="color:#b00;">${String(err.message || 'error loading common dishes.')}</p>`;
   }
 });

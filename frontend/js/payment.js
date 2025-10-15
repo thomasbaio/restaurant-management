@@ -1,6 +1,5 @@
-// js/payment.js — invio ordine con fallback locale + redirect a conferma.html
 
-// ====== Configurazione api base ======
+// ====== configurazione api base ======
 const isLocalhost = ["localhost", "127.0.0.1"].includes(location.hostname);
 const DEFAULT_API_BASE = isLocalhost
   ? "http://localhost:3000"
@@ -97,7 +96,7 @@ async function postOrderWithFallback(payload) {
       }
     } catch {}
   }
-  // Fallback: salva localmente
+  // fallback: salva localmente
   const arr = JSON.parse(localStorage.getItem(FALLBACK_KEY) || "[]");
   arr.push(payload);
   localStorage.setItem(FALLBACK_KEY, JSON.stringify(arr));
@@ -113,24 +112,24 @@ document.getElementById("payment-form").addEventListener("submit", async functio
   const cvv = document.getElementById("cvv").value.trim();
 
   // --- validazioni carta ---
-  if (!/^\d{16}$/.test(number)) { alert("Invalid card number (16 digits)."); return; }
-  if (!holder) { alert("Please enter the cardholder name."); return; }
+  if (!/^\d{16}$/.test(number)) { alert("invalid card number (16 digits)."); return; }
+  if (!holder) { alert("please enter the cardholder name."); return; }
   const expDate = parseExpiryToDate(expiry);
-  if (!expDate) { alert("Invalid expiration date."); return; }
+  if (!expDate) { alert("invalid expiration date."); return; }
   const now = new Date();
   if (expDate < new Date(now.getFullYear(), now.getMonth(), 1)) {
-    alert("The card has expired."); return;
+    alert("the card has expired."); return;
   }
-  if (!/^\d{3}$/.test(cvv)) { alert("Invalid CVV (3 digits)."); return; }
+  if (!/^\d{3}$/.test(cvv)) { alert("invalid CVV (3 digits)."); return; }
 
   // --- ordine in sospeso ---
   const ordine = JSON.parse(localStorage.getItem(PENDING_KEY) || "null");
-  if (!ordine) { alert("No pending order to pay."); return; }
+  if (!ordine) { alert("no pending order to pay."); return; }
 
   // --- utente ---
   const user = JSON.parse(localStorage.getItem("loggedUser") || "null") || {};
   const username = user?.username || ordine?.username;
-  if (!username) { alert("Unable to determine the order's user (missing username)."); return; }
+  if (!username) { alert("unable to determine the order's user (missing username)."); return; }
 
   // --- meals + total (compat con formati diversi) ---
   let meals = [];
@@ -149,7 +148,7 @@ document.getElementById("payment-form").addEventListener("submit", async functio
     total = Number(ordine.total) || 0;
   }
 
-  if (!meals.length) { alert("The order has no dishes."); return; }
+  if (!meals.length) { alert("the order has no dishes."); return; }
 
   // --- restaurantId: pendingOrder -> items -> inferenza da /meals ---
   let restaurantId =
@@ -161,7 +160,7 @@ document.getElementById("payment-form").addEventListener("submit", async functio
     try { restaurantId = await inferRestaurantIdFromAPI(meals); }
     catch {}
   }
-  if (!restaurantId) { alert("Unable to determine restaurantId for this order."); return; }
+  if (!restaurantId) { alert("unable to determine restaurantId for this order."); return; }
 
   // --- payload per backend (essenziale e compatibile) ---
   const payload = {
@@ -199,7 +198,7 @@ document.getElementById("payment-form").addEventListener("submit", async functio
     window.location.href = "conferma.html";
   } catch (err) {
     // Non blocchiamo l’utente con un 404: salviamo localmente e confermiamo.
-    console.error("Payment fallback error:", err);
+    console.error("payment fallback error:", err);
     const fallback = { ...payload, paymentInfo, paidAt: new Date().toISOString(), status: "pagato" };
     const arr = JSON.parse(localStorage.getItem(FALLBACK_KEY) || "[]");
     arr.push(fallback);

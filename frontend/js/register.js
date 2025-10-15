@@ -9,7 +9,7 @@ const API_BASE = isLocal ? "http://localhost:3000"
 
 console.log("[register] API_BASE:", API_BASE);
 
-// ================= Cache elementi =================
+// ================= cache elementi =================
 const form   = document.getElementById("register-form");
 const roleEl = document.getElementById("role");
 
@@ -31,7 +31,7 @@ const luogoEl = document.getElementById("luogo");
 const viaEl   = document.getElementById("via");
 const rnameEl = document.getElementById("restaurantName");
 
-// ================= UI per ruoli =================
+// ================= ui per ruoli =================
 function refreshRoleUI() {
   const role = roleEl?.value;
   const isCliente = role === "cliente";
@@ -49,7 +49,7 @@ function refreshRoleUI() {
 roleEl?.addEventListener("change", refreshRoleUI);
 refreshRoleUI();
 
-// ================= Validazione =================
+// ================= validazione =================
 function validateForm() {
   if (!usernameEl?.value.trim()) return "Username is required.";
   if (!emailEl?.value.trim())    return "Email is required.";
@@ -62,7 +62,7 @@ function validateForm() {
   return null;
 }
 
-// ================= Helper fetch con timeout =================
+// ================= helper fetch con timeout =================
 async function doPost(path, payload, { timeout = 12000 } = {}) {
   const ctrl = new AbortController();
   const t = setTimeout(() => ctrl.abort(), timeout);
@@ -80,7 +80,7 @@ async function doPost(path, payload, { timeout = 12000 } = {}) {
   }
 }
 
-// Prova più endpoint: continua se 404, altrimenti gestisci risposta
+// prova più endpoint: continua se 404, altrimenti gestisci risposta
 async function smartRegister(payload) {
   const candidates = [
     "/users/register",
@@ -109,21 +109,21 @@ async function smartRegister(payload) {
     } catch (e) {
       // abort -> timeout
       if (e.name === "AbortError") {
-        throw new Error("Network timeout while contacting server.");
+        throw new Error("network timeout while contacting server.");
       }
       // altri errori (CORS, 5xx, ecc.)
       throw e;
     }
   }
-  throw new Error(`No matching register endpoint (tried: ${candidates.join(", ")}). Last: ${lastErrTxt}`);
+  throw new Error(`no matching register endpoint (tried: ${candidates.join(", ")}). Last: ${lastErrTxt}`);
 }
 
-// ================= Submit =================
+// ================= submit =================
 form?.addEventListener("submit", async (e) => {
   e.preventDefault();
 
   if (!navigator.onLine) {
-    alert("Sei offline. Connettiti a Internet e riprova.");
+    alert("sei offline. connettiti a Internet e riprova.");
     return;
   }
 
@@ -151,16 +151,16 @@ form?.addEventListener("submit", async (e) => {
 
   const submitBtn = form.querySelector('button[type="submit"]');
   const prevTxt = submitBtn?.textContent;
-  if (submitBtn) { submitBtn.disabled = true; submitBtn.textContent = "Registrazione…"; }
+  if (submitBtn) { submitBtn.disabled = true; submitBtn.textContent = "registrazione…"; }
 
   try {
     const { ok, data, path } = await smartRegister(payload);
-    console.log("Registration OK via", path, data);
-    alert("Registrazione completata! Ora puoi effettuare il login.");
+    console.log("registration ok via", path, data);
+    alert("registrazione completata! ora puoi effettuare il login.");
     location.href = "login.html";
   } catch (e2) {
-    console.error("Registration error:", e2);
-    alert(`Errore di registrazione:\n${e2.message || e2}`);
+    console.error("registration error:", e2);
+    alert(`errore di registrazione:\n${e2.message || e2}`);
   } finally {
     if (submitBtn) { submitBtn.disabled = false; submitBtn.textContent = prevTxt; }
   }

@@ -55,8 +55,7 @@
         <option value="Breakfast"> Breakfast </option>
         <option value="Side"> Side </option>
         <option value="dessert"> Dessert </option>
-        <option value="offers of the day"> Offers of the day </option>
-      </select><br><br>
+        </select><br><br>
     </div>
 
     <button type="submit">Save changes</button>
@@ -80,7 +79,7 @@
   } catch { storedUser = null; }
 
   if (!storedUser) {
-    alert("You must be logged in to edit your profile.");
+    alert("you must be logged in to edit your profile.");
     window.location.href = "login.html";
   }
 
@@ -118,7 +117,7 @@
     return null;
   }
 
-  // ——— prefill e UI ———
+  // ——— prefill e ui ———
   function showRoleBlocks(role) {
     document.getElementById("ristoratore-extra").style.display = role === "ristoratore" ? "block" : "none";
     document.getElementById("cliente-extra").style.display = role === "cliente" ? "block" : "none";
@@ -212,23 +211,23 @@
         try { saved = await res.json(); } catch {}
         const finalUser = saved && typeof saved === "object" ? saved : { ...updatedUser, id: current.id };
         localStorage.setItem("loggedUser", JSON.stringify(finalUser));
-        alert("Profile updated successfully!");
+        alert("profile updated successfully!");
         window.location.href = "index.html";
       } else {
         const msg = await res.text();
-        alert("Error while editing profile: " + (msg || res.status));
+        alert("error while editing profile: " + (msg || res.status));
       }
     } catch (err) {
       console.error("Error:", err);
-      alert("Network error. check your connection or server URL.");
+      alert("network error. check your connection or server URL.");
     }
   });
 
-  // ——— Delete account ———
+  // ——— delete account ———
   document.getElementById("delete-btn").addEventListener("click", async function () {
     const current = JSON.parse(localStorage.getItem("loggedUser") || "null");
     if (!current || current.id == null) {
-      alert("Your session has expired. please log in again.");
+      alert("your session has expired. please log in again.");
       window.location.href = "login.html";
       return;
     }
@@ -237,16 +236,16 @@
     try {
       const res = await fetch(`${API_BASE}/users/${current.id}`, { method: "DELETE" });
       if (res.ok) {
-        alert("Account deleted.");
+        alert("account deleted.");
         localStorage.removeItem("loggedUser");
         window.location.href = "index.html";
       } else {
         const msg = await res.text();
-        alert("Error deleting account: " + (msg || res.status));
+        alert("error deleting account: " + (msg || res.status));
       }
     } catch (err) {
       console.error("Error:", err);
-      alert("Network error. check your connection or server URL.");
+      alert("network error. check your connection or server URL.");
     }
   });
 </script>

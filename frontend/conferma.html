@@ -30,7 +30,7 @@ window.onload = async () => {
   const riepilogoEl   = document.getElementById("riepilogo");
   const listaPiattiEl = document.getElementById("lista-piatti");
 
-  // ===== Utils =====
+  // ===== utils =====
   const toStr = v => (v == null ? null : String(v));
   const clean = s => (typeof s === "string" ? s.trim().toLowerCase() : null);
 
@@ -181,7 +181,7 @@ window.onload = async () => {
     } catch { return null; }
   }
 
-  // ===== Recupera ordine (id -> localStorage -> ultimo per utente) =====
+  // ===== recupera ordine (id -> localStorage -> ultimo per utente) =====
   const params = new URLSearchParams(location.search);
   const orderIdParam = params.get("orderId");
 
@@ -199,7 +199,7 @@ window.onload = async () => {
     return;
   }
 
-  // ===== Estrai items e stima ETA SOLO per pickup =====
+  // ===== estrai items e stima ETA SOLO per pickup =====
   let items =
     extractOrderItems(ordine.meals)
     .concat(extractOrderItems(ordine.items))
@@ -212,7 +212,6 @@ window.onload = async () => {
   const qtyTot = collapsed.reduce((s, x) => s + (x.qty || 1), 0);
 
   // ETA locale: ritiro in negozio
-  // base 12' + 5' per item; clamp 10..45
   let eta = 12 + 5 * Math.max(1, qtyTot);
   eta = Math.min(45, Math.max(10, eta));
 

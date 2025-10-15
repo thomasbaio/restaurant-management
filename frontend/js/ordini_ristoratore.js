@@ -4,7 +4,7 @@ const API_BASE = isLocal
   ? "http://localhost:3000"
   : "https://restaurant-management-wzhj.onrender.com";
 
-// ===================== Helper fetch JSON =====================
+// ===================== helper fetch JSON =====================
 async function fetchJSON(url, options = {}) {
   const res = await fetch(url, {
     headers: { "Content-Type": "application/json", ...(options.headers || {}) },
@@ -23,22 +23,22 @@ async function fetchJSON(url, options = {}) {
   return data;
 }
 
-// Prova più URL (per backend diversi)
+
 async function tryMany(urls) {
   let lastErr = null;
   for (const u of urls) {
     try { return await fetchJSON(u); }
     catch (e) { console.warn("[ORDINI] fallito", u, e.message); lastErr = e; }
   }
-  throw lastErr || new Error("Nessuna rotta disponibile");
+  throw lastErr || new Error("nessuna rotta disponibile");
 }
 
-// ===================== Utils =====================
+// ===================== utils =====================
 function money(n) {
   return `€${Number(n || 0).toFixed(2)}`;
 }
 
-// ===================== On load =====================
+// ===================== on load =====================
 window.addEventListener("load", async () => {
   const container = document.getElementById("ordine-lista");
   let user = null;
@@ -60,7 +60,7 @@ window.addEventListener("load", async () => {
     ]);
 
     if (!Array.isArray(orders) || orders.length === 0) {
-      container.innerHTML = "<p>No orders found for your restaurant.</p>";
+      container.innerHTML = "<p>no orders found for your restaurant.</p>";
       return;
     }
 
@@ -71,7 +71,7 @@ window.addEventListener("load", async () => {
       `${API_BASE}/api/meals`
     ]);
 
-    // Normalizzo struttura
+    // normalizzo struttura
     let restaurants = [];
     if (Array.isArray(mealsData) && mealsData[0]?.menu) {
       restaurants = mealsData; // caso A: lista ristoranti
@@ -139,7 +139,7 @@ Suggerimento: controlla che il backend esponga una rotta GET /orders o /api/orde
   }
 });
 
-// ===================== Cambio stato =====================
+// ===================== cambio stato =====================
 async function aggiornaStato(id, statoAttuale, domSpanId) {
   const next = {
     "ordinato": "in preparazione",
@@ -160,10 +160,10 @@ async function aggiornaStato(id, statoAttuale, domSpanId) {
       if (span) span.textContent = next;
     } else {
       const text = await res.text().catch(() => "");
-      alert("Error changing status. " + text);
+      alert("error changing status. " + text);
     }
   } catch (err) {
     console.error(err);
-    alert("Network error while changing status.");
+    alert("network error while changing status.");
   }
 }

@@ -1,14 +1,13 @@
-// js/order.js — single dish + builder multi-piatto con "Add to the order"
-// Riepilogo include bozza, "Confirm order" porta a payment.html
+
 (() => {
   "use strict";
 
   /* -------- auth: cliente -------- */
   const user = JSON.parse(localStorage.getItem("loggedUser") || "null");
   if (!user || user.role !== "cliente") {
-    alert("You must be logged in as a customer to place an order.");
+    alert("you must be logged in as a customer to place an order.");
     location.href = "login.html";
-    throw new Error("User not logged in as customer");
+    throw new Error("user not logged in as customer");
   }
 
   /* -------- API base -------- */
@@ -37,7 +36,7 @@
     }
     // vincolo: un solo ristorante per bozza
     if (draft.restaurantId && item.restaurantId && draft.restaurantId !== item.restaurantId) {
-      const ok = confirm("Your current order contains dishes from another restaurant. Replace it with this one?");
+      const ok = confirm("your current order contains dishes from another restaurant. Replace it with this one?");
       if (!ok) return false;
       draft = {
         userId: draft.userId,
@@ -59,7 +58,7 @@
     return true;
   }
 
-  // Unisce righe con stesso dishId sommando le qty (usata dal riepilogo)
+  // unisce righe con stesso dishId sommando le qty (usata dal riepilogo)
   function mergeItemsByDishId(items) {
     const by = new Map();
     for (const it of (items || [])) {
@@ -159,7 +158,7 @@
         if (res.ok) return await res.json();
       } catch {}
     }
-    throw new Error("Cannot load meals");
+    throw new Error("cannot load meals");
   }
 
   async function loadMealById(dishId, restaurantIdHint) {
@@ -177,7 +176,7 @@
       list.find(x => String(x.id) === String(dishId)) ||
       list.find(x => String(x.raw?.idmeals) === String(dishId)) ||
       list.find(x => String(x.raw?._id) === String(dishId));
-    if (!found) throw new Error("Dish not found");
+    if (!found) throw new Error("dish not found");
     ensureImageFallback(found, imgMap);
     if (restaurantIdHint && !found.restaurantId) found.restaurantId = String(restaurantIdHint);
     return found;
@@ -188,7 +187,7 @@
   let qty = 1;
   const FEES = 0;
 
-  // 👉 helper: passa l’ordine alla pagina di pagamento
+  // helper: passa l’ordine alla pagina di pagamento
   function goToPayment(order) {
     localStorage.setItem("pendingOrder", JSON.stringify(order));
     const d = getDraft();
@@ -219,7 +218,7 @@
       qty = v; qtyInput.value = String(v); renderSummary();
     });
 
-    // ↪ pulsante "Add to the order"
+    // pulsante "Add to the order"
     const form = qs("#order-form");
     if (form && !qs("#btn-add-to-draft")) {
       const addBtn = document.createElement("button");
@@ -232,7 +231,7 @@
     }
   }
 
-  // Riepilogo: include bozza (stesso ristorante) + piatto corrente
+  // riepilogo: include bozza + piatto corrente
   function renderSummary() {
     const sum = qs("#summary");
     if (!sum) return;
@@ -267,7 +266,7 @@
       });
     } else {
       if (draft && draft.items && draft.items.length) {
-        lines.push(`<div class="muted">You have an in-progress order for another restaurant. It won't be included.</div>`);
+        lines.push(`<div class="muted">you have an in-progress order for another restaurant. it won't be included.</div>`);
       }
       if (currentMeal) {
         const curTot = Number(currentMeal.price) * Number(qty);
@@ -301,7 +300,7 @@
     location.href = "index.html"; // torna al menu per aggiungere altro
   }
 
-  // 👉 "Confirm order" ora passa a payment.html con pendingOrder
+  // "Confirm order" ora passa a payment con pendingOrder
   async function submitSingleOrder(e) {
     e.preventDefault();
     if (!currentMeal) { alert("Dish not loaded."); return; }
@@ -338,7 +337,7 @@
     goToPayment(order);
   }
 
-  /* ============== BUILDER: più piatti e somme (senza dishId) ============== */
+  /* ============== builder: più piatti e somme  ============== */
   function renderBuilderList(container, groups) {
     container.innerHTML = "";
     groups.forEach(g => {
@@ -452,7 +451,7 @@
     return Array.from(groupsMap.values()).filter(g => g.items.length);
   }
 
-  // 👉 "Confirm order" del builder porta a payment.html
+  // "Confirm order" del builder porta a payment
   async function submitBuilderOrder(e, container) {
     e.preventDefault();
     const inputs = container.querySelectorAll("input.qty");
@@ -478,11 +477,11 @@
     });
 
     if (!items.length) {
-      alert("Select at least one dish (set Qty > 0).");
+      alert("select at least one dish (set Qty > 0).");
       return;
     }
     if (restaurantId === "__MIXED__") {
-      alert("Please select dishes from a single restaurant.");
+      alert("please select dishes from a single restaurant.");
       return;
     }
 
@@ -511,7 +510,7 @@
     const dishId = getParam("dishId");
     const rid    = getParam("restaurantId");
 
-    // ——— Modalità singolo piatto (con dishId)
+    // ——— modalità singolo piatto (con dishId)
     if (dishId) {
       try {
         currentMeal = await loadMealById(dishId, rid);
@@ -529,13 +528,13 @@
       return;
     }
 
-    // ——— Modalità builder (senza dishId)
+    // ——— modalità builder (senza dishId)
     const listEl = qs("#meals-list");
     if (listEl) {
       try {
         const groups = await buildGroupsForBuilder();
         if (!groups.length) {
-          listEl.innerHTML = `<p>No dishes available.</p>`;
+          listEl.innerHTML = `<p>no dishes available.</p>`;
           return;
         }
         renderBuilderList(listEl, groups);
@@ -553,8 +552,8 @@
         const form = qs("#order-form");
         form?.addEventListener("submit", (e) => submitBuilderOrder(e, listEl));
       } catch (err) {
-        console.error("Error loading dishes:", err);
-        alert(`Error loading dishes.\nBase URL: ${API_BASE}\nDetails: ${err.message}`);
+        console.error("error loading dishes:", err);
+        alert(`error loading dishes.\nBase URL: ${API_BASE}\nDetails: ${err.message}`);
       }
       return;
     }
@@ -565,8 +564,8 @@
       dishBox.innerHTML = `
         <div>
           <h2>No dish selected</h2>
-          <p class="muted">Open a dish and press "Order".</p>
-          <p><a href="ricerca_piatti.html">Go to dishes</a></p>
+          <p class="muted">open a dish and press "Order".</p>
+          <p><a href="ricerca_piatti.html">go to dishes</a></p>
         </div>
       `;
       qs("#order-form")?.addEventListener("submit", (e) => {

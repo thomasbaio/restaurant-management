@@ -41,7 +41,7 @@ function pickImageURL(p) {
 }
 
 // =========================
-// normalizzazione & chiavi
+// normalizzazione e chiavi
 // =========================
 function normalizeRestaurant(r) {
   const id = r.restaurantId ?? r.id ?? r._id ?? r.ownerUserId ?? null;
@@ -169,25 +169,25 @@ function enrichRestaurantWithUsersMap(r, map) {
 }
 
 // =========================
-// ruolo & azioni
+// ruolo e azioni
 // =========================
 function getLoggedUser() {
   try { return JSON.parse(localStorage.getItem("loggedUser")) || null; }
   catch { return null; }
 }
 
-// Delete SOLO per ristoratore DEL proprio ristorante
+// cancellazione solo per ristoratore del proprio ristorante
 async function handleDeleteAsRestaurant(piatto) {
   const user = getLoggedUser();
   if (!user || user.role !== "ristoratore") {
-    alert("Only restaurateurs can delete dishes.");
+    alert("only restaurateurs can delete dishes.");
     return;
   }
   if (!piatto.restaurantId || String(piatto.restaurantId) !== String(user.restaurantId || "")) {
-    alert("You can delete only dishes from your own restaurant.");
+    alert("you can delete only dishes from your own restaurant.");
     return;
   }
-  if (!confirm(`Delete dish "${piatto.nome}"? This action cannot be undone.`)) return;
+  if (!confirm(`delete dish "${piatto.nome}"? this action cannot be undone.`)) return;
 
   try {
     const res = await fetch(`${API_BASE}/meals/${encodeURIComponent(piatto.id)}`, {
@@ -200,8 +200,8 @@ async function handleDeleteAsRestaurant(piatto) {
     }
     window.cercaPiatti();
   } catch (err) {
-    console.error("Delete error:", err);
-    alert("Error deleting the dish: " + err.message);
+    console.error("delete error:", err);
+    alert("error deleting the dish: " + err.message);
   }
 }
 
@@ -330,7 +330,7 @@ window.cercaPiatti = async function () {
     });
 
     if (!filtered.length) {
-      ul.innerHTML = "<li>No dishes found.</li>";
+      ul.innerHTML = "<li>no dishes found.</li>";
       __ricercaPiattiIndex = new Map();
       return;
     }
@@ -341,8 +341,8 @@ window.cercaPiatti = async function () {
 
     renderGroupedByRestaurant(filtered, ul);
   } catch (err) {
-    console.error("Dish search error:", err);
-    ul.innerHTML = `<li style="color:#b00020;">Error during search. See console for details.</li>`;
+    console.error("dish search error:", err);
+    ul.innerHTML = `<li style="color:#b00020;">error during search. see console for details.</li>`;
   }
 };
 

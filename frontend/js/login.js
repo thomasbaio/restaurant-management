@@ -1,5 +1,4 @@
-/// login.js — Frontend robusto: prova prima /users/login, poi /login.
-// Mostra corpo errore se il server non restituisce JSON valido o manca "user".
+
 (() => {
   const isLocal = ["localhost", "127.0.0.1"].includes(location.hostname);
   const API_BASE = isLocal
@@ -77,7 +76,7 @@
       const password = (passEl?.value  || "").trim();
 
       if (!(rawEmail || rawUser) || !password) {
-        alert("Inserisci email o username e la password.");
+        alert("inserisci email o username e la password.");
         return;
       }
 
@@ -103,14 +102,14 @@
 
         // se il server ha risposto HTML, fallisci con dettaglio
         if (!data && resp.raw && /^\s*<!DOCTYPE html>/i.test(resp.raw)) {
-          throw new Error("Il server ha risposto HTML invece di JSON:\n" + resp.raw.slice(0, 200));
+          throw new Error("il server ha risposto HTML invece di json:\n" + resp.raw.slice(0, 200));
         }
 
         user = pickUser(data);
         if (!user) {
           // mostra anche il JSON grezzo che è arrivato per debug
           throw new Error(
-            "Risposta non valida dal server (utente mancante). Corpo: " +
+            "risposta non valida dal server (utente mancante). Corpo: " +
             (resp.raw ? resp.raw.slice(0, 300) : JSON.stringify(data))
           );
         }
@@ -142,10 +141,10 @@
         window.location.href = "index.html";
       } catch (err) {
         console.error("[LOGIN]", err);
-        const isNetwork = /Failed to fetch|NetworkError|CORS/i.test(String(err));
+        const isNetwork = /failed to fetch|NetworkError|CORS/i.test(String(err));
         alert(isNetwork
-          ? "Impossibile contattare il server. Controlla URL/connessione."
-          : `Login fallito: ${err.message}`);
+          ? "impossibile contattare il server. Controlla URL/connessione."
+          : `login fallito: ${err.message}`);
       }
     });
   });

@@ -6,7 +6,7 @@ const API_BASE = isLocal ? "http://localhost:3000"
 /* ========= fetch helper robusto =========
    - legge come testo
    - controlla content-type
-   - tenta JSON.parse solo se ha senso
+   - tenta json.parse solo se ha senso
    - errori sempre parlanti (no "Unexpected token '<'")
 */
 async function apiGet(path) {
@@ -24,7 +24,7 @@ async function apiGet(path) {
       throw new Error(`HTTP ${res.status} ${res.statusText} – ${snip || "no body"}`);
     }
 
-    // prova a capire se è JSON
+    // prova a capire se è json
     if (ctype.includes("application/json") || (text && text.trim().startsWith("{")) || (text && text.trim().startsWith("["))) {
       try { return JSON.parse(text); }
       catch {
@@ -32,7 +32,7 @@ async function apiGet(path) {
       }
     }
 
-    // risposta 200 ma non JSON
+    // risposta 200 ma non json 
     throw new Error(`Unexpected content-type for ${path}: ${ctype || "unknown"}`);
   } finally {
     clearTimeout(t);
@@ -97,7 +97,7 @@ function getUnitPrice(it, cat){
   return 0;
 }
 
-// ========= render items =========
+// ========= items =========
 function renderItemsAndTotal(order, mealsMap) {
   let total = 0; let rows = [];
   const mealsIdsByIndex = extractIdsFromMeals(order.meals);
@@ -141,7 +141,7 @@ function renderItemsAndTotal(order, mealsMap) {
   return { html: `<ul class="dishes">${rows.join("")}</ul>`, total };
 }
 
-/* ====== Fallback anti-404 per ORDERS ====== */
+/* ====== fallback anti-404 per orders ====== */
 async function fetchOrdersWithFallback(username) {
   const qs = username ? `?username=${encodeURIComponent(username)}` : "";
   const candidates = [
@@ -166,13 +166,13 @@ async function fetchOrdersWithFallback(username) {
           return [...a, ...c];
         }
       }
-      lastErr = new Error(`Unexpected payload from ${p}`);
+      lastErr = new Error(`unexpected payload from ${p}`);
     } catch (e) {
       lastErr = e;
     }
   }
-  console.warn("[orders] fallback: nessun endpoint valido. Ultimo errore:", lastErr?.message);
-  return []; // NON lanciare, così la pagina resta viva
+  console.warn("[orders] fallback: endpoint  not valid. last error:", lastErr?.message);
+  return []; // non lanciare, così la pagina resta viva
 }
 
 /* ============ bootstrap pagina ============ */
