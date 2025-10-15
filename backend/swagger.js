@@ -1,9 +1,9 @@
-// swagger.js
+
 const path = require("path");
 const swaggerJSDoc = require("swagger-jsdoc");
 const swaggerUi = require("swagger-ui-express");
 
-/* -------- servers dinamici (dev/prod) -------- */
+/* -------- servers -------- */
 const PROD_URL =
   process.env.RENDER_EXTERNAL_URL ||
   process.env.PUBLIC_BASE_URL ||
@@ -17,7 +17,7 @@ const servers = PROD_URL
       { url: "https://restaurant-management-wzhj.onrender.com", description: "Prod (statico)" },
     ];
 
-/* --------- definizione OpenAPI --------- */
+/* --------- definizione openAPI --------- */
 const options = {
   definition: {
     openapi: "3.0.3",
@@ -25,16 +25,16 @@ const options = {
       title: "Click&Food API",
       version: "1.0.0",
       description:
-        "API per ristoratori, piatti, ordini e autenticazione. Documentazione OpenAPI 3 per il progetto Click&Food.",
+        "API per ristoratori, piatti, ordini e autenticazione. documentazione openAPI 3 per il progetto Click&Food.",
     },
     servers,
     tags: [
-      { name: "fetch", description: "Endpoint di lettura/ricerca contenuti" },
-      { name: "Users", description: "Registrazione, login e profilo" },
-      { name: "Restaurants", description: "Anagrafica ristoranti" },
-      { name: "Meals", description: "Gestione piatti per ristorante" },
-      { name: "Orders", description: "Creazione ordini e gestione stati" },
-      { name: "database", description: "Stato/health del server e del DB" },
+      { name: "fetch", description: "endpoint di lettura/ricerca contenuti" },
+      { name: "Users", description: "registrazione, login e profilo" },
+      { name: "Restaurants", description: "anagrafica ristoranti" },
+      { name: "Meals", description: "gestione piatti per ristorante" },
+      { name: "Orders", description: "creazione ordini e gestione stati" },
+      { name: "database", description: "stato/health del server e del DB" },
     ],
     components: {
       securitySchemes: {
@@ -91,7 +91,7 @@ const options = {
             id: { type: "integer", example: 1 },
             _id: { type: "string", example: "66f1b3c1a2e4e9a1c9b0d123" },
             username: { type: "string", example: "thomas" },
-            email: { type: "string", format: "email", example: "thomas@example.com" },
+            email: { type: "string", format: "email", example: "baiocchithomas19@gmail.com" },
             password: { type: "string", example: "••••••••" },
             role: { type: "string", enum: ["cliente", "ristoratore"], example: "ristoratore" },
             telefono: { type: "string", example: "+39 333 1234567" },
@@ -108,7 +108,7 @@ const options = {
               type: "object",
               required: ["email", "password"],
               properties: {
-                email: { type: "string", format: "email", example: "thomas@example.com" },
+                email: { type: "string", format: "email", example: "baiocchithomas19@gmail.com" },
                 password: { type: "string", example: "••••••••" },
               },
             },
@@ -130,7 +130,7 @@ const options = {
           },
         },
 
-        /* ------------ MEALS ------------ */
+        /* ------------ piatti ------------ */
         Meal: {
           type: "object",
           required: ["nome", "prezzo", "restaurantId"],
@@ -184,7 +184,7 @@ const options = {
           additionalProperties: true,
         },
 
-        /* ------------ RESTAURANTS ------------ */
+        /* ------------ ristorante ------------ */
         Restaurant: {
           type: "object",
           required: ["restaurantId", "name"],
@@ -198,7 +198,7 @@ const options = {
           },
         },
 
-        /* ------------ ORDERS ------------ */
+        /* ------------ ordini ------------ */
         OrderItem: {
           type: "object",
           required: ["idmeals", "qty", "price"],
@@ -233,7 +233,7 @@ const options = {
           },
         },
 
-        /* ------------ ERROR ------------ */
+        /* ------------ errore ------------ */
         Error: {
           type: "object",
           properties: {

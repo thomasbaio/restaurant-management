@@ -1,4 +1,3 @@
-// ./models/meal.js
 const mongoose = require("mongoose");
 
 const mealSchema = new mongoose.Schema(
@@ -24,13 +23,13 @@ const mealSchema = new mongoose.Schema(
   { timestamps: true, autoIndex: true }
 );
 
-// ✅ Indice composto UNICO — niente altri indici su idmeals!
+//indice composto UNICO!
 mealSchema.index(
   { restaurantId: 1, idmeals: 1 },
   { unique: true, name: "uniq_restaurant_meal" }
 );
 
-// (facoltativi, NON unici) per /common-meals
+// per /common-meals
 mealSchema.index({ isCommon: 1 });
 mealSchema.index({ origine: 1 });
 

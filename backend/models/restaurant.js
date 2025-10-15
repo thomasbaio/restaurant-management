@@ -22,7 +22,7 @@ const RestaurantSchema = new mongoose.Schema(
     // riferimento all'utente ristoratore che possiede il ristorante
     ownerUserId: { type: String, required: true, index: true },
 
-    // identificatore "umano" opzionale (se vuoi compatibilità con "r_o")
+    // identificatore "umano" opzionale
     code: { type: String, trim: true, index: true }, // es: "r_o"
 
     nome: { type: String, required: true, trim: true },

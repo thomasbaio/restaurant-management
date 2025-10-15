@@ -1,4 +1,4 @@
-//// users.js
+
 const express = require("express");
 const bcrypt = require("bcrypt");
 const router = express.Router();
@@ -55,14 +55,14 @@ function sanitize(u) {
 }
 
 // =====================================================
-//                    REGISTRAZIONE
+//                    registrazione
 // =====================================================
 /**
  * @swagger
  * /users/register:
  *   post:
  *     tags: [Users]
- *     summary: Registra un nuovo utente (cliente o ristoratore)
+ *     summary: registra un nuovo utente (cliente o ristoratore)
  *     requestBody:
  *       required: true
  *       content:
@@ -79,16 +79,16 @@ router.post("/register", async (req, res) => {
   try {
     const b = normalizeBody(req.body);
     if (!b.username || !b.email || !b.password) {
-      return res.status(400).json({ message: "username, email e password sono obbligatori" });
+      return res.status(400).json({ message: "username, email and password are obligatory" });
     }
 
-    // Unicità
+    // unicità
     const exists = await User.findOne({
       $or: [{ username: b.username }, { email: b.email }]
     }).lean();
-    if (exists) return res.status(409).json({ message: "Username o email già usati" });
+    if (exists) return res.status(409).json({ message: "username or email areday used" });
 
-    // Hash password (se non sembra già hashata)
+    // hash password
     let hashed = b.password;
     if (!/^\$2[aby]\$/.test(hashed)) {
       hashed = await bcrypt.hash(String(b.password), 10);
@@ -105,38 +105,38 @@ router.post("/register", async (req, res) => {
     return res.status(201).json(sanitize(created.toObject()));
   } catch (err) {
     console.error("POST /users/register error:", err);
-    res.status(500).json({ message: err.message || "Errore server" });
+    res.status(500).json({ message: err.message || "error server" });
   }
 });
 
-// Compat: alcuni frontend usano POST /users per creare
+// compat: alcuni frontend usano POST /users per creare
 router.post("/", (req, res) => {
   req.url = "/register";
   router.handle(req, res);
 });
 
 // =====================================================
-//                         LOGIN
+//                         loin
 // =====================================================
 /**
  * @swagger
  * /users/login:
  *   post:
  *     tags: [Users]
- *     summary: Effettua il login (bcrypt compat o password in chiaro)
+ *     summary: effettua il login (bcrypt compat o password in chiaro)
  */
 router.post("/login", async (req, res) => {
   try {
     const { username, email, password } = req.body || {};
     if (!password || (!username && !email)) {
-      return res.status(400).json({ message: "username/email e password sono obbligatori" });
+      return res.status(400).json({ message: "username/email and password are obligatory" });
     }
 
     const user = await User.findOne(
       username ? { username } : { email }
     ).lean();
 
-    if (!user) return res.status(401).json({ message: "Credenziali non valide" });
+    if (!user) return res.status(401).json({ message: "invalid credentials" });
 
     const stored = String(user.password || "");
 
@@ -149,18 +149,18 @@ router.post("/login", async (req, res) => {
       ok = stored === String(password);
     }
 
-    if (!ok) return res.status(401).json({ message: "Credenziali non valide" });
+    if (!ok) return res.status(401).json({ message: " Invalid credentials" });
 
     // (qui potresti generare un JWT, per ora ritorno l'utente senza password)
     return res.json(sanitize(user));
   } catch (err) {
     console.error("POST /users/login error:", err);
-    res.status(500).json({ message: "Errore server" });
+    res.status(500).json({ message: "error server" });
   }
 });
 
 // =====================================================
-//                         LISTA
+//                         lista
 // =====================================================
 router.get("/", async (req, res) => {
   try {
@@ -213,7 +213,7 @@ router.get("/restaurants", async (_req, res) => {
 });
 
 // =====================================================
-//                        DETTAGLIO
+//                        dettaglio
 // =====================================================
 router.get("/:id", async (req, res) => {
   try {
@@ -223,7 +223,7 @@ router.get("/:id", async (req, res) => {
       : isNumericId(param)
       ? { legacyId: Number(param) }
       : null;
-    if (!filter) return res.status(400).json({ message: "id non valido" });
+    if (!filter) return res.status(400).json({ message: "ID not valid" });
 
     const u = await User.findOne(filter).select("-password").lean();
     if (!u) return res.status(404).json({ message: "User not found" });
@@ -235,7 +235,7 @@ router.get("/:id", async (req, res) => {
 });
 
 // =====================================================
-//                        UPDATE
+//                        aggiunta
 // =====================================================
 router.put("/:id", async (req, res) => {
   try {
@@ -245,7 +245,7 @@ router.put("/:id", async (req, res) => {
       : isNumericId(param)
       ? { legacyId: Number(param) }
       : null;
-    if (!filter) return res.status(400).json({ message: "id non valido" });
+    if (!filter) return res.status(400).json({ message: "ID not valid" });
 
     const updates = { ...normalizeBody(req.body) };
     delete updates._id;
@@ -266,7 +266,7 @@ router.put("/:id", async (req, res) => {
 });
 
 // =====================================================
-//                   CAMBIO PASSWORD
+//                   cambio password
 // =====================================================
 router.put("/:id/password", async (req, res) => {
   try {
@@ -276,10 +276,10 @@ router.put("/:id/password", async (req, res) => {
       : isNumericId(param)
       ? { legacyId: Number(param) }
       : null;
-    if (!filter) return res.status(400).json({ message: "id non valido" });
+    if (!filter) return res.status(400).json({ message: "ID not valid" });
 
     const { password } = req.body || {};
-    if (!password) return res.status(400).json({ message: "password obbligatoria" });
+    if (!password) return res.status(400).json({ message: "password obligatory" });
 
     const hash = await bcrypt.hash(String(password), 10);
     const updated = await User.findOneAndUpdate(filter, { $set: { password: hash } }, { new: true });
@@ -293,7 +293,7 @@ router.put("/:id/password", async (req, res) => {
 });
 
 // =====================================================
-//                         DELETE
+//                         cancelazione
 // =====================================================
 router.delete("/:id", async (req, res) => {
   try {
@@ -303,7 +303,7 @@ router.delete("/:id", async (req, res) => {
       : isNumericId(param)
       ? { legacyId: Number(param) }
       : null;
-    if (!filter) return res.status(400).json({ message: "id non valido" });
+    if (!filter) return res.status(400).json({ message: "ID not valid" });
 
     const deleted = await User.findOneAndDelete(filter);
     if (!deleted) return res.status(404).json({ message: "Utente not found" });

@@ -1,4 +1,3 @@
-// db.js
 require("dotenv").config();
 const path = require("path");
 const express = require("express");
@@ -6,7 +5,7 @@ const cors = require("cors");
 
 const connectDB = require("./connectDB");      // connessione Mongo opzionale
 
-// Routers
+// routers
 const mealsRouter = require("./meals");        // /meals
 const loginRouter = require("./login");        // POST /login
 const registerRouter = require("./register");  // POST /register
@@ -14,11 +13,11 @@ const usersRouter = require("./user");         // /users (legacy compat)
 const restaurantsRouter = require("./restaurant"); // /restaurants (NON modificato)
 const ordersRouter = require("./order");       // /orders
 
-const { setupSwagger } = require("./swagger"); // Swagger UI + /api-docs.json
+const { setupSwagger } = require("./swagger"); // swagger UI + /api-docs.json
 
 const app = express();
 
-// fidati del proxy (Render/Heroku)
+// fidati del proxy
 app.set("trust proxy", 1);
 
 // middlewares base
@@ -29,7 +28,7 @@ app.use(express.urlencoded({ extended: true }));
 // static (opzionale)
 app.use(express.static(path.join(__dirname, "public")));
 
-// Swagger UI + JSON spec
+// Swagger ui + jsom spec
 setupSwagger(app);
 
 // redirect comodo alla doc
@@ -61,8 +60,8 @@ app.get("/health", (_req, res) => {
   });
 });
 
-/* ================== API ROUTES ================== */
-// rotte root-level (non cambiamo le path)
+/* ================== API rotte ================== */
+// rotte root-level
 app.use(loginRouter);               // POST /login
 app.use(registerRouter);            // POST /register
 
@@ -73,7 +72,7 @@ app.use("/orders", ordersRouter);
 app.use("/meals", mealsRouter);
 /* =============================================== */
 
-// 404 API (copre tutte le nostre path API note)
+// 404 API 
 app.use((req, res, next) => {
   const API_PREFIXES = ["/meals", "/orders", "/users", "/restaurants", "/login", "/register", "/health"];
   if (API_PREFIXES.some((p) => req.path.startsWith(p))) {

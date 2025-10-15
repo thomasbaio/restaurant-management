@@ -1,4 +1,4 @@
-// register.js
+
 const express = require("express");
 const bcrypt = require("bcrypt");
 const router = express.Router();
@@ -9,8 +9,8 @@ const User = require("./models/user");
  * /register:
  *   post:
  *     tags: [Users]
- *     summary: Registrazione nuovo utente (cliente o ristoratore)
- *     description: Crea un utente. Se il ruolo è "ristoratore", assegna anche un `restaurantId` e accetta i campi anagrafici del ristorante.
+ *     summary: registrazione nuovo utente (cliente o ristoratore)
+ *     description: crea un utente. se il ruolo è "ristoratore", assegna anche un `restaurantId` e accetta i campi anagrafici del ristorante.
  *     requestBody:
  *       required: true
  *       content:
@@ -40,7 +40,7 @@ const User = require("./models/user");
  *                 restaurantName: "Pizzeria Da Mario"
  *     responses:
  *       201:
- *         description: Registrazione completata
+ *         description: registrazione completata
  *         content:
  *           application/json:
  *             schema:
@@ -94,12 +94,12 @@ router.post("/register", async (req, res) => {
 
     // 1) validazione minima
     if (!username || !email || !password) {
-      return res.status(400).json({ message: "username, email e password sono obbligatori" });
+      return res.status(400).json({ message: "username, email and password are obligatory" });
     }
 
     const role = (roleRaw || "cliente").toString().trim();
     if (!["cliente", "ristoratore"].includes(role)) {
-      return res.status(400).json({ message: "role non valido: usa 'cliente' o 'ristoratore'" });
+      return res.status(400).json({ message: "role not valid: use 'cliente' or 'ristoratore'" });
     }
 
     const emailNorm = String(email).trim().toLowerCase();
@@ -108,13 +108,13 @@ router.post("/register", async (req, res) => {
     const existing = await User.findOne({ $or: [{ username }, { email: emailNorm }] }).lean();
     if (existing) {
       const field = existing.username === username ? "username" : "email";
-      return res.status(409).json({ message: `${field} già registrata` });
+      return res.status(409).json({ message: `${field} areday register` });
     }
 
     // 3) hash password
     const passwordHash = await bcrypt.hash(String(password), 10);
 
-    // 4) dati ristoratore (se applicabile)
+    // 4) dati ristoratore 
     let restaurant = undefined;
     let restaurantId = null;
     if (role === "ristoratore") {
@@ -129,7 +129,7 @@ router.post("/register", async (req, res) => {
       };
     }
 
-    // 5) preferenza cliente (accetta alias)
+    // 5) preferenza cliente 
     const prefRaw = (preferenza ?? preferredCategory ?? favoriteCategory ?? "").toString().trim();
     const userPreference = role === "cliente" && prefRaw ? prefRaw : undefined;
 
@@ -148,9 +148,9 @@ router.post("/register", async (req, res) => {
       preferenza: userPreference,
     });
 
-    // 7) risposta (senza password)
+    // 7) risposta 
     return res.status(201).json({
-      message: "Registrazione completata",
+      message: "Registration completed",
       user: {
         id: newUser._id.toString(),
         username: newUser.username,
@@ -161,8 +161,8 @@ router.post("/register", async (req, res) => {
       },
     });
   } catch (err) {
-    console.error("Errore registrazione:", err);
-    return res.status(500).json({ message: "Errore durante la registrazione" });
+    console.error("Error registration:", err);
+    return res.status(500).json({ message: "error during the registration" });
   }
 });
 

@@ -1,67 +1,53 @@
-// models/order.js
 const mongoose = require("mongoose");
 
+/* ------------------------ Sotto-schema item ------------------------ */
 const OrderItemSchema = new mongoose.Schema(
   {
     mealId: { type: String, required: true }, // id piatto (string o _id)
     name:   { type: String },                 // snapshot nome (opzionale ma consigliato)
     qty:    { type: Number, required: true, min: 1, default: 1 },
-    price:  { type: Number },                 // prezzo unitario snapshot (opzionale)
+    price:  { type: Number },                 // prezzo unitario snapshot
   },
   { _id: false }
 );
 
+/* ------------------------ Schema ordine ------------------------ */
 const OrderSchema = new mongoose.Schema(
   {
-    // ---- Compatibilità con vecchie API / frontend ----
+    // ---- compatibilità con vecchie API / frontend ----
     id: { type: Number, index: true },           // ID incrementale (settato dalla rotta)
-    username: { type: String, index: true },     // username del cliente (compat)
+    username: { type: String, index: true },     // username del cliente (compatto)
 
-    // ---- Campi "nuovi" che già usavi ----
-    userId: { type: String, index: true },       // id utente (se lo usi)
+    // ---- campi "nuovi" che già usavi ----
+    userId: { type: String, index: true },       // ID utente
     restaurantId: { type: String, index: true }, // es: "r_o"
 
-    // Snapshot degli articoli acquistati
+    // snapshot degli articoli acquistati
     items: { type: [OrderItemSchema], default: [], required: true },
 
-    // Lista semplice di id (compat per vecchio frontend)
+    // lista semplice di ID (utile per ricerche veloci)
     meals: { type: [String], default: [] },
 
-    // Totale ordine (ricalcolato in pre-save)
+    // totale ordine
     total: { type: Number, default: 0, min: 0 },
 
-    // ---- Stato ordine (➕ 'ritirato') ----
+    // ---- stato ordine ----
+    // flusso tipico: ordinato -> preparazione -> ritirato
     status: {
       type: String,
-      enum: ["ordinato", "preparazione", "consegna", "consegnato", "ritirato", "annullato"],
+      enum: ["ordinato", "preparazione", "ritirato" ],
       default: "ordinato",
       index: true,
     },
 
-    // ---- Fulfillment/Delivery (con mapping) ----
-    // ritiro  <-> asporto
-    // consegna <-> domicilio
-    fulfillment: { type: String, enum: ["ritiro", "consegna"], default: "ritiro" },
-    delivery:    { type: String, enum: ["asporto", "domicilio"], default: "asporto" },
-
-    // Indirizzo: tieni entrambi per compatibilità
-    address: { type: String }, // compat frontend
-    deliveryAddress: {
-      via: String,
-      citta: String,
-      cap: String,
-      note: String,
-    },
-
-    // pagamento
+    // ---- pagamento ----
     payment: {
-      method: { type: String, enum: ["carta", "contanti", "online"], default: "carta" },
+      method: { type: String, enum: ["carta","online"], default: "carta" },
       paid: { type: Boolean, default: false },
       transactionId: String,
     },
 
-    // ---- Tracciamento consegna/ritiro (➕) ----
-    deliveredAt: Date,                 // quando è stato segnato "consegnato"
+    // ---- tracciamento ritiro ----
     ritiratoAt: Date,                  // quando è stato segnato "ritirato"
     ritiroConfermato: { type: Boolean, default: false },       // conferma ritiro lato backend
     clienteConfermaRitiro: { type: Boolean, default: false },  // flag inviato dal client
@@ -69,23 +55,9 @@ const OrderSchema = new mongoose.Schema(
   { timestamps: true }
 );
 
-// ---- Normalizzazioni automatiche ----
+/* ------------------------ utility interne ------------------------ */
 
-// Mappa fulfillment -> delivery e viceversa
-function syncFulfillmentDelivery(doc) {
-  // Se ho fulfillment ma non delivery, genero delivery
-  if (doc.isModified("fulfillment") || doc.delivery == null) {
-    if (doc.fulfillment === "ritiro") doc.delivery = "asporto";
-    else if (doc.fulfillment === "consegna") doc.delivery = "domicilio";
-  }
-  // Se ho delivery ma non fulfillment, genero fulfillment
-  if (doc.isModified("delivery") || doc.fulfillment == null) {
-    if (doc.delivery === "asporto") doc.fulfillment = "ritiro";
-    else if (doc.delivery === "domicilio") doc.fulfillment = "consegna";
-  }
-}
-
-// Calcola totale e lista meals dagli items
+// calcola totale e lista meals dagli items
 function recomputeTotals(doc) {
   let tot = 0;
   const ids = [];
@@ -101,35 +73,46 @@ function recomputeTotals(doc) {
   }
 }
 
-OrderSchema.pre("validate", function(next) {
-  syncFulfillmentDelivery(this);
+// normalizza eventuali valori legacy provenienti da versione con delivery
+function normalizeLegacy(doc) {
+  // mappa stati : "consegna" -> "preparazione", "consegnato" -> "ritirato"
+  const legacy = String(doc.status || "");
+  if (legacy === "consegna") {
+    doc.status = "preparazione";
+  } else if (legacy === "consegnato") {
+    doc.status = "ritirato";
+    if (!doc.ritiratoAt) doc.ritiratoAt = new Date();
+    if (!doc.ritiroConfermato) doc.ritiroConfermato = true;
+  }
+
+
+/* ------------------------ hook ------------------------ */
+OrderSchema.pre("validate", function (next) {
+  normalizeLegacy(this);
   next();
 });
 
-OrderSchema.pre("save", function(next) {
-  syncFulfillmentDelivery(this);
+OrderSchema.pre("save", function (next) {
+  normalizeLegacy(this);
   recomputeTotals(this);
 
-  // Se address vuoto ma ho deliveryAddress, creo una stringa comoda (compat)
-  if (!this.address && this.deliveryAddress && (this.delivery === "domicilio")) {
-    const a = this.deliveryAddress;
-    const parts = [a?.via, a?.citta, a?.cap].filter(Boolean);
-    if (parts.length) this.address = parts.join(", ");
-  }
-
-  // Se lo stato è cambiato, aggiorno i timestamp coerenti
+  // timestamp coerenti con cambio stato
   if (this.isModified("status")) {
     const s = String(this.status || "");
-    if (s === "consegnato" && !this.deliveredAt) this.deliveredAt = new Date();
-    if (s === "ritirato"   && !this.ritiratoAt)  this.ritiratoAt  = new Date();
-    if (s === "ritirato") this.ritiroConfermato = true;
+    if (s === "ritirato" && !this.ritiratoAt) {
+      this.ritiratoAt = new Date();
+    }
+    if (s === "ritirato") {
+      this.ritiroConfermato = true;
+    }
   }
 
   next();
 });
 
-// Indici utili
+/* ------------------------ indici utili ------------------------ */
 OrderSchema.index({ createdAt: -1 });
 OrderSchema.index({ id: -1 }); // per nextOrderId e fetch per id
 
 module.exports = mongoose.model("Order", OrderSchema);
+

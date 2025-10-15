@@ -1,4 +1,4 @@
-// orders.js — Router ordini robusto (Mongo + fallback file) con Swagger
+// order.js — SOLO ASPORTO (ritiro in sede)
 const express = require("express");
 const fs = require("fs");
 const path = require("path");
@@ -10,18 +10,16 @@ try { Order = require("./models/order"); } catch { Order = null; } // se manca i
 /* ====================== Config & costanti ====================== */
 
 // file locali (fallback)
-const USERS_FILE = path.join(__dirname, "users.json");
-const MEALS_FILE = path.join(__dirname, "meals1.json");
+const USERS_FILE  = path.join(__dirname, "users.json");
+const MEALS_FILE  = path.join(__dirname, "meals1.json");
 const ORDERS_FILE = path.join(__dirname, "orders.json");
 
-// stati e transizioni (+ 'ritirato')
-const VALID_STATES = ["ordinato", "preparazione", "consegna", "consegnato", "ritirato", "annullato"];
-const FINAL_STATES = new Set(["consegnato", "annullato", "ritirato"]);
+// Stati SOLO ASPORTO (flusso: ordinato -> preparazione -> ritirato | annullato)
+const VALID_STATES = ["ordinato", "preparazione", "ritirato", "annullato"];
+const FINAL_STATES = new Set(["ritirato", "annullato"]);
 const NEXT_ALLOWED = {
-  ordinato:     ["preparazione", "annullato", "ritirato"],
-  preparazione: ["consegna", "ritirato", "annullato"],
-  consegna:     ["consegnato"],
-  consegnato:   [],
+  ordinato:     ["preparazione", "annullato", "ritirato"], // ritiro immediato consentito
+  preparazione: ["ritirato", "annullato"],
   ritirato:     [],
   annullato:    [],
 };
@@ -44,7 +42,7 @@ function writeJSON(file, data) {
   fs.writeFileSync(file, JSON.stringify(data, null, 2), "utf8");
 }
 
-/* ====================== Helper comuni ====================== */
+/* ====================== helper comuni ====================== */
 const toStr = (v) => (v == null ? null : String(v).trim());
 
 function mongoReady() {
@@ -55,12 +53,12 @@ function mongoReady() {
 }
 
 async function nextOrderId() {
-  // Prova Mongo
+  // prova mongo
   if (Order && mongoReady()) {
     const last = await Order.findOne().sort({ id: -1 }).select("id").lean();
     return (last?.id || 0) + 1;
   }
-  // Fallback file
+  // fallback file
   const all = safeReadJSON(ORDERS_FILE) || [];
   const max = all.reduce((m, o) => Math.max(m, Number(o.id) || 0), 0);
   return max + 1;
@@ -145,7 +143,7 @@ function enrichItemsFromFile(items) {
   });
 }
 
-// compat schema Mongoose: idmeals numerico se possibile
+// compat schema mongoose: idmeals
 function toSchemaItems(items) {
   return (items || []).map(it => {
     const n = Number(it.mealId);
@@ -160,42 +158,42 @@ function computeTotal(items) {
   return Number(tot.toFixed(2));
 }
 
-function normalizeDelivery(obj) {
-  let delivery = obj.delivery;
-  let fulfillment = obj.fulfillment;
-  if (!delivery && fulfillment) {
-    delivery = fulfillment === "ritiro" ? "asporto" : fulfillment === "consegna" ? "domicilio" : undefined;
-  }
-  if (!fulfillment && delivery) {
-    fulfillment = delivery === "asporto" ? "ritiro" : delivery === "domicilio" ? "consegna" : undefined;
-  }
-  return { delivery, fulfillment };
+/* ------------ normalizzazioni SOLO ASPORTO + compat legacy ------------ */
+function normalizeLegacyState(s) {
+  const v = String(s || "").toLowerCase();
+  if (v === "consegna") return "preparazione";
+  if (v === "consegnato") return "ritirato";
+  return v;
 }
 
 function normalizeBody(b) {
   const body = { ...(b || {}) };
   body.username = typeof body.username === "string" ? body.username.trim() : "";
-  body.payment = body.payment || "carta";
-  body.status = VALID_STATES.includes(body.status) ? body.status : "ordinato";
-  if (typeof body.address === "string") body.address = body.address.trim();
+  body.payment  = body.payment || "carta";
+  body.status   = normalizeLegacyState(body.status);
+  if (!VALID_STATES.includes(body.status)) body.status = "ordinato";
+
   if (typeof body.userId === "string") body.userId = body.userId.trim();
   if (typeof body.restaurantId === "string") body.restaurantId = body.restaurantId.trim();
-  const { delivery, fulfillment } = normalizeDelivery(body);
-  body.delivery = delivery;
-  body.fulfillment = fulfillment;
+
+  // RIMOSSI: delivery/fulfillment/address (solo asporto)
+  delete body.delivery;
+  delete body.fulfillment;
+  delete body.address;
+  delete body.deliveryAddress;
   return body;
 }
 
 function normalizePaymentMethod(m) {
   const s = String(m || "carta").toLowerCase().replace(/\s+/g, "_").replace(/-/g, "_");
   if (["carta","card","creditcard","credit_card","carta_credito","carta_di_credito"].includes(s)) return "carta";
-  if (["contanti","cash"].includes(s)) return "contanti";
   if (["online","paypal","stripe"].includes(s)) return "online";
+  if (["contanti","cash"].includes(s)) return "contanti";
   return "carta";
 }
 
 async function findOrderByAnyId(idParam) {
-  // se ho Mongo provo id numerico e poi _id
+  // se ho mongo provo id numerico e poi _id
   if (Order && mongoReady()) {
     const asNumber = Number(idParam);
     if (Number.isFinite(asNumber)) {
@@ -218,13 +216,13 @@ function validateForCreate(payload) {
   return errors;
 }
 
-/* ============================ Swagger: Create ============================ */
+/* ============================ swagger: create ============================ */
 /**
  * @swagger
  * /orders:
  *   post:
  *     tags: [Orders]
- *     summary: Crea un nuovo ordine
+ *     summary: Crea un nuovo ordine (solo asporto)
  *     requestBody:
  *       required: true
  *       content:
@@ -240,8 +238,7 @@ function validateForCreate(payload) {
  *                   - idmeals: 101
  *                     qty: 2
  *                     price: 7.5
- *                 payment: { method: "card", paid: false }
- *                 delivery: "asporto"
+ *                 payment: { method: "carta", paid: false }
  *     responses:
  *       201:
  *         description: Ordine creato
@@ -264,14 +261,16 @@ router.post("/", async (req, res) => {
     if (!raw.restaurantId) raw.restaurantId = inferRestaurantIdFromMeals(meals);
 
     const rawPayment = raw.payment;
-    const methodIn = typeof rawPayment === "object" ? rawPayment.method : rawPayment;
-    const method = normalizePaymentMethod(methodIn);
-    const payment = {
+    const methodIn   = typeof rawPayment === "object" ? rawPayment.method : rawPayment;
+    const method     = normalizePaymentMethod(methodIn);
+    const payment    = {
       method,
       paid: typeof rawPayment === "object" ? Boolean(rawPayment.paid) : false,
       transactionId: typeof rawPayment === "object" ? rawPayment.transactionId : undefined,
     };
 
+    // mappa stato legacy se arrivasse (consegna/consegnato)
+    const status = normalizeLegacyState(raw.status);
     const payload = {
       id: await nextOrderId(),
       username: raw.username,
@@ -280,19 +279,16 @@ router.post("/", async (req, res) => {
       items: schemaItems,   // idmeals/qty/price (+ name, mealId)
       meals,                // elenco id stringa (compat vecchio)
       total: computeTotal(schemaItems),
-      status: raw.status,
-      state: raw.status,
+      status,
+      state: status,        // compat
       payment,
-      delivery: raw.delivery || "asporto",
-      fulfillment: raw.fulfillment || (raw.delivery === "domicilio" ? "consegna" : "ritiro"),
-      address: raw.address,
       note: raw.note,
       createdAt: new Date(),
       updatedAt: new Date(),
     };
 
     const errors = validateForCreate(payload);
-    if (errors.length) return res.status(400).json({ message: "Payload non valido", details: errors });
+    if (errors.length) return res.status(400).json({ message: "payload not valid", details: errors });
 
     if (Order && mongoReady()) {
       const created = await Order.create(payload);
@@ -305,12 +301,12 @@ router.post("/", async (req, res) => {
       return res.status(201).json(created);
     }
   } catch (err) {
-    console.error("Errore POST /orders:", err);
-    return res.status(500).json({ message: "Error during create of the order", detail: String(err?.message || err) });
+    console.error("error POST /orders:", err);
+    return res.status(500).json({ message: "error during create of the order", detail: String(err?.message || err) });
   }
 });
 
-/* ============================ Swagger: List ============================ */
+/* ============================ swagger: lista ============================ */
 /**
  * @swagger
  * /orders:
@@ -326,10 +322,10 @@ router.post("/", async (req, res) => {
  *         schema: { type: string }
  *       - in: query
  *         name: status
- *         schema: { type: string, enum: [ordinato, preparazione, consegna, consegnato, ritirato, annullato] }
+ *         schema: { type: string, enum: [ordinato, preparazione, ritirato, annullato] }
  *       - in: query
  *         name: state
- *         schema: { type: string, enum: [ordinato, preparazione, consegna, consegnato, ritirato, annullato] }
+ *         schema: { type: string, enum: [ordinato, preparazione, ritirato, annullato] }
  *     responses:
  *       200:
  *         description: Elenco ordini
@@ -337,11 +333,14 @@ router.post("/", async (req, res) => {
 router.get("/", async (req, res) => {
   try {
     const { username, restaurantId, status, state } = req.query;
+    const normStatus = status ? normalizeLegacyState(status) : null;
+    const normState  = state  ? normalizeLegacyState(state)  : null;
+
     const q = {};
     if (username) q.username = username;
     if (restaurantId) q.restaurantId = restaurantId;
-    if (status) q.$or = [{ status }, { state: status }];
-    else if (state) q.$or = [{ status: state }, { state }];
+    if (normStatus) q.$or = [{ status: normStatus }, { state: normStatus }];
+    else if (normState) q.$or = [{ status: normState }, { state: normState }];
 
     if (Order && mongoReady()) {
       const orders = await Order.find(q).sort({ createdAt: -1, id: -1 }).lean();
@@ -351,18 +350,18 @@ router.get("/", async (req, res) => {
       const rows = all.filter(o =>
         (username ? String(o.username) === String(username) : true) &&
         (restaurantId ? String(o.restaurantId) === String(restaurantId) : true) &&
-        (status ? (o.status === status || o.state === status) : true) &&
-        (state ? (o.status === state || o.state === state) : true)
+        (normStatus ? (normalizeLegacyState(o.status) === normStatus || normalizeLegacyState(o.state) === normStatus) : true) &&
+        (normState ? (normalizeLegacyState(o.status) === normState || normalizeLegacyState(o.state) === normState) : true)
       );
       return res.json(rows);
     }
   } catch (err) {
-    console.error("Error GET /orders:", err);
-    return res.status(500).json({ message: "Error order recovery" });
+    console.error("error GET /orders:", err);
+    return res.status(500).json({ message: "error order recovery" });
   }
 });
 
-/* ============================ Alias: /orders/list ============================ */
+/* ============================ alias: /orders/list ============================ */
 /**
  * @swagger
  * /orders/list:
@@ -375,7 +374,7 @@ router.get("/", async (req, res) => {
  */
 router.get("/list", (req, res) => router.handle({ ...req, url: "/orders", originalUrl: "/orders" }, res));
 
-/* ============================ Swagger: by restaurant ============================ */
+/* ============================ swagger: by restaurant ============================ */
 /**
  * @swagger
  * /orders/restaurant/{id}:
@@ -404,11 +403,11 @@ router.get("/restaurant/:id", async (req, res) => {
     }
   } catch (err) {
     console.error("Error GET /orders/restaurant/:id:", err);
-    return res.status(500).json({ message: "Error order recovery" });
+    return res.status(500).json({ message: "error order recovery" });
   }
 });
 
-/* ============================ Swagger: Get by id ============================ */
+/* ============================ swagger: Get by id ============================ */
 /**
  * @swagger
  * /orders/{id}:
@@ -426,39 +425,39 @@ router.get("/restaurant/:id", async (req, res) => {
 router.get("/:id", async (req, res) => {
   try {
     const order = await findOrderByAnyId(req.params.id);
-    if (!order) return res.status(404).json({ message: "Order not found" });
+    if (!order) return res.status(404).json({ message: "order not found" });
     res.json(order);
   } catch (err) {
     console.error("Error GET /orders/:id:", err);
-    res.status(500).json({ message: "Error loading order" });
+    res.status(500).json({ message: "error loading order" });
   }
 });
 
-/* ============================ Cambio stato ============================ */
+/* ============================ cambio stato ============================ */
 async function updateOrderStateGeneric(idParam, incomingBody, res) {
-  const desired = String(incomingBody?.status ?? incomingBody?.state ?? incomingBody?.newState ?? "").trim();
+  const desiredRaw = incomingBody?.status ?? incomingBody?.state ?? incomingBody?.newState ?? "";
+  const desired = normalizeLegacyState(desiredRaw);
   const clienteConfermaRitiro = incomingBody?.clienteConfermaRitiro;
 
   if (!VALID_STATES.includes(desired)) {
-    return res.status(400).json({ message: `Status not valid: ${desired}` });
+    return res.status(400).json({ message: `status not valid: ${desired}` });
   }
 
-  // carica ordine (Mongo o file)
+  // carica ordine (mongo o file)
   let order = await findOrderByAnyId(idParam);
-  if (!order) return res.status(404).json({ message: "Order not found" });
+  if (!order) return res.status(404).json({ message: "order not found" });
 
-  const current = order.status || order.state || "ordinato";
+  const current = normalizeLegacyState(order.status || order.state || "ordinato");
   const allowedNext = NEXT_ALLOWED[current] || [];
   if (current !== desired && !allowedNext.includes(desired)) {
-    return res.status(422).json({ message: `Transizione non valida da "${current}" a "${desired}"`, allowedNext });
+    return res.status(422).json({ message: `invalid transition from "${current}" a "${desired}"`, allowedNext });
   }
 
   order.status = desired;
-  order.state = desired;
+  order.state  = desired;
 
   if (typeof clienteConfermaRitiro !== "undefined") order.clienteConfermaRitiro = Boolean(clienteConfermaRitiro);
   const s = desired.toLowerCase();
-  if (s === "consegnato" && !order.deliveredAt) order.deliveredAt = new Date();
   if (s === "ritirato" && !order.ritiratoAt) order.ritiratoAt = new Date();
   if (s === "ritirato") order.ritiroConfermato = true;
   if (FINAL_STATES.has(s)) order.closedAt = order.closedAt || new Date();
@@ -481,7 +480,7 @@ async function updateOrderStateGeneric(idParam, incomingBody, res) {
     // persist su file
     const all = safeReadJSON(ORDERS_FILE) || [];
     const idx = all.findIndex(o => String(o._id || o.id) === String(idParam));
-    if (idx < 0) return res.status(404).json({ message: "Order not found" });
+    if (idx < 0) return res.status(404).json({ message: "order not found" });
     all[idx] = { ...all[idx], ...order };
     writeJSON(ORDERS_FILE, all);
     return res.json(all[idx]);
@@ -505,7 +504,7 @@ async function updateOrderStateGeneric(idParam, incomingBody, res) {
  *             properties:
  *               status:
  *                 type: string
- *                 enum: [ordinato, preparazione, consegna, consegnato, ritirato, annullato]
+ *                 enum: [ordinato, preparazione, ritirato, annullato]
  *               clienteConfermaRitiro: { type: boolean }
  *     responses:
  *       200: { description: Stato aggiornato }
@@ -518,8 +517,8 @@ router.put("/:id", async (req, res) => {
   try {
     await updateOrderStateGeneric(req.params.id, req.body, res);
   } catch (err) {
-    console.error("Errore PUT /orders/:id:", err);
-    return res.status(500).json({ message: "Errore aggiornamento ordine", detail: String(err?.message || err) });
+    console.error("error PUT /orders/:id:", err);
+    return res.status(500).json({ message: "error update order", detail: String(err?.message || err) });
   }
 });
 
@@ -540,7 +539,7 @@ router.put("/:id", async (req, res) => {
  *             properties:
  *               newState:
  *                 type: string
- *                 enum: [ordinato, preparazione, consegna, consegnato, ritirato, annullato]
+ *                 enum: [ordinato, preparazione, ritirato, annullato]
  *     responses:
  *       200: { description: Stato aggiornato }
  *       404: { $ref: '#/components/responses/NotFound' }
@@ -549,8 +548,8 @@ router.put("/:id/state", async (req, res) => {
   try {
     await updateOrderStateGeneric(req.params.id, req.body, res);
   } catch (err) {
-    console.error("Errore PUT /orders/:id/state:", err);
-    return res.status(500).json({ message: "Errore aggiornamento ordine", detail: String(err?.message || err) });
+    console.error("error PUT /orders/:id/state:", err);
+    return res.status(500).json({ message: "error update order", detail: String(err?.message || err) });
   }
 });
 

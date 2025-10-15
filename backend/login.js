@@ -1,11 +1,10 @@
-// login.js
 const express = require("express");
 const bcrypt = require("bcrypt");
 const crypto = require("crypto");
 let jwt; try { jwt = require("jsonwebtoken"); } catch {}
 const router = express.Router();
 
-const User = require("./models/user"); // Assicurati che lo schema includa restaurantId: String
+const User = require("./models/user"); // assicurati che lo schema includa restaurantId: String
 
 const JWT_SECRET = process.env.JWT_SECRET || null;
 const JWT_TTL = process.env.JWT_TTL || "7d";

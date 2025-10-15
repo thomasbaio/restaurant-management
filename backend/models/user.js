@@ -6,7 +6,7 @@ const UserSchema = new mongoose.Schema({
   password:  { type: String, required: true },
   role:      { type: String, enum: ['cliente', 'ristoratore'], default: 'cliente' },
 
-  // campi ristoratore...
+  // campi ristoratore
   telefono:   { type: String },
   partitaIva: { type: String },
   indirizzo:  { type: String },
@@ -15,11 +15,11 @@ const UserSchema = new mongoose.Schema({
   // ID ristorante (unico se presente; i clienti possono non averlo)
   restaurantId: { type: String, default: "", unique: true, sparse: true, index: true },
 
-  // opzionale: se nel tuo progetto usi un id legacy numerico
+  // opzionale:
   legacyId:   { type: Number, index: true, sparse: true },
 
-  // blocco info ristorante (facoltativo, lo lasciamo com'è)
-  restaurant: {
+  // blocco info ristorante 
+    restaurant: {
     restaurantId: String,
     nome: String,
     telefono: String,

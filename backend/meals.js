@@ -1,4 +1,4 @@
-// meals.js
+
 const express = require("express");
 const router = express.Router();
 
@@ -20,7 +20,7 @@ function mongoReady() {
   return mongoose?.connection?.readyState === 1; // 1 = connected
 }
 
-// risolve il percorso di meals1.json in modo robusto (env > locale > parent)
+// risolve il percorso di meals1.json in modo robusto
 function resolveMealsFile() {
   const candidates = [
     process.env.MEALS_FILE,
@@ -65,7 +65,7 @@ function looksLikeMeal(o) {
   );
 }
 
-// accetta sia struttura [{restaurantId,menu:[...]}, ...] sia lista flat di piatti
+// sia lista flat di piatti
 function flattenFileMeals(data) {
   if (!Array.isArray(data)) return [];
 
@@ -211,7 +211,7 @@ function dedupeByName(list) {
   return [...map.values()];
 }
 
-// carica SOLO i piatti “comuni” dal file (no menu dei ristoranti)
+// carica solo i piatti “comuni” dal file (no menu dei ristoranti)
 function loadCommonFromFile() {
   const { data } = readFileMeals();
   if (!data) return [];
@@ -237,30 +237,30 @@ function loadCommonFromFile() {
  * /meals/common-meals:
  *   get:
  *     tags: [Meals]
- *     summary: Lista dei piatti comuni (merge DB + file), senza piatti dei ristoranti, con deduplica
+ *     summary: lista dei piatti comuni (merge DB + file), senza piatti dei ristoranti, con deduplica
  *     parameters:
  *       - in: query
  *         name: source
- *         description: Sorgente da cui leggere
+ *         description: sorgente da cui leggere
  *         schema:
  *           type: string
  *           enum: [all, db, file]
  *           default: all
  *       - in: query
  *         name: excludeMyMenu
- *         description: RestaurantId del chiamante; esclude i piatti già presenti nel suo menu (per nome)
+ *         description: restaurantId del chiamante; esclude i piatti già presenti nel suo menu (per nome)
  *         schema:
  *           type: string
  *       - in: query
  *         name: dedup
- *         description: Modalità di deduplica (attualmente per nome)
+ *         description: modalità di deduplica (attualmente per nome)
  *         schema:
  *           type: string
  *           enum: [global, off]
  *           default: global
  *     responses:
  *       200:
- *         description: Elenco piatti comuni (deduplicati e filtrati)
+ *         description: elenco piatti comuni (deduplicati e filtrati)
  *         content:
  *           application/json:
  *             schema:
@@ -274,7 +274,7 @@ router.get("/common-meals", async (req, res) => {
     const dedupMode = String(req.query.dedup || "global").toLowerCase();
     const excludeMyMenu = String(req.query.excludeMyMenu || "").trim();
 
-    // --- FILE: solo “comuni” dal file (no menu dei ristoranti) ---
+    // --- file: solo “comuni” dal file (no menu dei ristoranti) ---
     let fileMeals = [];
     const { filePath, exists, error } = readFileMeals();
     if (source !== "db") {
@@ -287,7 +287,7 @@ router.get("/common-meals", async (req, res) => {
     res.setHeader("X-Meals-File-Exists", String(!!exists));
     res.setHeader("X-Meals-File-Count", String(fileMeals.length));
 
-    // --- DB: prendi solo candidati “comuni” ed escludi SEMPRE quelli con restaurantId ---
+    // --- DB: prendi solo candidati “comuni” ed escludi sempre quelli con restaurantId ---
     let dbMeals = [];
     if (source !== "file" && mongoReady()) {
       const base = {
@@ -354,7 +354,7 @@ router.get("/common-meals", async (req, res) => {
  * /meals:
  *   post:
  *     tags: [Meals]
- *     summary: Crea un nuovo piatto (DB, fallback su file)
+ *     summary: crea un nuovo piatto (DB, fallback su file)
  *     requestBody:
  *       required: true
  *       content:
@@ -458,7 +458,7 @@ router.post("/", async (req, res) => {
  * /meals/{id}:
  *   put:
  *     tags: [Meals]
- *     summary: Aggiorna un piatto per ID (ObjectId o idmeals numerico)
+ *     summary: aggiorna un piatto per ID (ObjectId o idmeals numerico)
  *     parameters:
  *       - in: path
  *         name: id
@@ -522,7 +522,7 @@ router.put("/:id", async (req, res) => {
  * /meals/{id}:
  *   get:
  *     tags: [Meals]
- *     summary: Ottiene un piatto per ID (ObjectId o idmeals numerico)
+ *     summary: ottiene un piatto per ID (ObjectId o idmeals numerico)
  *     parameters:
  *       - in: path
  *         name: id
@@ -572,7 +572,7 @@ router.get("/:id", async (req, res) => {
  * /meals/{id}:
  *   delete:
  *     tags: [Meals]
- *     summary: Elimina un piatto (ObjectId o idmeals numerico)
+ *     summary: elimina un piatto (ObjectId o idmeals numerico)
  *     parameters:
  *       - in: path
  *         name: id
@@ -638,7 +638,7 @@ router.delete("/:id", async (req, res) => {
  * /meals/{restaurantId}/{id}:
  *   delete:
  *     tags: [Meals]
- *     summary: Elimina un piatto specificando anche il restaurantId (compatibilità menu annidato)
+ *     summary: elimina un piatto specificando anche il restaurantId (compatibilità menu annidato)
  *     parameters:
  *       - in: path
  *         name: restaurantId
@@ -700,7 +700,7 @@ router.delete("/:restaurantId/:id", async (req, res) => {
  * /meals:
  *   get:
  *     tags: [Meals]
- *     summary: Restituisce i menu per ristorante (DB, fallback su file)
+ *     summary: restituisce i menu per ristorante (DB, fallback su file)
  *     parameters:
  *       - in: query
  *         name: restaurantId
@@ -708,7 +708,7 @@ router.delete("/:restaurantId/:id", async (req, res) => {
  *         description: Se presente, filtra per ristorante
  *     responses:
  *       200:
- *         description: Array di ristoranti con il rispettivo menu
+ *         description: array di ristoranti con il rispettivo menu
  *         content:
  *           application/json:
  *             schema:

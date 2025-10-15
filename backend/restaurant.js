@@ -1,4 +1,4 @@
-// restaurant.js
+
 const express = require("express");
 const router = express.Router();
 const Restaurant = require("./models/restaurant");
@@ -31,31 +31,31 @@ function toPublic(r = {}) {
 function normalizeBody(b = {}) {
   const out = {};
 
-  // ID esplicito (opzionale: altrimenti lo generiamo in POST)
+  // ID esplicito
   if ("restaurantId" in b && b.restaurantId) out.restaurantId = String(b.restaurantId);
 
-  // name / nome
+  // nome
   if (b.name != null || b.nome != null) {
     out.name = b.name ?? b.nome;
     out.nome = b.nome ?? b.name;
   }
-  // phone / telefono
+  // telefono
   if (b.phone != null || b.telefono != null) {
     out.phone = b.phone ?? b.telefono;
     out.telefono = b.telefono ?? b.phone;
   }
-  // piva / partitaIva
+  // partitaIva
   if (b.piva != null || b.partitaIva != null) {
     out.piva = b.piva ?? b.partitaIva;
     out.partitaIva = b.partitaIva ?? b.piva;
   }
-  // address / indirizzo (accetta stringa o oggetto)
+  // indirizzo 
   if (b.address != null || b.indirizzo != null) {
     out.address = typeof b.address === "object" ? b.address?.via : b.address;
     out.indirizzo =
       typeof b.indirizzo === "object" ? b.indirizzo : { via: b.indirizzo ?? b.address ?? "" };
   }
-  // place / luogo
+  // luogo
   if (b.place != null || b.luogo != null) {
     out.place = b.place ?? b.luogo;
     out.luogo = b.luogo ?? b.place;
@@ -64,7 +64,7 @@ function normalizeBody(b = {}) {
   return out;
 }
 
-/* ------------------------ ROUTES ------------------------ */
+/* ------------------------ rotte ------------------------ */
 
 /**
  * @swagger
@@ -72,7 +72,7 @@ function normalizeBody(b = {}) {
  *   get:
  *     tags: [Restaurants, fetch]
  *     summary: Elenco ristoranti
- *     description: Filtra per nome/luogo. Supporta sia campi italiani che inglesi nel DB.
+ *     description: filtra per nome/luogo. supporta sia campi italiani che inglesi nel DB.
  *     parameters:
  *       - in: query
  *         name: q
@@ -86,7 +86,7 @@ function normalizeBody(b = {}) {
  *         schema: { type: string }
  *     responses:
  *       200:
- *         description: Lista ristoranti
+ *         description: lista ristoranti
  *         content:
  *           application/json:
  *             schema:
@@ -127,7 +127,7 @@ router.get("/", async (req, res) => {
  * /restaurants/{id}:
  *   get:
  *     tags: [Restaurants]
- *     summary: Dettaglio ristorante
+ *     summary: dettaglio ristorante
  *     parameters:
  *       - in: path
  *         name: id
@@ -159,8 +159,8 @@ router.get("/:id", async (req, res) => {
  * /restaurants:
  *   post:
  *     tags: [Restaurants]
- *     summary: Crea ristorante
- *     description: Accetta campi in ITA o ENG (name/nome, phone/telefono, piva/partitaIva, address/indirizzo, place/luogo).
+ *     summary: crea ristorante
+ *     description: accetta campi in ENG (name, phone,piva, address, place).
  *     requestBody:
  *       required: true
  *       content:
@@ -191,10 +191,10 @@ router.post("/", async (req, res) => {
     res.status(201).json(toPublic(created.toObject()));
   } catch (err) {
     if (err?.code === 11000) {
-      return res.status(400).json({ message: "Chiave duplicata", details: err.keyValue });
+      return res.status(400).json({ message: "key duplicated", details: err.keyValue });
     }
     console.error("Error POST /restaurants:", err);
-    res.status(500).json({ message: "Error in the creation of the restaurant" });
+    res.status(500).json({ message: "error in the creation of the restaurant" });
   }
 });
 
@@ -203,7 +203,7 @@ router.post("/", async (req, res) => {
  * /restaurants/{id}:
  *   put:
  *     tags: [Restaurants]
- *     summary: Modifica ristorante per restaurantId
+ *     summary: modifica ristorante per restaurantId
  *     parameters:
  *       - in: path
  *         name: id
@@ -217,7 +217,7 @@ router.post("/", async (req, res) => {
  *           schema: { $ref: "#/components/schemas/Restaurant" }
  *     responses:
  *       200:
- *         description: Aggiornato
+ *         description: aggiunto
  *         content:
  *           application/json:
  *             schema: { $ref: "#/components/schemas/Restaurant" }
@@ -233,11 +233,11 @@ router.put("/:id", async (req, res) => {
       { new: true }
     ).lean();
 
-    if (!updated) return res.status(404).json({ message: "Restaurant not found" });
+    if (!updated) return res.status(404).json({ message: "restaurant not found" });
     res.json(toPublic(updated));
   } catch (err) {
     console.error("Error PUT /restaurants/:id:", err);
-    res.status(500).json({ message: "Error in the modification of the restaurant" });
+    res.status(500).json({ message: "error in the modification of the restaurant" });
   }
 });
 
@@ -246,7 +246,7 @@ router.put("/:id", async (req, res) => {
  * /restaurants/{id}:
  *   delete:
  *     tags: [Restaurants]
- *     summary: Elimina ristorante per restaurantId
+ *     summary: elimina ristorante per restaurantId
  *     parameters:
  *       - in: path
  *         name: id
@@ -254,7 +254,7 @@ router.put("/:id", async (req, res) => {
  *         schema: { type: string }
  *     responses:
  *       200:
- *         description: Eliminato
+ *         description: eliminato
  *         content:
  *           application/json:
  *             schema:

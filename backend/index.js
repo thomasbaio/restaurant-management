@@ -14,7 +14,7 @@ app.set('trust proxy', 1);
 app.use(cors());
 app.use(express.json({ limit: '10mb' }));
 
-// -------------------- mongoDB (non blocca l'avvio se manca) --------------------
+// -------------------- mongodb --------------------
 (async () => {
   try {
     if (!process.env.MONGO_URI) {
@@ -28,7 +28,7 @@ app.use(express.json({ limit: '10mb' }));
   }
 })();
 
-// -------------------- rotte API (caricamento sicuro) --------------------
+// -------------------- rotte API --------------------
 function safeRequire(relPath) {
   try {
     return require(relPath);
@@ -43,7 +43,7 @@ const userRoutes = require('./users');
 const orderRoutes = safeRequire('./orders');
 const restaurantRoutes = safeRequire('./restaurant');
 
-// Health checks (Render li ping-a)
+// health checks 
 app.get('/healthz', (_req, res) => res.send('ok'));
 app.get('/health', (_req, res) =>
   res.json({
@@ -53,7 +53,7 @@ app.get('/health', (_req, res) =>
   })
 );
 
-// -------------------- frontend statico (se presente) --------------------
+// -------------------- frontend --------------------
 const FRONTEND_DIR = path.join(__dirname, '..', 'frontend');
 const hasFrontend = fs.existsSync(FRONTEND_DIR);
 if (hasFrontend) {
@@ -100,7 +100,7 @@ app.use((err, _req, res, _next) => {
   res.status(500).send('Internal error');
 });
 
-// -------------------- Listen --------------------
+// -------------------- listen --------------------
 app.listen(PORT, '0.0.0.0', () => {
   console.log(` Server listening on :${PORT}`);
   console.log(` Swagger UI: ${PUBLIC_BASE}/api-docs`);
