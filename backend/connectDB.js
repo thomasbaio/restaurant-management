@@ -1,9 +1,7 @@
-const mongoose = require("mongoose");
-// connectDB.js
+// backend/connectDB.js
 const mongoose = require("mongoose");
 
 mongoose.set("strictQuery", true);
-// evita che Mongoose faccia buffering se il DB non è ancora connesso
 mongoose.set("bufferCommands", false);
 
 const STATE = ["disconnected", "connected", "connecting", "disconnecting"];
@@ -106,9 +104,9 @@ async function closeDB() {
   }
 }
 
-// esporti la funzione come default + helper come proprietà
 module.exports = connectDB;
 module.exports.mongoReady = mongoReady;
 module.exports.closeDB = closeDB;
 module.exports.stateLabel = stateLabel;
 module.exports.mongoose = mongoose;
+
