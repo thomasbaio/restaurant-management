@@ -2,10 +2,11 @@ const express = require('express');
 const cors = require('cors');
 const path = require('path');
 const fs = require('fs');
-const mongoose = require('mongoose');
 const swaggerUi = require('swagger-ui-express');
 const swaggerJsdoc = require('swagger-jsdoc');
 require('dotenv').config();
+
+const { connectDB, mongoose } = require('./connectDB');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -16,16 +17,7 @@ app.use(express.json({ limit: '10mb' }));
 
 // -------------------- mongodb --------------------
 (async () => {
-  try {
-    if (!process.env.MONGO_URI) {
-      console.warn('MONGO_URI not set: I continue without DB');
-    } else {
-      await mongoose.connect(process.env.MONGO_URI);
-      console.log('Mongo connected');
-    }
-  } catch (err) {
-    console.error('Error connected Mongo:', err.message);
-  }
+  await connectDB(); // prova a collegarsi a Mongo usando MONGO_URI
 })();
 
 // -------------------- rotte API --------------------
@@ -43,7 +35,7 @@ const userRoutes = require('./users');
 const orderRoutes = safeRequire('./orders');
 const restaurantRoutes = safeRequire('./restaurant');
 
-// health checks 
+// -------------------- health checks --------------------
 app.get('/healthz', (_req, res) => res.send('ok'));
 app.get('/health', (_req, res) =>
   res.json({
@@ -56,10 +48,13 @@ app.get('/health', (_req, res) =>
 // -------------------- frontend --------------------
 const FRONTEND_DIR = path.join(__dirname, '..', 'frontend');
 const hasFrontend = fs.existsSync(FRONTEND_DIR);
+
 if (hasFrontend) {
   console.log('FRONTEND_DIR:', FRONTEND_DIR);
   app.use(express.static(FRONTEND_DIR));
-  app.get('/', (_req, res) => res.sendFile(path.join(FRONTEND_DIR, 'index.html')));
+  app.get('/', (_req, res) =>
+    res.sendFile(path.join(FRONTEND_DIR, 'index.html'))
+  );
 } else {
   app.get('/', (_req, res) => res.send('OK'));
 }
@@ -82,7 +77,7 @@ const swaggerSpec = swaggerJsdoc({
     info: { title: 'Restaurant Management API', version: '1.0.0' },
     servers: [{ url: PUBLIC_BASE }, { url: `http://localhost:${PORT}` }],
   },
-  apis: [path.join(__dirname, '*.js')], // puoi aggiungere pattern extra
+  apis: [path.join(__dirname, '*.js')], // aggiungi altri pattern se serve
 });
 
 app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec, { explorer: true }));

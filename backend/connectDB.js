@@ -1,6 +1,10 @@
 const mongoose = require("mongoose");
+// connectDB.js
+const mongoose = require("mongoose");
 
 mongoose.set("strictQuery", true);
+// evita che Mongoose faccia buffering se il DB non è ancora connesso
+mongoose.set("bufferCommands", false);
 
 const STATE = ["disconnected", "connected", "connecting", "disconnecting"];
 
@@ -13,6 +17,7 @@ function stateLabel() {
 }
 
 function redact(uri = "") {
+  // nasconde la password nei log
   return uri.replace(/\/\/([^:@]+):([^@]+)@/, "//$1:***@");
 }
 
@@ -31,13 +36,16 @@ async function connectDB(uri) {
 
   // già connesso
   if (mongoose.connection.readyState === 1) {
-    console.log(" already connected to mongodb .", mongoose.connection.name ? `DB: ${mongoose.connection.name}` : "");
+    console.log(
+      " already connected to mongodb.",
+      mongoose.connection.name ? `DB: ${mongoose.connection.name}` : ""
+    );
     return mongoose.connection;
   }
 
   // fase di connessione
   if (mongoose.connection.readyState === 2) {
-    console.log("connection mongodb in corso…");
+    console.log(" connection mongodb in corso…");
     await new Promise((resolve, reject) => {
       const onOk = () => { cleanup(); resolve(); };
       const onErr = (err) => { cleanup(); reject(err); };
@@ -61,16 +69,23 @@ async function connectDB(uri) {
       autoIndex: process.env.NODE_ENV !== "production",
     };
 
-    // log essenziale
     console.log("🔌 Connessione a MongoDB:", redact(mongoUri));
     await mongoose.connect(mongoUri, opts);
 
     // event logging minimale
-    mongoose.connection.on("error", (e) => console.error("mongo error:", e.message));
-    mongoose.connection.on("disconnected", () => console.warn("mongo disconnected"));
-    mongoose.connection.on("reconnected", () => console.log(" mongo reconnected"));
+    mongoose.connection.on("error", (e) =>
+      console.error(" mongo error:", e.message)
+    );
+    mongoose.connection.on("disconnected", () =>
+      console.warn(" mongo disconnected")
+    );
+    mongoose.connection.on("reconnected", () =>
+      console.log(" mongo reconnected")
+    );
 
-    console.log(`mongodb connected (state=${stateLabel()}) DB: ${mongoose.connection.name}`);
+    console.log(
+      ` mongodb connected (state=${stateLabel()}) DB: ${mongoose.connection.name}`
+    );
     return mongoose.connection;
   } catch (err) {
     console.error(" connecting error mongodb:", err.message);
@@ -84,14 +99,16 @@ async function closeDB() {
   try {
     if (mongoose.connection.readyState !== 0) {
       await mongoose.connection.close();
-      console.log("connected close to mongodb .");
+      console.log(" connected close to mongodb.");
     }
   } catch (e) {
-    console.error("close erroe mongodb:", e?.message || e);
+    console.error(" close errore mongodb:", e?.message || e);
   }
 }
 
+// esporti la funzione come default + helper come proprietà
 module.exports = connectDB;
 module.exports.mongoReady = mongoReady;
 module.exports.closeDB = closeDB;
 module.exports.stateLabel = stateLabel;
+module.exports.mongoose = mongoose;
